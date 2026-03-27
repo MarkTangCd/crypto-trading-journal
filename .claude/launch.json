@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Dev Server (Express + Vite)",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--yes", "tsx", "watch", "server/_core/index.ts"],
+      "port": 3000
+    }
+  ]
+}

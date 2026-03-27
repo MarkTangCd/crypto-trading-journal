@@ -1,0 +1,34 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1769564572265,
+      "tag": "0000_flat_doomsday",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1769564715020,
+      "tag": "0001_bumpy_alex_wilder",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1770127162595,
+      "tag": "0002_keen_rocket_racer",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1770209614359,
+      "tag": "0003_overconfident_shiver_man",
+      "breakpoints": true
+    }
+  ]
+}
