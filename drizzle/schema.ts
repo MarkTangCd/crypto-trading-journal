@@ -1,23 +1,34 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, decimal, bigint } from "drizzle-orm/mysql-core";
+import { sql } from "drizzle-orm";
+import { check, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 /**
  * Core user table backing auth flow.
  */
-export const users = mysqlTable("users", {
-  id: int("id").autoincrement().primaryKey(),
-  openId: varchar("openId", { length: 64 }).notNull().unique(),
-  name: text("name"),
-  email: varchar("email", { length: 320 }),
-  loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-  lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
-  /** Initial account balance set by user */
-  initialBalance: decimal("initialBalance", { precision: 18, scale: 2 }).default("0"),
-  /** Currently active trading system ID */
-  activeTradingSystemId: int("activeTradingSystemId"),
-});
+export const users = sqliteTable(
+  "users",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    openId: text("openId").notNull().unique(),
+    name: text("name"),
+    email: text("email"),
+    loginMethod: text("loginMethod"),
+    role: text("role").$type<"user" | "admin">().default("user").notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" })
+      .default(sql`(unixepoch() * 1000)`)
+      .notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" })
+      .default(sql`(unixepoch() * 1000)`)
+      .notNull(),
+    lastSignedIn: integer("lastSignedIn", { mode: "timestamp_ms" })
+      .default(sql`(unixepoch() * 1000)`)
+      .notNull(),
+    /** Initial account balance set by user */
+    initialBalance: text("initialBalance").default("0"),
+    /** Currently active trading system ID */
+    activeTradingSystemId: integer("activeTradingSystemId"),
+  },
+  table => [check("users_role_check", sql`${table.role} in ('user', 'admin')`)]
+);
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -25,20 +36,24 @@ export type InsertUser = typeof users.$inferInsert;
 /**
  * Trading elements (opportunity tags) - e.g., Gap, Double Top/Bottom, CVD divergence
  */
-export const tradingElements = mysqlTable("trading_elements", {
-  id: int("id").autoincrement().primaryKey(),
+export const tradingElements = sqliteTable("trading_elements", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   /** Foreign key to users table */
-  userId: int("userId").notNull(),
+  userId: integer("userId").notNull(),
   /** Element name e.g., "Gap", "Double Top/Bottom" */
-  name: varchar("name", { length: 100 }).notNull(),
+  name: text("name").notNull(),
   /** Optional description/notes */
   description: text("description"),
   /** Confidence level for this element (0-100) */
-  confidenceLevel: int("confidenceLevel").notNull().default(50),
+  confidenceLevel: integer("confidenceLevel").notNull().default(50),
   /** Record creation timestamp */
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  createdAt: integer("createdAt", { mode: "timestamp_ms" })
+    .default(sql`(unixepoch() * 1000)`)
+    .notNull(),
   /** Record update timestamp */
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: integer("updatedAt", { mode: "timestamp_ms" })
+    .default(sql`(unixepoch() * 1000)`)
+    .notNull(),
 });
 
 export type TradingElement = typeof tradingElements.$inferSelect;
@@ -47,20 +62,24 @@ export type InsertTradingElement = typeof tradingElements.$inferInsert;
 /**
  * Trading systems - named strategies with associated elements
  */
-export const tradingSystems = mysqlTable("trading_systems", {
-  id: int("id").autoincrement().primaryKey(),
+export const tradingSystems = sqliteTable("trading_systems", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   /** Foreign key to users table */
-  userId: int("userId").notNull(),
+  userId: integer("userId").notNull(),
   /** System name */
-  name: varchar("name", { length: 100 }).notNull(),
+  name: text("name").notNull(),
   /** Notes/description about the system */
   notes: text("notes"),
   /** Whether this system is active (only one can be active per user) */
-  isActive: int("isActive").notNull().default(0),
+  isActive: integer("isActive").notNull().default(0),
   /** Record creation timestamp */
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  createdAt: integer("createdAt", { mode: "timestamp_ms" })
+    .default(sql`(unixepoch() * 1000)`)
+    .notNull(),
   /** Record update timestamp */
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: integer("updatedAt", { mode: "timestamp_ms" })
+    .default(sql`(unixepoch() * 1000)`)
+    .notNull(),
 });
 
 export type TradingSystem = typeof tradingSystems.$inferSelect;
@@ -69,63 +88,81 @@ export type InsertTradingSystem = typeof tradingSystems.$inferInsert;
 /**
  * Junction table for trading systems and elements (many-to-many)
  */
-export const tradingSystemElements = mysqlTable("trading_system_elements", {
-  id: int("id").autoincrement().primaryKey(),
+export const tradingSystemElements = sqliteTable("trading_system_elements", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   /** Foreign key to trading systems */
-  tradingSystemId: int("tradingSystemId").notNull(),
+  tradingSystemId: integer("tradingSystemId").notNull(),
   /** Foreign key to trading elements */
-  tradingElementId: int("tradingElementId").notNull(),
+  tradingElementId: integer("tradingElementId").notNull(),
 });
 
 export type TradingSystemElement = typeof tradingSystemElements.$inferSelect;
-export type InsertTradingSystemElement = typeof tradingSystemElements.$inferInsert;
+export type InsertTradingSystemElement =
+  typeof tradingSystemElements.$inferInsert;
 
 /**
  * Trading transactions table - stores all trade records
  */
-export const transactions = mysqlTable("transactions", {
-  id: int("id").autoincrement().primaryKey(),
-  /** Foreign key to users table */
-  userId: int("userId").notNull(),
-  /** Foreign key to trading systems (optional, for binding trades to systems) */
-  tradingSystemId: int("tradingSystemId"),
-  /** Account balance at time of trade */
-  accountBalance: decimal("accountBalance", { precision: 18, scale: 2 }).notNull(),
-  /** Trading pair e.g., BTCUSDT */
-  tradingPair: varchar("tradingPair", { length: 32 }).notNull(),
-  /** Time frame e.g., 1H, 4H, 1D */
-  timeFrame: varchar("timeFrame", { length: 16 }).notNull(),
-  /** Trade start time - stored as UTC timestamp in milliseconds */
-  startTime: bigint("startTime", { mode: "number" }).notNull(),
-  /** Trade end time - stored as UTC timestamp in milliseconds */
-  endTime: bigint("endTime", { mode: "number" }).notNull(),
-  /** Trade direction: long or short */
-  direction: mysqlEnum("direction", ["long", "short"]).notNull(),
-  /** Trading logic/rationale for the trade */
-  tradingLogic: text("tradingLogic").notNull(),
-  /** Trade outcome: win, loss, or breakeven */
-  outcome: mysqlEnum("outcome", ["win", "loss", "breakeven"]).notNull(),
-  /** Number of consecutive losses at time of trade */
-  consecutiveLosses: int("consecutiveLosses").notNull().default(0),
-  /** Risk-reward ratio e.g., 1.5, 2.0 */
-  riskRewardRatio: decimal("riskRewardRatio", { precision: 8, scale: 2 }).notNull(),
-  /** Return amount - negative for loss, positive for profit */
-  returnAmount: decimal("returnAmount", { precision: 18, scale: 2 }).notNull(),
-  /** Overall confidence level calculated from selected elements (0-100) */
-  confidenceLevel: int("confidenceLevel"),
-  /** Optional TradingView URL */
-  tvUrl: text("tvUrl"),
-  /** Review feedback text */
-  reviewFeedback: text("reviewFeedback"),
-  /** Post-review TradingView chart URL */
-  reviewChartUrl: text("reviewChartUrl"),
-  /** Whether the trade has been reviewed */
-  isReviewed: int("isReviewed").notNull().default(0),
-  /** Record creation timestamp */
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  /** Record update timestamp */
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+export const transactions = sqliteTable(
+  "transactions",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** Foreign key to users table */
+    userId: integer("userId").notNull(),
+    /** Foreign key to trading systems (optional, for binding trades to systems) */
+    tradingSystemId: integer("tradingSystemId"),
+    /** Account balance at time of trade */
+    accountBalance: text("accountBalance").notNull(),
+    /** Trading pair e.g., BTCUSDT */
+    tradingPair: text("tradingPair").notNull(),
+    /** Time frame e.g., 1H, 4H, 1D */
+    timeFrame: text("timeFrame").notNull(),
+    /** Trade start time - stored as UTC timestamp in milliseconds */
+    startTime: integer("startTime", { mode: "number" }).notNull(),
+    /** Trade end time - stored as UTC timestamp in milliseconds */
+    endTime: integer("endTime", { mode: "number" }).notNull(),
+    /** Trade direction: long or short */
+    direction: text("direction").$type<"long" | "short">().notNull(),
+    /** Trading logic/rationale for the trade */
+    tradingLogic: text("tradingLogic").notNull(),
+    /** Trade outcome: win, loss, or breakeven */
+    outcome: text("outcome").$type<"win" | "loss" | "breakeven">().notNull(),
+    /** Number of consecutive losses at time of trade */
+    consecutiveLosses: integer("consecutiveLosses").notNull().default(0),
+    /** Risk-reward ratio e.g., 1.5, 2.0 */
+    riskRewardRatio: text("riskRewardRatio").notNull(),
+    /** Return amount - negative for loss, positive for profit */
+    returnAmount: text("returnAmount").notNull(),
+    /** Overall confidence level calculated from selected elements (0-100) */
+    confidenceLevel: integer("confidenceLevel"),
+    /** Optional TradingView URL */
+    tvUrl: text("tvUrl"),
+    /** Review feedback text */
+    reviewFeedback: text("reviewFeedback"),
+    /** Post-review TradingView chart URL */
+    reviewChartUrl: text("reviewChartUrl"),
+    /** Whether the trade has been reviewed */
+    isReviewed: integer("isReviewed").notNull().default(0),
+    /** Record creation timestamp */
+    createdAt: integer("createdAt", { mode: "timestamp_ms" })
+      .default(sql`(unixepoch() * 1000)`)
+      .notNull(),
+    /** Record update timestamp */
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" })
+      .default(sql`(unixepoch() * 1000)`)
+      .notNull(),
+  },
+  table => [
+    check(
+      "transactions_direction_check",
+      sql`${table.direction} in ('long', 'short')`
+    ),
+    check(
+      "transactions_outcome_check",
+      sql`${table.outcome} in ('win', 'loss', 'breakeven')`
+    ),
+  ]
+);
 
 export type Transaction = typeof transactions.$inferSelect;
 export type InsertTransaction = typeof transactions.$inferInsert;
@@ -134,12 +171,12 @@ export type InsertTransaction = typeof transactions.$inferInsert;
  * Junction table for transactions and elements (many-to-many)
  * Stores which trading elements were used in each transaction
  */
-export const transactionElements = mysqlTable("transaction_elements", {
-  id: int("id").autoincrement().primaryKey(),
+export const transactionElements = sqliteTable("transaction_elements", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   /** Foreign key to transactions */
-  transactionId: int("transactionId").notNull(),
+  transactionId: integer("transactionId").notNull(),
   /** Foreign key to trading elements */
-  tradingElementId: int("tradingElementId").notNull(),
+  tradingElementId: integer("tradingElementId").notNull(),
 });
 
 export type TransactionElement = typeof transactionElements.$inferSelect;

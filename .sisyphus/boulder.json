@@ -1,0 +1,94 @@
+{
+  "active_plan": "/Users/marktang/programming/personal-projects/crypto-trading-journal/.sisyphus/plans/mysql-to-sqlite-migration.md",
+  "started_at": "2026-03-27T13:49:59.024Z",
+  "session_ids": [
+    "ses_2d0933427ffeRZ19Ht8v1wFVn4",
+    "ses_2d0701da8ffeSTC3zY8JE6Pr7J",
+    "ses_2d06b85cbffeCfeDMh9g373LD3",
+    "ses_2d0669527ffecBGPYvSChoOUtI",
+    "ses_2d06142a3ffewzplhPIkTTqULx",
+    "ses_2d04e3159ffeDoG5Pgtsu4iKzG",
+    "ses_2d037697effe3597t727umlNQf",
+    "ses_2d02d8deeffe4ivqAjdlb3GIFe",
+    "ses_2d028875effep1vxagUCdDK9pF",
+    "ses_2d022fe41ffesbu4didhkXCy01",
+    "ses_2d023071affeO4fbRIeThSe7HH",
+    "ses_2d02314d0ffe12CsWVI7xvr1YB"
+  ],
+  "plan_name": "mysql-to-sqlite-migration",
+  "agent": "atlas",
+  "task_sessions": {
+    "todo:1": {
+      "task_key": "todo:1",
+      "task_label": "1",
+      "task_title": "Lock the SQLite runtime/env/path contract",
+      "session_id": "ses_2d0701da8ffeSTC3zY8JE6Pr7J",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-03-27T13:54:43.797Z"
+    },
+    "todo:2": {
+      "task_key": "todo:2",
+      "task_label": "2",
+      "task_title": "Add a fixed-point helper for decimal-like trading values",
+      "session_id": "ses_2d06b85cbffeCfeDMh9g373LD3",
+      "agent": "Sisyphus-Junior",
+      "category": "deep",
+      "updated_at": "2026-03-27T14:00:40.013Z"
+    },
+    "todo:3": {
+      "task_key": "todo:3",
+      "task_label": "3",
+      "task_title": "Rewrite Drizzle schema and config for SQLite",
+      "session_id": "ses_2d0669527ffecBGPYvSChoOUtI",
+      "agent": "Sisyphus-Junior",
+      "category": "deep",
+      "updated_at": "2026-03-27T14:06:23.898Z"
+    },
+    "todo:4": {
+      "task_key": "todo:4",
+      "task_label": "4",
+      "task_title": "Migrate the SQLite connection lifecycle and add a real-SQLite harness",
+      "session_id": "ses_2d06142a3ffewzplhPIkTTqULx",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-03-27T14:26:43.296Z"
+    },
+    "todo:5": {
+      "task_key": "todo:5",
+      "task_label": "5",
+      "task_title": "Replace MySQL-specific write paths and make multi-step mutations atomic",
+      "session_id": "ses_2d04e3159ffeDoG5Pgtsu4iKzG",
+      "agent": "Sisyphus-Junior",
+      "category": "deep",
+      "updated_at": "2026-03-27T14:40:25.429Z"
+    },
+    "todo:6": {
+      "task_key": "todo:6",
+      "task_label": "6",
+      "task_title": "Replace numeric query semantics and timestamp update behavior on reads/stats",
+      "session_id": "ses_2d037697effe3597t727umlNQf",
+      "agent": "Sisyphus-Junior",
+      "category": "deep",
+      "updated_at": "2026-03-27T15:02:18.042Z"
+    },
+    "todo:7": {
+      "task_key": "todo:7",
+      "task_label": "7",
+      "task_title": "Reset the Drizzle migration lineage and prove a clean SQLite bootstrap",
+      "session_id": "ses_2d02d8deeffe4ivqAjdlb3GIFe",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-03-27T15:07:52.230Z"
+    },
+    "todo:8": {
+      "task_key": "todo:8",
+      "task_label": "8",
+      "task_title": "Remove MySQL residue, finish SQLite integration coverage, and run full regression",
+      "session_id": "ses_2d028875effep1vxagUCdDK9pF",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-03-27T15:14:26.648Z"
+    }
+  }
+}

@@ -7,7 +7,7 @@ vi.mock("./db", () => ({
   getUserById: vi.fn().mockResolvedValue({ id: 1, initialBalance: "10000" }),
   getCurrentBalance: vi.fn().mockResolvedValue("10000"),
   getConsecutiveLosses: vi.fn().mockResolvedValue(0),
-  createTransaction: vi.fn().mockImplementation((data) => ({
+  createTransaction: vi.fn().mockImplementation(data => ({
     id: 1,
     ...data,
     createdAt: new Date(),
@@ -58,18 +58,22 @@ vi.mock("./db", () => ({
   }),
   updateUserInitialBalance: vi.fn().mockResolvedValue(undefined),
   // Trading element functions
-  createTradingElement: vi.fn().mockImplementation((data) => ({
+  createTradingElement: vi.fn().mockImplementation(data => ({
     id: 1,
     ...data,
     createdAt: new Date(),
     updatedAt: new Date(),
   })),
   getTradingElementsByUserId: vi.fn().mockResolvedValue([]),
-  getTradingElementById: vi.fn().mockResolvedValue({ id: 1, userId: 1, name: "Gap", description: null }),
-  updateTradingElement: vi.fn().mockResolvedValue({ id: 1, name: "Gap Updated" }),
+  getTradingElementById: vi
+    .fn()
+    .mockResolvedValue({ id: 1, userId: 1, name: "Gap", description: null }),
+  updateTradingElement: vi
+    .fn()
+    .mockResolvedValue({ id: 1, name: "Gap Updated" }),
   deleteTradingElement: vi.fn().mockResolvedValue(undefined),
   // Trading system functions
-  createTradingSystem: vi.fn().mockImplementation((data) => ({
+  createTradingSystem: vi.fn().mockImplementation(data => ({
     id: 1,
     ...data,
     isActive: 0,
@@ -77,8 +81,18 @@ vi.mock("./db", () => ({
     updatedAt: new Date(),
   })),
   getTradingSystemsByUserId: vi.fn().mockResolvedValue([]),
-  getTradingSystemById: vi.fn().mockResolvedValue({ id: 1, userId: 1, name: "Test System", notes: null, isActive: 0 }),
-  updateTradingSystem: vi.fn().mockResolvedValue({ id: 1, name: "Updated System" }),
+  getTradingSystemById: vi
+    .fn()
+    .mockResolvedValue({
+      id: 1,
+      userId: 1,
+      name: "Test System",
+      notes: null,
+      isActive: 0,
+    }),
+  updateTradingSystem: vi
+    .fn()
+    .mockResolvedValue({ id: 1, name: "Updated System" }),
   deleteTradingSystem: vi.fn().mockResolvedValue(undefined),
   activateTradingSystem: vi.fn().mockResolvedValue(undefined),
   deactivateTradingSystem: vi.fn().mockResolvedValue(undefined),
@@ -94,6 +108,16 @@ vi.mock("./db", () => ({
   removeElementsFromTransaction: vi.fn().mockResolvedValue(undefined),
   calculateConfidenceLevel: vi.fn().mockResolvedValue(65),
   getElementsByIds: vi.fn().mockResolvedValue([]),
+  // SQLite transaction helpers
+  createTransactionWithElements: vi
+    .fn()
+    .mockImplementation((data, _elementIds) => ({
+      id: 1,
+      ...data,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })),
+  deleteTransactionWithElements: vi.fn().mockResolvedValue(undefined),
 }));
 
 type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
