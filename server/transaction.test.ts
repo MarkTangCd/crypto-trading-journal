@@ -81,15 +81,13 @@ vi.mock("./db", () => ({
     updatedAt: new Date(),
   })),
   getTradingSystemsByUserId: vi.fn().mockResolvedValue([]),
-  getTradingSystemById: vi
-    .fn()
-    .mockResolvedValue({
-      id: 1,
-      userId: 1,
-      name: "Test System",
-      notes: null,
-      isActive: 0,
-    }),
+  getTradingSystemById: vi.fn().mockResolvedValue({
+    id: 1,
+    userId: 1,
+    name: "Test System",
+    notes: null,
+    isActive: 0,
+  }),
   updateTradingSystem: vi
     .fn()
     .mockResolvedValue({ id: 1, name: "Updated System" }),
@@ -130,6 +128,8 @@ function createAuthContext(): TrpcContext {
     name: "Test User",
     loginMethod: "manus",
     role: "user",
+    initialBalance: "0",
+    activeTradingSystemId: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     lastSignedIn: new Date(),

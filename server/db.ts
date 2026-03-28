@@ -5,6 +5,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import {
   InsertUser,
+  type User,
   users,
   transactions,
   InsertTransaction,
@@ -19,6 +20,7 @@ import {
   transactionElements,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import { ANONYMOUS_OPEN_ID, ANONYMOUS_USER_NAME } from "@shared/const";
 import {
   add as addFixedPoint,
   compare as compareFixedPoint,
@@ -51,6 +53,7 @@ function addDecimalStrings(values: string[]): string {
 
 let _db: SqliteRemoteDatabase | null = null;
 let _sqliteDb: DatabaseSync | null = null;
+let _anonymousUserPromise: Promise<User> | null = null;
 
 async function runInSqliteTransaction<T>(
   operation: (db: SqliteRemoteDatabase) => Promise<T>
@@ -161,6 +164,35 @@ export function closeDb(): void {
     _sqliteDb = null;
   }
   _db = null;
+  _anonymousUserPromise = null;
+}
+
+async function loadAnonymousUser(): Promise<User> {
+  await upsertUser({
+    openId: ANONYMOUS_OPEN_ID,
+    name: ANONYMOUS_USER_NAME,
+    loginMethod: "anonymous",
+    role: "user",
+    lastSignedIn: new Date(),
+  });
+
+  const user = await getUserByOpenId(ANONYMOUS_OPEN_ID);
+  if (!user) {
+    throw new Error("Failed to create anonymous user");
+  }
+
+  return user;
+}
+
+export async function getOrCreateAnonymousUser(): Promise<User> {
+  if (!_anonymousUserPromise) {
+    _anonymousUserPromise = loadAnonymousUser().catch(error => {
+      _anonymousUserPromise = null;
+      throw error;
+    });
+  }
+
+  return _anonymousUserPromise;
 }
 
 export async function upsertUser(user: InsertUser): Promise<void> {
@@ -200,9 +232,6 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     if (user.role !== undefined) {
       values.role = user.role;
       updateSet.role = user.role;
-    } else if (user.openId === ENV.ownerOpenId) {
-      values.role = "admin";
-      updateSet.role = "admin";
     }
 
     if (!values.lastSignedIn) {

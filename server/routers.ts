@@ -1,7 +1,5 @@
-import { COOKIE_NAME } from "@shared/const";
-import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import {
   createTransactionWithElements,
@@ -39,20 +37,10 @@ import { add as addFixedPoint } from "./_core/fixedPoint";
 
 export const appRouter = router({
   system: systemRouter,
-  auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
-    logout: publicProcedure.mutation(({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      return {
-        success: true,
-      } as const;
-    }),
-  }),
 
   // User settings
   user: router({
-    getSettings: protectedProcedure.query(async ({ ctx }) => {
+    getSettings: publicProcedure.query(async ({ ctx }) => {
       const user = await getUserById(ctx.user.id);
       return {
         initialBalance: user?.initialBalance || "0",
@@ -60,7 +48,7 @@ export const appRouter = router({
       };
     }),
 
-    setInitialBalance: protectedProcedure
+    setInitialBalance: publicProcedure
       .input(z.object({ initialBalance: z.string() }))
       .mutation(async ({ ctx, input }) => {
         await updateUserInitialBalance(ctx.user.id, input.initialBalance);
@@ -70,7 +58,7 @@ export const appRouter = router({
 
   // Trading Elements (opportunity tags)
   tradingElement: router({
-    create: protectedProcedure
+    create: publicProcedure
       .input(
         z.object({
           name: z.string().min(1).max(100),
@@ -87,17 +75,17 @@ export const appRouter = router({
         });
       }),
 
-    get: protectedProcedure
+    get: publicProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ ctx, input }) => {
         return getTradingElementById(input.id, ctx.user.id);
       }),
 
-    list: protectedProcedure.query(async ({ ctx }) => {
+    list: publicProcedure.query(async ({ ctx }) => {
       return getTradingElementsByUserId(ctx.user.id);
     }),
 
-    update: protectedProcedure
+    update: publicProcedure
       .input(
         z.object({
           id: z.number(),
@@ -111,7 +99,7 @@ export const appRouter = router({
         return updateTradingElement(id, ctx.user.id, data);
       }),
 
-    delete: protectedProcedure
+    delete: publicProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
         await deleteTradingElement(input.id, ctx.user.id);
@@ -121,7 +109,7 @@ export const appRouter = router({
 
   // Trading Systems
   tradingSystem: router({
-    create: protectedProcedure
+    create: publicProcedure
       .input(
         z.object({
           name: z.string().min(1).max(100),
@@ -140,21 +128,21 @@ export const appRouter = router({
         );
       }),
 
-    get: protectedProcedure
+    get: publicProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ ctx, input }) => {
         return getTradingSystemById(input.id, ctx.user.id);
       }),
 
-    list: protectedProcedure.query(async ({ ctx }) => {
+    list: publicProcedure.query(async ({ ctx }) => {
       return getTradingSystemsByUserId(ctx.user.id);
     }),
 
-    getActive: protectedProcedure.query(async ({ ctx }) => {
+    getActive: publicProcedure.query(async ({ ctx }) => {
       return getActiveTradingSystem(ctx.user.id);
     }),
 
-    update: protectedProcedure
+    update: publicProcedure
       .input(
         z.object({
           id: z.number(),
@@ -168,20 +156,20 @@ export const appRouter = router({
         return updateTradingSystem(id, ctx.user.id, data, elementIds);
       }),
 
-    delete: protectedProcedure
+    delete: publicProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
         await deleteTradingSystem(input.id, ctx.user.id);
         return { success: true };
       }),
 
-    activate: protectedProcedure
+    activate: publicProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
         return activateTradingSystem(input.id, ctx.user.id);
       }),
 
-    deactivate: protectedProcedure
+    deactivate: publicProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
         await deactivateTradingSystem(input.id, ctx.user.id);
@@ -192,7 +180,7 @@ export const appRouter = router({
   // Transaction operations
   transaction: router({
     // Create a new transaction
-    create: protectedProcedure
+    create: publicProcedure
       .input(
         z.object({
           tradingPair: z.string().min(1),
@@ -268,7 +256,7 @@ export const appRouter = router({
       }),
 
     // Get a single transaction with elements
-    get: protectedProcedure
+    get: publicProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ ctx, input }) => {
         const transaction = await getTransactionById(input.id, ctx.user.id);
@@ -279,7 +267,7 @@ export const appRouter = router({
       }),
 
     // List transactions with filters
-    list: protectedProcedure
+    list: publicProcedure
       .input(
         z
           .object({
@@ -300,7 +288,7 @@ export const appRouter = router({
       }),
 
     // Update transaction (for reviews)
-    update: protectedProcedure
+    update: publicProcedure
       .input(
         z.object({
           id: z.number(),
@@ -318,7 +306,7 @@ export const appRouter = router({
       }),
 
     // Delete transaction
-    delete: protectedProcedure
+    delete: publicProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
         await deleteTransactionWithElements(input.id, ctx.user.id);
@@ -326,7 +314,7 @@ export const appRouter = router({
       }),
 
     // Get current state for new transaction form
-    getFormDefaults: protectedProcedure.query(async ({ ctx }) => {
+    getFormDefaults: publicProcedure.query(async ({ ctx }) => {
       const user = await getUserById(ctx.user.id);
       const initialBalance = user?.initialBalance || "0";
       const currentBalance = await getCurrentBalance(
@@ -351,12 +339,12 @@ export const appRouter = router({
     }),
 
     // Get unique trading pairs for filter dropdown
-    getTradingPairs: protectedProcedure.query(async ({ ctx }) => {
+    getTradingPairs: publicProcedure.query(async ({ ctx }) => {
       return getUniqueTradingPairs(ctx.user.id);
     }),
 
     // Get elements for a transaction
-    getElements: protectedProcedure
+    getElements: publicProcedure
       .input(z.object({ transactionId: z.number() }))
       .query(async ({ input }) => {
         return getTransactionElements(input.transactionId);
@@ -365,13 +353,13 @@ export const appRouter = router({
 
   // Statistics
   stats: router({
-    get: protectedProcedure.query(async ({ ctx }) => {
+    get: publicProcedure.query(async ({ ctx }) => {
       const user = await getUserById(ctx.user.id);
       const initialBalance = user?.initialBalance || "0";
       return getStatistics(ctx.user.id, initialBalance);
     }),
 
-    getBySystem: protectedProcedure.query(async ({ ctx }) => {
+    getBySystem: publicProcedure.query(async ({ ctx }) => {
       return getSystemStatistics(ctx.user.id);
     }),
   }),
