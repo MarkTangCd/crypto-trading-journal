@@ -1,5 +1,11 @@
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,7 +15,7 @@ import { trpc } from "@/lib/trpc";
 import { useState, useEffect } from "react";
 import { useLocation, useParams } from "wouter";
 import { format } from "date-fns";
-import { ArrowLeft, ExternalLink, Loader2, CheckCircle2, Gauge, Tag } from "lucide-react";
+import { ArrowLeft, ExternalLink, Loader2, Gauge, Tag } from "lucide-react";
 import { toast } from "sonner";
 
 function getConfidenceColor(level: number): string {
@@ -63,7 +69,7 @@ export default function TransactionDetail() {
       utils.transaction.get.invalidate({ id: transactionId });
       utils.transaction.list.invalidate();
     },
-    onError: (error) => {
+    onError: error => {
       toast.error(error.message || "Failed to save review");
     },
   });
@@ -73,7 +79,6 @@ export default function TransactionDetail() {
       id: transactionId,
       reviewFeedback: reviewFeedback || undefined,
       reviewChartUrl: reviewChartUrl || undefined,
-      isReviewed: true,
     });
   };
 
@@ -89,7 +94,9 @@ export default function TransactionDetail() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px]">
         <h2 className="text-lg font-semibold">Transaction not found</h2>
-        <p className="text-muted-foreground mt-1">The transaction you're looking for doesn't exist.</p>
+        <p className="text-muted-foreground mt-1">
+          The transaction you're looking for doesn't exist.
+        </p>
         <Button className="mt-4" onClick={() => setLocation("/transactions")}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Transactions
@@ -103,22 +110,29 @@ export default function TransactionDetail() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => setLocation("/transactions")}>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setLocation("/transactions")}
+        >
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
           <h1 className="text-heading flex items-center gap-3">
             {transaction.tradingPair}
-            <Badge 
-              variant="outline" 
-              className={transaction.direction === "long" ? "direction-long border-current" : "direction-short border-current"}
+            <Badge
+              variant="outline"
+              className={
+                transaction.direction === "long"
+                  ? "direction-long border-current"
+                  : "direction-short border-current"
+              }
             >
               {transaction.direction.toUpperCase()}
             </Badge>
-            {transaction.isReviewed ? (
+            {transaction.status !== "open" ? (
               <Badge variant="secondary" className="bg-accent">
-                <CheckCircle2 className="mr-1 h-3 w-3" />
-                Reviewed
+                {transaction.status.toUpperCase()}
               </Badge>
             ) : null}
           </h1>
@@ -133,13 +147,17 @@ export default function TransactionDetail() {
         <div className="lg:col-span-2 space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg font-semibold">Trade Details</CardTitle>
+              <CardTitle className="text-lg font-semibold">
+                Trade Details
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid gap-6 sm:grid-cols-2">
                 <div className="space-y-4">
                   <div>
-                    <p className="text-sm text-muted-foreground">Trading Pair</p>
+                    <p className="text-sm text-muted-foreground">
+                      Trading Pair
+                    </p>
                     <p className="font-semibold">{transaction.tradingPair}</p>
                   </div>
                   <div>
@@ -148,7 +166,9 @@ export default function TransactionDetail() {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Direction</p>
-                    <p className={`font-semibold ${transaction.direction === "long" ? "direction-long" : "direction-short"}`}>
+                    <p
+                      className={`font-semibold ${transaction.direction === "long" ? "direction-long" : "direction-short"}`}
+                    >
                       {transaction.direction.toUpperCase()}
                     </p>
                   </div>
@@ -156,16 +176,30 @@ export default function TransactionDetail() {
                 <div className="space-y-4">
                   <div>
                     <p className="text-sm text-muted-foreground">Start Time</p>
-                    <p className="font-semibold">{format(new Date(transaction.startTime), "MMM d, yyyy HH:mm")}</p>
+                    <p className="font-semibold">
+                      {format(
+                        new Date(transaction.startTime),
+                        "MMM d, yyyy HH:mm"
+                      )}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">End Time</p>
-                    <p className="font-semibold">{format(new Date(transaction.endTime), "MMM d, yyyy HH:mm")}</p>
+                    <p className="font-semibold">
+                      {transaction.endTime
+                        ? format(
+                            new Date(transaction.endTime),
+                            "MMM d, yyyy HH:mm"
+                          )
+                        : "—"}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Duration</p>
                     <p className="font-semibold">
-                      {Math.round((transaction.endTime - transaction.startTime) / (1000 * 60))} minutes
+                      {transaction.endTime
+                        ? `${Math.round((transaction.endTime - transaction.startTime) / (1000 * 60))} minutes`
+                        : "—"}
                     </p>
                   </div>
                 </div>
@@ -174,9 +208,13 @@ export default function TransactionDetail() {
               <Separator className="my-6" />
 
               <div>
-                <p className="text-sm text-muted-foreground mb-2">Trading Logic</p>
+                <p className="text-sm text-muted-foreground mb-2">
+                  Trading Logic
+                </p>
                 <div className="bg-muted/50 rounded-lg p-4">
-                  <p className="text-sm whitespace-pre-wrap">{transaction.tradingLogic}</p>
+                  <p className="text-sm whitespace-pre-wrap">
+                    {transaction.tradingLogic}
+                  </p>
                 </div>
               </div>
 
@@ -184,8 +222,13 @@ export default function TransactionDetail() {
                 <>
                   <Separator className="my-6" />
                   <div>
-                    <p className="text-sm text-muted-foreground mb-2">TradingView Chart</p>
-                    <Button variant="outline" onClick={() => window.open(transaction.tvUrl!, "_blank")}>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      TradingView Chart
+                    </p>
+                    <Button
+                      variant="outline"
+                      onClick={() => window.open(transaction.tvUrl!, "_blank")}
+                    >
                       <ExternalLink className="mr-2 h-4 w-4" />
                       Open Chart
                     </Button>
@@ -209,17 +252,25 @@ export default function TransactionDetail() {
               </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-2">
-                  {elements.map((element: { id: number; name: string; confidenceLevel: number }) => (
-                    <div
-                      key={element.id}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-card"
-                    >
-                      <span className="font-medium">{element.name}</span>
-                      <span className={`text-xs px-1.5 py-0.5 rounded ${getConfidenceBgColor(element.confidenceLevel)} ${getConfidenceColor(element.confidenceLevel)}`}>
-                        {element.confidenceLevel}%
-                      </span>
-                    </div>
-                  ))}
+                  {elements.map(
+                    (element: {
+                      id: number;
+                      name: string;
+                      confidenceLevel: number;
+                    }) => (
+                      <div
+                        key={element.id}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-card"
+                      >
+                        <span className="font-medium">{element.name}</span>
+                        <span
+                          className={`text-xs px-1.5 py-0.5 rounded ${getConfidenceBgColor(element.confidenceLevel)} ${getConfidenceColor(element.confidenceLevel)}`}
+                        >
+                          {element.confidenceLevel}%
+                        </span>
+                      </div>
+                    )
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -228,7 +279,9 @@ export default function TransactionDetail() {
           {/* Review Section */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg font-semibold">Trade Review</CardTitle>
+              <CardTitle className="text-lg font-semibold">
+                Trade Review
+              </CardTitle>
               <CardDescription className="text-subtitle">
                 Add your post-trade analysis and feedback
               </CardDescription>
@@ -241,18 +294,20 @@ export default function TransactionDetail() {
                   placeholder="What did you learn from this trade? What could you have done better?"
                   rows={5}
                   value={reviewFeedback}
-                  onChange={(e) => setReviewFeedback(e.target.value)}
+                  onChange={e => setReviewFeedback(e.target.value)}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="reviewChartUrl">Post-Review Chart URL (Optional)</Label>
+                <Label htmlFor="reviewChartUrl">
+                  Post-Review Chart URL (Optional)
+                </Label>
                 <Input
                   id="reviewChartUrl"
                   type="url"
                   placeholder="https://www.tradingview.com/chart/..."
                   value={reviewChartUrl}
-                  onChange={(e) => setReviewChartUrl(e.target.value)}
+                  onChange={e => setReviewChartUrl(e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">
                   Attach a TradingView chart showing your post-trade analysis
@@ -261,7 +316,12 @@ export default function TransactionDetail() {
 
               {transaction.reviewChartUrl && (
                 <div>
-                  <Button variant="outline" onClick={() => window.open(transaction.reviewChartUrl!, "_blank")}>
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      window.open(transaction.reviewChartUrl!, "_blank")
+                    }
+                  >
                     <ExternalLink className="mr-2 h-4 w-4" />
                     View Review Chart
                   </Button>
@@ -269,7 +329,7 @@ export default function TransactionDetail() {
               )}
 
               <div className="pt-2">
-                <Button 
+                <Button
                   onClick={handleSaveReview}
                   disabled={updateMutation.isPending}
                 >
@@ -296,17 +356,21 @@ export default function TransactionDetail() {
             <CardContent className="space-y-4">
               <div className="flex justify-between items-center py-2 border-b">
                 <span className="text-sm text-muted-foreground">Result</span>
-                <Badge 
+                <Badge
                   variant="outline"
                   className={
-                    transaction.outcome === "win" 
-                      ? "status-win border-current" 
-                      : transaction.outcome === "loss" 
-                        ? "status-loss border-current" 
+                    transaction.outcome === "win"
+                      ? "status-win border-current"
+                      : transaction.outcome === "loss"
+                        ? "status-loss border-current"
                         : "status-breakeven border-current"
                   }
                 >
-                  {transaction.outcome === "breakeven" ? "BREAK EVEN" : transaction.outcome.toUpperCase()}
+                  {transaction.outcome
+                    ? transaction.outcome === "breakeven"
+                      ? "BREAK EVEN"
+                      : transaction.outcome.toUpperCase()
+                    : "—"}
                 </Badge>
               </div>
               {transaction.confidenceLevel !== null && (
@@ -316,33 +380,55 @@ export default function TransactionDetail() {
                     Confidence
                   </span>
                   <div className="flex items-center gap-2">
-                    <span className={`font-semibold ${getConfidenceColor(transaction.confidenceLevel)}`}>
+                    <span
+                      className={`font-semibold ${getConfidenceColor(transaction.confidenceLevel)}`}
+                    >
                       {transaction.confidenceLevel}%
                     </span>
-                    <span className={`text-xs ${getConfidenceColor(transaction.confidenceLevel)}`}>
+                    <span
+                      className={`text-xs ${getConfidenceColor(transaction.confidenceLevel)}`}
+                    >
                       ({getConfidenceLabel(transaction.confidenceLevel)})
                     </span>
                   </div>
                 </div>
               )}
               <div className="flex justify-between items-center py-2 border-b">
-                <span className="text-sm text-muted-foreground">Risk-Reward</span>
-                <span className="font-semibold">{transaction.riskRewardRatio}</span>
-              </div>
-              <div className="flex justify-between items-center py-2 border-b">
-                <span className="text-sm text-muted-foreground">Return</span>
-                <span className={`font-semibold ${parseFloat(transaction.returnAmount) >= 0 ? "status-win" : "status-loss"}`}>
-                  {parseFloat(transaction.returnAmount) >= 0 ? "+" : ""}${transaction.returnAmount}
+                <span className="text-sm text-muted-foreground">
+                  Risk-Reward
+                </span>
+                <span className="font-semibold">
+                  {transaction.riskRewardRatio ?? "—"}
                 </span>
               </div>
               <div className="flex justify-between items-center py-2 border-b">
-                <span className="text-sm text-muted-foreground">Balance After</span>
-                <span className="font-semibold">${transaction.accountBalance}</span>
+                <span className="text-sm text-muted-foreground">Return</span>
+                <span
+                  className={`font-semibold ${transaction.returnAmount && parseFloat(transaction.returnAmount) >= 0 ? "status-win" : "status-loss"}`}
+                >
+                  {transaction.returnAmount
+                    ? `${parseFloat(transaction.returnAmount) >= 0 ? "+" : ""}$${transaction.returnAmount}`
+                    : "—"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-sm text-muted-foreground">
+                  Balance After
+                </span>
+                <span className="font-semibold">
+                  {transaction.accountBalance
+                    ? `$${transaction.accountBalance}`
+                    : "—"}
+                </span>
               </div>
               <div className="flex justify-between items-center py-2">
-                <span className="text-sm text-muted-foreground">Losing Streak</span>
-                <span className={`font-semibold ${transaction.consecutiveLosses > 0 ? "status-loss" : ""}`}>
-                  {transaction.consecutiveLosses}
+                <span className="text-sm text-muted-foreground">
+                  Losing Streak
+                </span>
+                <span
+                  className={`font-semibold ${transaction.consecutiveLosses && transaction.consecutiveLosses > 0 ? "status-loss" : ""}`}
+                >
+                  {transaction.consecutiveLosses ?? "—"}
                 </span>
               </div>
             </CardContent>
@@ -355,11 +441,15 @@ export default function TransactionDetail() {
             <CardContent className="space-y-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Created</span>
-                <span>{format(new Date(transaction.createdAt), "MMM d, yyyy HH:mm")}</span>
+                <span>
+                  {format(new Date(transaction.createdAt), "MMM d, yyyy HH:mm")}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Updated</span>
-                <span>{format(new Date(transaction.updatedAt), "MMM d, yyyy HH:mm")}</span>
+                <span>
+                  {format(new Date(transaction.updatedAt), "MMM d, yyyy HH:mm")}
+                </span>
               </div>
             </CardContent>
           </Card>

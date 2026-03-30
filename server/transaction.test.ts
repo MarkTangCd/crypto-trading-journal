@@ -9,6 +9,7 @@ vi.mock("./db", () => ({
   getConsecutiveLosses: vi.fn().mockResolvedValue(0),
   createTransaction: vi.fn().mockImplementation(data => ({
     id: 1,
+    status: "open",
     ...data,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -23,6 +24,7 @@ vi.mock("./db", () => ({
     direction: "long",
     tradingLogic: "Test trade",
     outcome: "win",
+    status: "open",
     consecutiveLosses: 0,
     riskRewardRatio: "2.5",
     returnAmount: "100",
@@ -30,14 +32,13 @@ vi.mock("./db", () => ({
     tvUrl: null,
     reviewFeedback: null,
     reviewChartUrl: null,
-    isReviewed: 0,
     createdAt: new Date(),
     updatedAt: new Date(),
   }),
   getTransactionsByUserId: vi.fn().mockResolvedValue([]),
   updateTransaction: vi.fn().mockResolvedValue({
     id: 1,
-    isReviewed: 1,
+    status: "reviewed",
     reviewFeedback: "Good trade",
   }),
   deleteTransaction: vi.fn().mockResolvedValue(undefined),
@@ -111,6 +112,7 @@ vi.mock("./db", () => ({
     .fn()
     .mockImplementation((data, _elementIds) => ({
       id: 1,
+      status: "open",
       ...data,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -242,7 +244,6 @@ describe("transaction procedures", () => {
       const result = await caller.transaction.update({
         id: 1,
         reviewFeedback: "Good trade, followed the plan",
-        isReviewed: true,
       });
 
       expect(result).toBeDefined();

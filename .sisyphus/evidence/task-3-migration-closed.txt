@@ -1,0 +1,6 @@
+Command: npx vitest run server/transaction.lifecycle.test.ts -t "closed"
+
+Result:
+✓ server/transaction.lifecycle.test.ts (3 tests | 1 skipped) 360ms
+Test Files  1 passed (1)
+Tests  2 passed | 1 skipped (3)

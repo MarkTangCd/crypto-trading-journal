@@ -1,4 +1,4 @@
-import { eq, desc, asc, and, inArray } from "drizzle-orm";
+import { eq, desc, asc, and, inArray, sql } from "drizzle-orm";
 import { drizzle, type SqliteRemoteDatabase } from "drizzle-orm/sqlite-proxy";
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
@@ -600,7 +600,7 @@ export async function getTransactionsByUserId(
     outcome?: "win" | "loss" | "breakeven";
     direction?: "long" | "short";
     tradingPair?: string;
-    isReviewed?: boolean;
+    status?: "open" | "closed" | "reviewed";
     tradingSystemId?: number;
   }
 ) {
@@ -618,8 +618,8 @@ export async function getTransactionsByUserId(
   if (options?.tradingPair) {
     conditions.push(eq(transactions.tradingPair, options.tradingPair));
   }
-  if (options?.isReviewed !== undefined) {
-    conditions.push(eq(transactions.isReviewed, options.isReviewed ? 1 : 0));
+  if (options?.status) {
+    conditions.push(eq(transactions.status, options.status));
   }
   if (options?.tradingSystemId !== undefined) {
     conditions.push(eq(transactions.tradingSystemId, options.tradingSystemId));
@@ -638,8 +638,11 @@ export async function getTransactionsByUserId(
     const multiplier = options?.sortOrder === "asc" ? 1 : -1;
 
     rows.sort((left, right) => {
+      const leftReturnAmount = left.returnAmount ?? ZERO_DECIMAL;
+      const rightReturnAmount = right.returnAmount ?? ZERO_DECIMAL;
+
       return (
-        compareFixedPoint(left.returnAmount, right.returnAmount) * multiplier
+        compareFixedPoint(leftReturnAmount, rightReturnAmount) * multiplier
       );
     });
 
@@ -669,6 +672,25 @@ export async function updateTransaction(
     .where(and(eq(transactions.id, id), eq(transactions.userId, userId)));
 
   return getTransactionById(id, userId);
+}
+
+export async function migrateTransactionStatus(): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const reviewedRows = await db
+    .update(transactions)
+    .set({ status: "reviewed" })
+    .where(eq(sql<number>`isReviewed`, 1))
+    .returning({ id: transactions.id });
+
+  const closedRows = await db
+    .update(transactions)
+    .set({ status: "closed" })
+    .where(eq(sql<number>`isReviewed`, 0))
+    .returning({ id: transactions.id });
+
+  return reviewedRows.length + closedRows.length;
 }
 
 export async function deleteTransaction(id: number, userId: number) {
@@ -731,7 +753,7 @@ export async function getCurrentBalance(
     .where(eq(transactions.userId, userId));
 
   const totalReturn = addDecimalStrings(
-    returnRows.map(row => row.returnAmount)
+    returnRows.map(row => row.returnAmount ?? ZERO_DECIMAL)
   );
 
   return addDecimalStrings([initialBalance || ZERO_DECIMAL, totalReturn]);
@@ -784,19 +806,18 @@ export async function getStatistics(userId: number, initialBalance: string) {
   let negativeReturnCount = 0;
 
   for (const transaction of allTransactions) {
-    totalReward = addDecimalStrings([totalReward, transaction.returnAmount]);
+    const returnAmount = transaction.returnAmount ?? ZERO_DECIMAL;
 
-    const comparison = compareFixedPoint(
-      transaction.returnAmount,
-      ZERO_DECIMAL
-    );
+    totalReward = addDecimalStrings([totalReward, returnAmount]);
+
+    const comparison = compareFixedPoint(returnAmount, ZERO_DECIMAL);
     if (comparison > 0) {
-      totalProfit = addDecimalStrings([totalProfit, transaction.returnAmount]);
+      totalProfit = addDecimalStrings([totalProfit, returnAmount]);
       positiveReturnCount += 1;
     } else if (comparison < 0) {
-      const absoluteLoss = transaction.returnAmount.startsWith("-")
-        ? transaction.returnAmount.slice(1)
-        : transaction.returnAmount;
+      const absoluteLoss = returnAmount.startsWith("-")
+        ? returnAmount.slice(1)
+        : returnAmount;
 
       totalLoss = addDecimalStrings([totalLoss, absoluteLoss]);
       negativeReturnCount += 1;
@@ -881,7 +902,9 @@ export async function getSystemStatistics(userId: number) {
       const winRate = totalTrades > 0 ? (winCount / totalTrades) * 100 : 0;
 
       const totalReturn = addDecimalStrings(
-        systemTransactions.map(transaction => transaction.returnAmount)
+        systemTransactions.map(
+          transaction => transaction.returnAmount ?? ZERO_DECIMAL
+        )
       );
 
       return {

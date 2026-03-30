@@ -1,0 +1,9 @@
+
+> crypto-trading-journal@1.0.0 db:push
+> drizzle-kit generate && drizzle-kit migrate
+
+No config path provided, using default 'drizzle.config.ts'
+Reading config file '/Users/marktang/programming/personal-projects/crypto-trading-journal/drizzle.config.ts'
+No config path provided, using default 'drizzle.config.ts'
+Reading config file '/Users/marktang/programming/personal-projects/crypto-trading-journal/drizzle.config.ts'
+[⣷] applying migrations...[2K[1G[✓] migrations applied successfully!

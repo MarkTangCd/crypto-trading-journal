@@ -1,0 +1,6 @@
+Command: npx vitest run server/transaction.lifecycle.test.ts -t "marks reviewed transactions as reviewed"
+
+Result:
+✓ server/transaction.lifecycle.test.ts (3 tests | 2 skipped) 199ms
+Test Files  1 passed (1)
+Tests  1 passed | 2 skipped (3)

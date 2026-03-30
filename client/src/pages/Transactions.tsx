@@ -1,13 +1,34 @@
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { ArrowUpDown, Plus, Eye, Trash2, Loader2, ExternalLink, Gauge } from "lucide-react";
+import {
+  ArrowUpDown,
+  Plus,
+  Eye,
+  Trash2,
+  Loader2,
+  ExternalLink,
+  Gauge,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -49,7 +70,7 @@ function getConfidenceBgColor(level: number): string {
 export default function Transactions() {
   const [, setLocation] = useLocation();
   const utils = trpc.useUtils();
-  
+
   const [sortBy, setSortBy] = useState<SortBy>("createdAt");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [outcomeFilter, setOutcomeFilter] = useState<Outcome>(undefined);
@@ -75,7 +96,7 @@ export default function Transactions() {
       utils.stats.get.invalidate();
       setDeleteId(null);
     },
-    onError: (error) => {
+    onError: error => {
       toast.error(error.message || "Failed to delete transaction");
     },
   });
@@ -102,7 +123,9 @@ export default function Transactions() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-heading">Transactions</h1>
-          <p className="text-subtitle mt-1">View and manage your trading history</p>
+          <p className="text-subtitle mt-1">
+            View and manage your trading history
+          </p>
         </div>
         <Button onClick={() => setLocation("/transactions/new")}>
           <Plus className="mr-2 h-4 w-4" />
@@ -126,9 +149,11 @@ export default function Transactions() {
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-2">
               <label className="text-sm text-muted-foreground">Outcome</label>
-              <Select 
-                value={outcomeFilter || "all"} 
-                onValueChange={(v) => setOutcomeFilter(v === "all" ? undefined : v as Outcome)}
+              <Select
+                value={outcomeFilter || "all"}
+                onValueChange={v =>
+                  setOutcomeFilter(v === "all" ? undefined : (v as Outcome))
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="All outcomes" />
@@ -143,9 +168,11 @@ export default function Transactions() {
             </div>
             <div className="space-y-2">
               <label className="text-sm text-muted-foreground">Direction</label>
-              <Select 
-                value={directionFilter || "all"} 
-                onValueChange={(v) => setDirectionFilter(v === "all" ? undefined : v as Direction)}
+              <Select
+                value={directionFilter || "all"}
+                onValueChange={v =>
+                  setDirectionFilter(v === "all" ? undefined : (v as Direction))
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="All directions" />
@@ -158,18 +185,22 @@ export default function Transactions() {
               </Select>
             </div>
             <div className="space-y-2">
-              <label className="text-sm text-muted-foreground">Trading Pair</label>
-              <Select 
-                value={pairFilter || "all"} 
-                onValueChange={(v) => setPairFilter(v === "all" ? "" : v)}
+              <label className="text-sm text-muted-foreground">
+                Trading Pair
+              </label>
+              <Select
+                value={pairFilter || "all"}
+                onValueChange={v => setPairFilter(v === "all" ? "" : v)}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="All pairs" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All pairs</SelectItem>
-                  {tradingPairs?.map((pair) => (
-                    <SelectItem key={pair} value={pair}>{pair}</SelectItem>
+                  {tradingPairs?.map(pair => (
+                    <SelectItem key={pair} value={pair}>
+                      {pair}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -193,7 +224,7 @@ export default function Transactions() {
                     <TableHead>Pair</TableHead>
                     <TableHead>Direction</TableHead>
                     <TableHead>
-                      <button 
+                      <button
                         className="flex items-center gap-1 hover:text-foreground"
                         onClick={() => toggleSort("startTime")}
                       >
@@ -214,7 +245,7 @@ export default function Transactions() {
                     </TableHead>
                     <TableHead>R:R</TableHead>
                     <TableHead>
-                      <button 
+                      <button
                         className="flex items-center gap-1 hover:text-foreground"
                         onClick={() => toggleSort("returnAmount")}
                       >
@@ -229,11 +260,20 @@ export default function Transactions() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {transactions.map((tx) => (
+                  {transactions.map(tx => (
                     <TableRow key={tx.id}>
-                      <TableCell className="font-medium">{tx.tradingPair}</TableCell>
+                      <TableCell className="font-medium">
+                        {tx.tradingPair}
+                      </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className={tx.direction === "long" ? "direction-long border-current" : "direction-short border-current"}>
+                        <Badge
+                          variant="outline"
+                          className={
+                            tx.direction === "long"
+                              ? "direction-long border-current"
+                              : "direction-short border-current"
+                          }
+                        >
                           {tx.direction.toUpperCase()}
                         </Badge>
                       </TableCell>
@@ -242,24 +282,30 @@ export default function Transactions() {
                       </TableCell>
                       <TableCell>{tx.timeFrame}</TableCell>
                       <TableCell>
-                        <Badge 
+                        <Badge
                           variant="outline"
                           className={
-                            tx.outcome === "win" 
-                              ? "status-win border-current" 
-                              : tx.outcome === "loss" 
-                                ? "status-loss border-current" 
+                            tx.outcome === "win"
+                              ? "status-win border-current"
+                              : tx.outcome === "loss"
+                                ? "status-loss border-current"
                                 : "status-breakeven border-current"
                           }
                         >
-                          {tx.outcome === "breakeven" ? "BE" : tx.outcome.toUpperCase()}
+                          {tx.outcome
+                            ? tx.outcome === "breakeven"
+                              ? "BE"
+                              : tx.outcome.toUpperCase()
+                            : "—"}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         {tx.confidenceLevel !== null ? (
                           <Tooltip>
                             <TooltipTrigger>
-                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${getConfidenceBgColor(tx.confidenceLevel)} ${getConfidenceColor(tx.confidenceLevel)}`}>
+                              <span
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${getConfidenceBgColor(tx.confidenceLevel)} ${getConfidenceColor(tx.confidenceLevel)}`}
+                              >
                                 {tx.confidenceLevel}%
                               </span>
                             </TooltipTrigger>
@@ -268,26 +314,46 @@ export default function Transactions() {
                             </TooltipContent>
                           </Tooltip>
                         ) : (
-                          <span className="text-muted-foreground text-sm">—</span>
+                          <span className="text-muted-foreground text-sm">
+                            —
+                          </span>
                         )}
                       </TableCell>
-                      <TableCell>{tx.riskRewardRatio}</TableCell>
-                      <TableCell className={parseFloat(tx.returnAmount) >= 0 ? "status-win font-medium" : "status-loss font-medium"}>
-                        {parseFloat(tx.returnAmount) >= 0 ? "+" : ""}{tx.returnAmount}
+                      <TableCell>{tx.riskRewardRatio ?? "—"}</TableCell>
+                      <TableCell
+                        className={
+                          tx.returnAmount && parseFloat(tx.returnAmount) >= 0
+                            ? "status-win font-medium"
+                            : "status-loss font-medium"
+                        }
+                      >
+                        {tx.returnAmount
+                          ? `${parseFloat(tx.returnAmount) >= 0 ? "+" : ""}${tx.returnAmount}`
+                          : "—"}
                       </TableCell>
-                      <TableCell>${tx.accountBalance}</TableCell>
                       <TableCell>
-                        {tx.consecutiveLosses > 0 ? (
-                          <span className="status-loss">{tx.consecutiveLosses}</span>
+                        {tx.accountBalance ? `$${tx.accountBalance}` : "—"}
+                      </TableCell>
+                      <TableCell>
+                        {tx.consecutiveLosses && tx.consecutiveLosses > 0 ? (
+                          <span className="status-loss">
+                            {tx.consecutiveLosses}
+                          </span>
                         ) : (
-                          <span className="text-muted-foreground">0</span>
+                          <span className="text-muted-foreground">
+                            {tx.consecutiveLosses ?? "—"}
+                          </span>
                         )}
                       </TableCell>
                       <TableCell>
-                        {tx.isReviewed ? (
-                          <Badge variant="secondary" className="bg-accent">Reviewed</Badge>
+                        {tx.status !== "open" ? (
+                          <Badge variant="secondary" className="bg-accent">
+                            {tx.status.toUpperCase()}
+                          </Badge>
                         ) : (
-                          <span className="text-muted-foreground text-sm">—</span>
+                          <span className="text-muted-foreground text-sm">
+                            —
+                          </span>
                         )}
                       </TableCell>
                       <TableCell className="text-right">
@@ -306,7 +372,9 @@ export default function Transactions() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8"
-                            onClick={() => setLocation(`/transactions/${tx.id}`)}
+                            onClick={() =>
+                              setLocation(`/transactions/${tx.id}`)
+                            }
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
@@ -344,19 +412,25 @@ export default function Transactions() {
       </Card>
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={deleteId !== null} onOpenChange={() => setDeleteId(null)}>
+      <AlertDialog
+        open={deleteId !== null}
+        onOpenChange={() => setDeleteId(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Transaction</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this transaction? This action cannot be undone.
+              Are you sure you want to delete this transaction? This action
+              cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => deleteId && deleteMutation.mutate({ id: deleteId })}
+              onClick={() =>
+                deleteId && deleteMutation.mutate({ id: deleteId })
+              }
             >
               {deleteMutation.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

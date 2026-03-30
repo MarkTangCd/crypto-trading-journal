@@ -1,0 +1,46 @@
+
+> crypto-trading-journal@1.0.0 check
+> tsc --noEmit
+
+client/src/pages/TransactionDetail.tsx(118,26): error TS2339: Property 'isReviewed' does not exist on type '{ elements: { id: number; name: string; createdAt: Date; updatedAt: Date; userId: number; description: string | null; confidenceLevel: number; }[]; id: number; userId: number; tradingSystemId: number | null; ... 17 more ...; updatedAt: Date; }'.
+client/src/pages/TransactionDetail.tsx(163,67): error TS2769: No overload matches this call.
+  Overload 1 of 4, '(value: string | number | Date): Date', gave the following error.
+    Argument of type 'number | null' is not assignable to parameter of type 'string | number | Date'.
+      Type 'null' is not assignable to type 'string | number | Date'.
+  Overload 2 of 4, '(value: string | number): Date', gave the following error.
+    Argument of type 'number | null' is not assignable to parameter of type 'string | number'.
+      Type 'null' is not assignable to type 'string | number'.
+client/src/pages/TransactionDetail.tsx(168,36): error TS18047: 'transaction.endTime' is possibly 'null'.
+client/src/pages/TransactionDetail.tsx(309,73): error TS18047: 'transaction.outcome' is possibly 'null'.
+client/src/pages/TransactionDetail.tsx(334,62): error TS2345: Argument of type 'string | null' is not assignable to parameter of type 'string'.
+  Type 'null' is not assignable to type 'string'.
+client/src/pages/TransactionDetail.tsx(335,31): error TS2345: Argument of type 'string | null' is not assignable to parameter of type 'string'.
+  Type 'null' is not assignable to type 'string'.
+client/src/pages/TransactionDetail.tsx(344,51): error TS18047: 'transaction.consecutiveLosses' is possibly 'null'.
+client/src/pages/Transactions.tsx(255,64): error TS18047: 'tx.outcome' is possibly 'null'.
+client/src/pages/Transactions.tsx(275,56): error TS2345: Argument of type 'string | null' is not assignable to parameter of type 'string'.
+  Type 'null' is not assignable to type 'string'.
+client/src/pages/Transactions.tsx(276,37): error TS2345: Argument of type 'string | null' is not assignable to parameter of type 'string'.
+  Type 'null' is not assignable to type 'string'.
+client/src/pages/Transactions.tsx(280,26): error TS18047: 'tx.consecutiveLosses' is possibly 'null'.
+client/src/pages/Transactions.tsx(287,29): error TS2339: Property 'isReviewed' does not exist on type '{ id: number; userId: number; tradingSystemId: number | null; status: string; accountBalance: string | null; tradingPair: string; timeFrame: string; startTime: number; endTime: number | null; ... 11 more ...; updatedAt: Date; }'.
+server/db.ts(622,37): error TS2339: Property 'isReviewed' does not exist on type 'SQLiteTableWithColumns<{ name: "transactions"; schema: undefined; columns: { id: SQLiteColumn<{ name: "id"; tableName: "transactions"; dataType: "number"; columnType: "SQLiteInteger"; data: number; driverParam: number; notNull: true; ... 7 more ...; generated: undefined; }, {}, {}>; ... 19 more ...; updatedAt: SQLit...'.
+server/db.ts(642,27): error TS2345: Argument of type 'string | null' is not assignable to parameter of type 'string'.
+  Type 'null' is not assignable to type 'string'.
+server/db.ts(734,5): error TS2345: Argument of type '(string | null)[]' is not assignable to parameter of type 'string[]'.
+  Type 'string | null' is not assignable to type 'string'.
+    Type 'null' is not assignable to type 'string'.
+server/db.ts(787,51): error TS2322: Type 'string | null' is not assignable to type 'string'.
+  Type 'null' is not assignable to type 'string'.
+server/db.ts(790,7): error TS2345: Argument of type 'string | null' is not assignable to parameter of type 'string'.
+  Type 'null' is not assignable to type 'string'.
+server/db.ts(794,53): error TS2322: Type 'string | null' is not assignable to type 'string'.
+  Type 'null' is not assignable to type 'string'.
+server/db.ts(797,28): error TS18047: 'transaction.returnAmount' is possibly 'null'.
+server/db.ts(798,11): error TS18047: 'transaction.returnAmount' is possibly 'null'.
+server/db.ts(801,49): error TS2322: Type 'string | null' is not assignable to type 'string'.
+  Type 'null' is not assignable to type 'string'.
+server/db.ts(884,9): error TS2345: Argument of type '(string | null)[]' is not assignable to parameter of type 'string[]'.
+  Type 'string | null' is not assignable to type 'string'.
+    Type 'null' is not assignable to type 'string'.
+server/routers.ts(304,11): error TS2353: Object literal may only specify known properties, and 'isReviewed' does not exist in type 'Partial<{ userId: number; tradingPair: string; timeFrame: string; startTime: number; direction: "long" | "short"; tradingLogic: string; id?: number | undefined; createdAt?: Date | undefined; ... 12 more ...; reviewChartUrl?: string | ... 1 more ... | undefined; }>'.

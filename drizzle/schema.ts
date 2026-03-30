@@ -111,8 +111,9 @@ export const transactions = sqliteTable(
     userId: integer("userId").notNull(),
     /** Foreign key to trading systems (optional, for binding trades to systems) */
     tradingSystemId: integer("tradingSystemId"),
+    status: text("status").notNull().default("open"),
     /** Account balance at time of trade */
-    accountBalance: text("accountBalance").notNull(),
+    accountBalance: text("accountBalance"),
     /** Trading pair e.g., BTCUSDT */
     tradingPair: text("tradingPair").notNull(),
     /** Time frame e.g., 1H, 4H, 1D */
@@ -120,19 +121,19 @@ export const transactions = sqliteTable(
     /** Trade start time - stored as UTC timestamp in milliseconds */
     startTime: integer("startTime", { mode: "number" }).notNull(),
     /** Trade end time - stored as UTC timestamp in milliseconds */
-    endTime: integer("endTime", { mode: "number" }).notNull(),
+    endTime: integer("endTime", { mode: "number" }),
     /** Trade direction: long or short */
     direction: text("direction").$type<"long" | "short">().notNull(),
     /** Trading logic/rationale for the trade */
     tradingLogic: text("tradingLogic").notNull(),
     /** Trade outcome: win, loss, or breakeven */
-    outcome: text("outcome").$type<"win" | "loss" | "breakeven">().notNull(),
+    outcome: text("outcome").$type<"win" | "loss" | "breakeven">(),
     /** Number of consecutive losses at time of trade */
-    consecutiveLosses: integer("consecutiveLosses").notNull().default(0),
+    consecutiveLosses: integer("consecutiveLosses").default(0),
     /** Risk-reward ratio e.g., 1.5, 2.0 */
-    riskRewardRatio: text("riskRewardRatio").notNull(),
+    riskRewardRatio: text("riskRewardRatio"),
     /** Return amount - negative for loss, positive for profit */
-    returnAmount: text("returnAmount").notNull(),
+    returnAmount: text("returnAmount"),
     /** Overall confidence level calculated from selected elements (0-100) */
     confidenceLevel: integer("confidenceLevel"),
     /** Optional TradingView URL */
@@ -141,8 +142,6 @@ export const transactions = sqliteTable(
     reviewFeedback: text("reviewFeedback"),
     /** Post-review TradingView chart URL */
     reviewChartUrl: text("reviewChartUrl"),
-    /** Whether the trade has been reviewed */
-    isReviewed: integer("isReviewed").notNull().default(0),
     /** Record creation timestamp */
     createdAt: integer("createdAt", { mode: "timestamp_ms" })
       .default(sql`(unixepoch() * 1000)`)
@@ -153,6 +152,10 @@ export const transactions = sqliteTable(
       .notNull(),
   },
   table => [
+    check(
+      "transactions_status_check",
+      sql`${table.status} in ('open', 'closed', 'reviewed')`
+    ),
     check(
       "transactions_direction_check",
       sql`${table.direction} in ('long', 'short')`

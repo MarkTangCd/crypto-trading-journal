@@ -278,7 +278,7 @@ export const appRouter = router({
             outcome: z.enum(["win", "loss", "breakeven"]).optional(),
             direction: z.enum(["long", "short"]).optional(),
             tradingPair: z.string().optional(),
-            isReviewed: z.boolean().optional(),
+            status: z.enum(["open", "closed", "reviewed"]).optional(),
             tradingSystemId: z.number().optional(),
           })
           .optional()
@@ -294,14 +294,13 @@ export const appRouter = router({
           id: z.number(),
           reviewFeedback: z.string().optional(),
           reviewChartUrl: z.string().optional(),
-          isReviewed: z.boolean().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
         const { id, ...data } = input;
         return updateTransaction(id, ctx.user.id, {
           ...data,
-          isReviewed: data.isReviewed ? 1 : 0,
+          status: "reviewed",
         });
       }),
 
