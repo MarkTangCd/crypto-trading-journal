@@ -28,6 +28,7 @@ import {
 } from "./_core/fixedPoint";
 
 const ZERO_DECIMAL = "0.00";
+const CLOSED_TRADE_STATUSES = ["closed", "reviewed"] as const;
 
 function decimalToCents(value: string): number {
   const normalizedValue = normalizeFixedPoint(value);
@@ -655,6 +656,14 @@ export async function getTransactionsByUserId(
     endTime: transactions.endTime,
   };
 
+  if (sortColumn === "endTime") {
+    const nullsLastOrder =
+      options?.sortOrder === "asc"
+        ? sql`CASE WHEN ${transactions.endTime} IS NULL THEN 1 ELSE 0 END ASC, ${transactions.endTime} ASC`
+        : sql`CASE WHEN ${transactions.endTime} IS NULL THEN 1 ELSE 0 END ASC, ${transactions.endTime} DESC`;
+    return query.orderBy(nullsLastOrder);
+  }
+
   return query.orderBy(sortFn(columnMap[sortColumn]));
 }
 
@@ -724,7 +733,12 @@ export async function getConsecutiveLosses(userId: number): Promise<number> {
   const recentTransactions = await db
     .select()
     .from(transactions)
-    .where(eq(transactions.userId, userId))
+    .where(
+      and(
+        eq(transactions.userId, userId),
+        inArray(transactions.status, CLOSED_TRADE_STATUSES)
+      )
+    )
     .orderBy(desc(transactions.createdAt))
     .limit(100);
 
@@ -750,7 +764,12 @@ export async function getCurrentBalance(
   const returnRows = await db
     .select({ returnAmount: transactions.returnAmount })
     .from(transactions)
-    .where(eq(transactions.userId, userId));
+    .where(
+      and(
+        eq(transactions.userId, userId),
+        inArray(transactions.status, CLOSED_TRADE_STATUSES)
+      )
+    );
 
   const totalReturn = addDecimalStrings(
     returnRows.map(row => row.returnAmount ?? ZERO_DECIMAL)
@@ -788,7 +807,12 @@ export async function getStatistics(userId: number, initialBalance: string) {
   const allTransactions = await db
     .select()
     .from(transactions)
-    .where(eq(transactions.userId, userId))
+    .where(
+      and(
+        eq(transactions.userId, userId),
+        inArray(transactions.status, CLOSED_TRADE_STATUSES)
+      )
+    )
     .orderBy(asc(transactions.createdAt));
 
   const winCount = allTransactions.filter(t => t.outcome === "win").length;
@@ -885,7 +909,8 @@ export async function getSystemStatistics(userId: number) {
         .where(
           and(
             eq(transactions.userId, userId),
-            eq(transactions.tradingSystemId, system.id)
+            eq(transactions.tradingSystemId, system.id),
+            inArray(transactions.status, CLOSED_TRADE_STATUSES)
           )
         );
 
@@ -986,12 +1011,44 @@ export async function removeElementsFromTransaction(transactionId: number) {
     .where(eq(transactionElements.transactionId, transactionId));
 }
 
+export async function replaceTransactionElements(
+  transactionId: number,
+  elementIds: number[]
+) {
+  const uniqueElementIds = Array.from(new Set(elementIds));
+
+  await runInSqliteTransaction(async db => {
+    await db
+      .delete(transactionElements)
+      .where(eq(transactionElements.transactionId, transactionId));
+
+    if (uniqueElementIds.length > 0) {
+      await db.insert(transactionElements).values(
+        uniqueElementIds.map(elementId => ({
+          transactionId,
+          tradingElementId: elementId,
+        }))
+      );
+    }
+  });
+}
+
 export async function createTransactionWithElements(
   data: InsertTransaction,
   elementIds: number[]
 ): Promise<Transaction> {
+  const insertData: InsertTransaction = {
+    ...data,
+    status: "open",
+    endTime: data.endTime ?? null,
+    outcome: data.outcome ?? null,
+    riskRewardRatio: data.riskRewardRatio ?? null,
+    returnAmount: data.returnAmount ?? null,
+    accountBalance: data.accountBalance ?? null,
+  };
+
   const { transactionId } = await runInSqliteTransaction(async db => {
-    await db.insert(transactions).values(data);
+    await db.insert(transactions).values(insertData);
     const newTransactionId = getLastInsertRowId();
 
     if (elementIds.length > 0) {
@@ -1006,7 +1063,7 @@ export async function createTransactionWithElements(
     return { transactionId: newTransactionId };
   });
 
-  const created = await getTransactionById(transactionId, data.userId);
+  const created = await getTransactionById(transactionId, insertData.userId);
   if (!created) {
     throw new Error("Failed to load newly created transaction");
   }

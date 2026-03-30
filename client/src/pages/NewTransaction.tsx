@@ -1,8 +1,20 @@
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -33,9 +45,10 @@ function getConfidenceLabel(level: number): string {
 export default function NewTransaction() {
   const [, setLocation] = useLocation();
   const utils = trpc.useUtils();
-  
-  const { data: formDefaults, isLoading: loadingDefaults } = trpc.transaction.getFormDefaults.useQuery();
-  
+
+  const { data: formDefaults, isLoading: loadingDefaults } =
+    trpc.transaction.getFormDefaults.useQuery();
+
   const createMutation = trpc.transaction.create.useMutation({
     onSuccess: () => {
       toast.success("Transaction recorded successfully");
@@ -45,7 +58,7 @@ export default function NewTransaction() {
       utils.stats.getBySystem.invalidate();
       setLocation("/transactions");
     },
-    onError: (error) => {
+    onError: error => {
       toast.error(error.message || "Failed to create transaction");
     },
   });
@@ -67,16 +80,21 @@ export default function NewTransaction() {
 
   // Calculate confidence level from selected elements
   const calculatedConfidence = useMemo(() => {
-    if (!formDefaults?.activeSystem?.elements || selectedElementIds.length === 0) {
+    if (
+      !formDefaults?.activeSystem?.elements ||
+      selectedElementIds.length === 0
+    ) {
       return null;
     }
     const selectedElements = formDefaults.activeSystem.elements.filter(
-      (el: { id: number; confidenceLevel: number }) => selectedElementIds.includes(el.id)
+      (el: { id: number; confidenceLevel: number }) =>
+        selectedElementIds.includes(el.id)
     );
     if (selectedElements.length === 0) return null;
-    
+
     const totalConfidence = selectedElements.reduce(
-      (sum: number, el: { confidenceLevel: number }) => sum + el.confidenceLevel, 
+      (sum: number, el: { confidenceLevel: number }) =>
+        sum + el.confidenceLevel,
       0
     );
     return Math.round(totalConfidence / selectedElements.length);
@@ -84,10 +102,18 @@ export default function NewTransaction() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!formData.tradingPair || !formData.timeFrame || !formData.startTime || 
-        !formData.endTime || !formData.direction || !formData.tradingLogic || 
-        !formData.outcome || !formData.riskRewardRatio || !formData.returnAmount) {
+
+    if (
+      !formData.tradingPair ||
+      !formData.timeFrame ||
+      !formData.startTime ||
+      !formData.endTime ||
+      !formData.direction ||
+      !formData.tradingLogic ||
+      !formData.outcome ||
+      !formData.riskRewardRatio ||
+      !formData.returnAmount
+    ) {
       toast.error("Please fill in all required fields");
       return;
     }
@@ -104,12 +130,8 @@ export default function NewTransaction() {
       tradingPair: formData.tradingPair,
       timeFrame: formData.timeFrame,
       startTime: startTimestamp,
-      endTime: endTimestamp,
       direction: formData.direction as "long" | "short",
       tradingLogic: formData.tradingLogic,
-      outcome: formData.outcome as "win" | "loss" | "breakeven",
-      riskRewardRatio: formData.riskRewardRatio,
-      returnAmount: formData.returnAmount,
       tvUrl: formData.tvUrl || undefined,
       selectedElementIds,
     });
@@ -120,7 +142,7 @@ export default function NewTransaction() {
   };
 
   const toggleElement = (elementId: number) => {
-    setSelectedElementIds(prev => 
+    setSelectedElementIds(prev =>
       prev.includes(elementId)
         ? prev.filter(id => id !== elementId)
         : [...prev, elementId]
@@ -128,9 +150,13 @@ export default function NewTransaction() {
   };
 
   // Calculate preview of new balance
-  const previewBalance = formDefaults && formData.returnAmount
-    ? (parseFloat(formDefaults.currentBalance) + parseFloat(formData.returnAmount || "0")).toFixed(2)
-    : formDefaults?.currentBalance || "0.00";
+  const previewBalance =
+    formDefaults && formData.returnAmount
+      ? (
+          parseFloat(formDefaults.currentBalance) +
+          parseFloat(formData.returnAmount || "0")
+        ).toFixed(2)
+      : formDefaults?.currentBalance || "0.00";
 
   // Calculate preview of consecutive losses
   const previewConsecutiveLosses = formDefaults
@@ -155,7 +181,9 @@ export default function NewTransaction() {
     <div className="space-y-6">
       <div>
         <h1 className="text-heading">Record Transaction</h1>
-        <p className="text-subtitle mt-1">Log a new trading record with all relevant details</p>
+        <p className="text-subtitle mt-1">
+          Log a new trading record with all relevant details
+        </p>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -171,8 +199,12 @@ export default function NewTransaction() {
                       <Layers className="h-5 w-5 text-green-600" />
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm text-muted-foreground">This trade will be linked to</p>
-                      <p className="font-semibold">{formDefaults.activeSystem.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        This trade will be linked to
+                      </p>
+                      <p className="font-semibold">
+                        {formDefaults.activeSystem.name}
+                      </p>
                     </div>
                     <Button
                       type="button"
@@ -220,69 +252,90 @@ export default function NewTransaction() {
                     Trading Elements Used
                   </CardTitle>
                   <CardDescription className="text-subtitle">
-                    Select the elements from your trading system that were present in this trade
+                    Select the elements from your trading system that were
+                    present in this trade
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    {activeSystemElements.map((element: { id: number; name: string; confidenceLevel: number; description?: string | null }) => (
-                      <div
-                        key={element.id}
-                        className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
-                          selectedElementIds.includes(element.id)
-                            ? "border-primary bg-primary/5"
-                            : "hover:border-muted-foreground/30"
-                        }`}
-                        onClick={() => toggleElement(element.id)}
-                      >
-                        <Checkbox
-                          checked={selectedElementIds.includes(element.id)}
-                          onCheckedChange={() => toggleElement(element.id)}
-                          className="mt-0.5"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{element.name}</span>
-                            <span className={`text-xs ${getConfidenceColor(element.confidenceLevel)}`}>
-                              {element.confidenceLevel}%
-                            </span>
+                    {activeSystemElements.map(
+                      (element: {
+                        id: number;
+                        name: string;
+                        confidenceLevel: number;
+                        description?: string | null;
+                      }) => (
+                        <div
+                          key={element.id}
+                          className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                            selectedElementIds.includes(element.id)
+                              ? "border-primary bg-primary/5"
+                              : "hover:border-muted-foreground/30"
+                          }`}
+                          onClick={() => toggleElement(element.id)}
+                        >
+                          <Checkbox
+                            checked={selectedElementIds.includes(element.id)}
+                            onCheckedChange={() => toggleElement(element.id)}
+                            className="mt-0.5"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">
+                                {element.name}
+                              </span>
+                              <span
+                                className={`text-xs ${getConfidenceColor(element.confidenceLevel)}`}
+                              >
+                                {element.confidenceLevel}%
+                              </span>
+                            </div>
+                            {element.description && (
+                              <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+                                {element.description}
+                              </p>
+                            )}
                           </div>
-                          {element.description && (
-                            <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
-                              {element.description}
-                            </p>
-                          )}
+                        </div>
+                      )
+                    )}
+                  </div>
+
+                  {selectedElementIds.length > 0 &&
+                    calculatedConfidence !== null && (
+                      <div className="mt-4 p-3 rounded-lg bg-muted/50 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Gauge className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm text-muted-foreground">
+                            Overall Confidence Level
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`text-lg font-bold ${getConfidenceColor(calculatedConfidence)}`}
+                          >
+                            {calculatedConfidence}%
+                          </span>
+                          <span
+                            className={`text-sm ${getConfidenceColor(calculatedConfidence)}`}
+                          >
+                            ({getConfidenceLabel(calculatedConfidence)})
+                          </span>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                  
-                  {selectedElementIds.length > 0 && calculatedConfidence !== null && (
-                    <div className="mt-4 p-3 rounded-lg bg-muted/50 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Gauge className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">
-                          Overall Confidence Level
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-lg font-bold ${getConfidenceColor(calculatedConfidence)}`}>
-                          {calculatedConfidence}%
-                        </span>
-                        <span className={`text-sm ${getConfidenceColor(calculatedConfidence)}`}>
-                          ({getConfidenceLabel(calculatedConfidence)})
-                        </span>
-                      </div>
-                    </div>
-                  )}
+                    )}
                 </CardContent>
               </Card>
             )}
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg font-semibold">Trade Details</CardTitle>
-                <CardDescription className="text-subtitle">Enter the basic information about your trade</CardDescription>
+                <CardTitle className="text-lg font-semibold">
+                  Trade Details
+                </CardTitle>
+                <CardDescription className="text-subtitle">
+                  Enter the basic information about your trade
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -292,18 +345,25 @@ export default function NewTransaction() {
                       id="tradingPair"
                       placeholder="e.g., BTCUSDT"
                       value={formData.tradingPair}
-                      onChange={(e) => updateField("tradingPair", e.target.value.toUpperCase())}
+                      onChange={e =>
+                        updateField("tradingPair", e.target.value.toUpperCase())
+                      }
                     />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="timeFrame">Time Frame *</Label>
-                    <Select value={formData.timeFrame} onValueChange={(v) => updateField("timeFrame", v)}>
+                    <Select
+                      value={formData.timeFrame}
+                      onValueChange={v => updateField("timeFrame", v)}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Select time frame" />
                       </SelectTrigger>
                       <SelectContent>
-                        {TIME_FRAMES.map((tf) => (
-                          <SelectItem key={tf} value={tf}>{tf}</SelectItem>
+                        {TIME_FRAMES.map(tf => (
+                          <SelectItem key={tf} value={tf}>
+                            {tf}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -317,7 +377,7 @@ export default function NewTransaction() {
                       id="startTime"
                       type="datetime-local"
                       value={formData.startTime}
-                      onChange={(e) => updateField("startTime", e.target.value)}
+                      onChange={e => updateField("startTime", e.target.value)}
                     />
                   </div>
                   <div className="space-y-2">
@@ -326,14 +386,17 @@ export default function NewTransaction() {
                       id="endTime"
                       type="datetime-local"
                       value={formData.endTime}
-                      onChange={(e) => updateField("endTime", e.target.value)}
+                      onChange={e => updateField("endTime", e.target.value)}
                     />
                   </div>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="direction">Direction *</Label>
-                  <Select value={formData.direction} onValueChange={(v) => updateField("direction", v)}>
+                  <Select
+                    value={formData.direction}
+                    onValueChange={v => updateField("direction", v)}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select direction" />
                     </SelectTrigger>
@@ -342,7 +405,9 @@ export default function NewTransaction() {
                         <span className="direction-long font-medium">Long</span>
                       </SelectItem>
                       <SelectItem value="short">
-                        <span className="direction-short font-medium">Short</span>
+                        <span className="direction-short font-medium">
+                          Short
+                        </span>
                       </SelectItem>
                     </SelectContent>
                   </Select>
@@ -355,7 +420,7 @@ export default function NewTransaction() {
                     placeholder="Describe your rationale for initiating this trade..."
                     rows={4}
                     value={formData.tradingLogic}
-                    onChange={(e) => updateField("tradingLogic", e.target.value)}
+                    onChange={e => updateField("tradingLogic", e.target.value)}
                   />
                 </div>
               </CardContent>
@@ -363,14 +428,21 @@ export default function NewTransaction() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg font-semibold">Trade Outcome</CardTitle>
-                <CardDescription className="text-subtitle">Record the result of your trade</CardDescription>
+                <CardTitle className="text-lg font-semibold">
+                  Trade Outcome
+                </CardTitle>
+                <CardDescription className="text-subtitle">
+                  Record the result of your trade
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-3">
                   <div className="space-y-2">
                     <Label htmlFor="outcome">Win/Loss/BE *</Label>
-                    <Select value={formData.outcome} onValueChange={(v) => updateField("outcome", v)}>
+                    <Select
+                      value={formData.outcome}
+                      onValueChange={v => updateField("outcome", v)}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Select outcome" />
                       </SelectTrigger>
@@ -382,7 +454,9 @@ export default function NewTransaction() {
                           <span className="status-loss font-medium">Loss</span>
                         </SelectItem>
                         <SelectItem value="breakeven">
-                          <span className="status-breakeven font-medium">Break Even</span>
+                          <span className="status-breakeven font-medium">
+                            Break Even
+                          </span>
                         </SelectItem>
                       </SelectContent>
                     </Select>
@@ -396,7 +470,9 @@ export default function NewTransaction() {
                       min="0"
                       placeholder="e.g., 2.5"
                       value={formData.riskRewardRatio}
-                      onChange={(e) => updateField("riskRewardRatio", e.target.value)}
+                      onChange={e =>
+                        updateField("riskRewardRatio", e.target.value)
+                      }
                     />
                   </div>
                   <div className="space-y-2">
@@ -407,9 +483,13 @@ export default function NewTransaction() {
                       step="0.01"
                       placeholder="e.g., -50 or 100"
                       value={formData.returnAmount}
-                      onChange={(e) => updateField("returnAmount", e.target.value)}
+                      onChange={e =>
+                        updateField("returnAmount", e.target.value)
+                      }
                     />
-                    <p className="text-xs text-muted-foreground">Negative for loss, positive for profit</p>
+                    <p className="text-xs text-muted-foreground">
+                      Negative for loss, positive for profit
+                    </p>
                   </div>
                 </div>
 
@@ -420,7 +500,7 @@ export default function NewTransaction() {
                     type="url"
                     placeholder="https://www.tradingview.com/chart/..."
                     value={formData.tvUrl}
-                    onChange={(e) => updateField("tvUrl", e.target.value)}
+                    onChange={e => updateField("tvUrl", e.target.value)}
                   />
                 </div>
               </CardContent>
@@ -431,42 +511,70 @@ export default function NewTransaction() {
           <div className="space-y-6">
             <Card className="sticky top-4">
               <CardHeader>
-                <CardTitle className="text-lg font-semibold">Account Summary</CardTitle>
-                <CardDescription className="text-subtitle">Auto-calculated values</CardDescription>
+                <CardTitle className="text-lg font-semibold">
+                  Account Summary
+                </CardTitle>
+                <CardDescription className="text-subtitle">
+                  Auto-calculated values
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-3">
                   {formDefaults?.activeSystem && (
                     <div className="flex justify-between items-center py-2 border-b">
-                      <span className="text-sm text-muted-foreground">Trading System</span>
-                      <Badge variant="secondary">{formDefaults.activeSystem.name}</Badge>
+                      <span className="text-sm text-muted-foreground">
+                        Trading System
+                      </span>
+                      <Badge variant="secondary">
+                        {formDefaults.activeSystem.name}
+                      </Badge>
                     </div>
                   )}
                   {calculatedConfidence !== null && (
                     <div className="flex justify-between items-center py-2 border-b">
-                      <span className="text-sm text-muted-foreground">Confidence Level</span>
-                      <span className={`font-semibold ${getConfidenceColor(calculatedConfidence)}`}>
+                      <span className="text-sm text-muted-foreground">
+                        Confidence Level
+                      </span>
+                      <span
+                        className={`font-semibold ${getConfidenceColor(calculatedConfidence)}`}
+                      >
                         {calculatedConfidence}%
                       </span>
                     </div>
                   )}
                   <div className="flex justify-between items-center py-2 border-b">
-                    <span className="text-sm text-muted-foreground">Current Balance</span>
-                    <span className="font-semibold">${formDefaults?.currentBalance || "0.00"}</span>
+                    <span className="text-sm text-muted-foreground">
+                      Current Balance
+                    </span>
+                    <span className="font-semibold">
+                      ${formDefaults?.currentBalance || "0.00"}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center py-2 border-b">
-                    <span className="text-sm text-muted-foreground">New Balance</span>
-                    <span className={`font-semibold ${parseFloat(formData.returnAmount || "0") >= 0 ? "status-win" : "status-loss"}`}>
+                    <span className="text-sm text-muted-foreground">
+                      New Balance
+                    </span>
+                    <span
+                      className={`font-semibold ${parseFloat(formData.returnAmount || "0") >= 0 ? "status-win" : "status-loss"}`}
+                    >
                       ${previewBalance}
                     </span>
                   </div>
                   <div className="flex justify-between items-center py-2 border-b">
-                    <span className="text-sm text-muted-foreground">Current Losing Streak</span>
-                    <span className="font-semibold">{formDefaults?.consecutiveLosses || 0}</span>
+                    <span className="text-sm text-muted-foreground">
+                      Current Losing Streak
+                    </span>
+                    <span className="font-semibold">
+                      {formDefaults?.consecutiveLosses || 0}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center py-2">
-                    <span className="text-sm text-muted-foreground">New Losing Streak</span>
-                    <span className={`font-semibold ${previewConsecutiveLosses > 0 ? "status-loss" : ""}`}>
+                    <span className="text-sm text-muted-foreground">
+                      New Losing Streak
+                    </span>
+                    <span
+                      className={`font-semibold ${previewConsecutiveLosses > 0 ? "status-loss" : ""}`}
+                    >
                       {previewConsecutiveLosses}
                     </span>
                   </div>
@@ -474,12 +582,20 @@ export default function NewTransaction() {
 
                 {selectedElementIds.length > 0 && (
                   <div className="pt-2 border-t">
-                    <p className="text-sm text-muted-foreground mb-2">Selected Elements</p>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Selected Elements
+                    </p>
                     <div className="flex flex-wrap gap-1">
                       {activeSystemElements
-                        .filter((el: { id: number }) => selectedElementIds.includes(el.id))
+                        .filter((el: { id: number }) =>
+                          selectedElementIds.includes(el.id)
+                        )
                         .map((el: { id: number; name: string }) => (
-                          <Badge key={el.id} variant="outline" className="text-xs">
+                          <Badge
+                            key={el.id}
+                            variant="outline"
+                            className="text-xs"
+                          >
                             {el.name}
                           </Badge>
                         ))}
@@ -488,9 +604,9 @@ export default function NewTransaction() {
                 )}
 
                 <div className="pt-4 space-y-3">
-                  <Button 
-                    type="submit" 
-                    className="w-full" 
+                  <Button
+                    type="submit"
+                    className="w-full"
                     disabled={createMutation.isPending}
                   >
                     {createMutation.isPending ? (
@@ -502,9 +618,9 @@ export default function NewTransaction() {
                       "Record Transaction"
                     )}
                   </Button>
-                  <Button 
-                    type="button" 
-                    variant="outline" 
+                  <Button
+                    type="button"
+                    variant="outline"
                     className="w-full"
                     onClick={() => setLocation("/transactions")}
                   >

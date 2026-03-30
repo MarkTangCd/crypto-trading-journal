@@ -1,5 +1,11 @@
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
@@ -9,7 +15,7 @@ import { Loader2, Save, Wallet } from "lucide-react";
 
 export default function Settings() {
   const utils = trpc.useUtils();
-  
+
   const { data: settings, isLoading } = trpc.user.getSettings.useQuery();
   const [initialBalance, setInitialBalance] = useState("");
 
@@ -26,7 +32,7 @@ export default function Settings() {
       utils.transaction.getFormDefaults.invalidate();
       utils.stats.get.invalidate();
     },
-    onError: (error) => {
+    onError: error => {
       toast.error(error.message || "Failed to save settings");
     },
   });
@@ -47,7 +53,9 @@ export default function Settings() {
     <div className="space-y-6">
       <div>
         <h1 className="text-heading">Settings</h1>
-        <p className="text-subtitle mt-1">Configure your trading journal preferences</p>
+        <p className="text-subtitle mt-1">
+          Configure your trading journal preferences
+        </p>
       </div>
 
       <div className="max-w-2xl">
@@ -58,7 +66,9 @@ export default function Settings() {
                 <Wallet className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
-                <CardTitle className="text-lg font-semibold">Account Balance</CardTitle>
+                <CardTitle className="text-lg font-semibold">
+                  Account Balance
+                </CardTitle>
                 <CardDescription className="text-subtitle">
                   Set your initial trading account balance
                 </CardDescription>
@@ -75,17 +85,15 @@ export default function Settings() {
                 min="0"
                 placeholder="e.g., 10000"
                 value={initialBalance}
-                onChange={(e) => setInitialBalance(e.target.value)}
+                onChange={e => setInitialBalance(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                This is your starting account balance. All statistics will be calculated relative to this amount.
+                This is your starting account balance. All statistics will be
+                calculated relative to this amount.
               </p>
             </div>
 
-            <Button 
-              onClick={handleSave}
-              disabled={updateMutation.isPending}
-            >
+            <Button onClick={handleSave} disabled={updateMutation.isPending}>
               {updateMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -110,10 +118,13 @@ export default function Settings() {
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <p>
-              A minimalist trading journal designed to help you track, review, and analyze your cryptocurrency trades.
+              A minimalist trading journal designed to help you track, review,
+              and analyze your cryptocurrency trades.
             </p>
             <p>
-              Record your trades with detailed information, review them with feedback, and monitor your performance through comprehensive statistics.
+              Record your trades with detailed information, review them with
+              feedback, and monitor your performance through comprehensive
+              statistics.
             </p>
           </CardContent>
         </Card>

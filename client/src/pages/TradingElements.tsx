@@ -1,5 +1,11 @@
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,7 +31,15 @@ import {
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Plus, Pencil, Trash2, Tag, Sparkles, Gauge } from "lucide-react";
+import {
+  Loader2,
+  Plus,
+  Pencil,
+  Trash2,
+  Tag,
+  Sparkles,
+  Gauge,
+} from "lucide-react";
 
 function getConfidenceColor(level: number): string {
   if (level >= 80) return "text-green-600";
@@ -45,14 +59,23 @@ function getConfidenceLabel(level: number): string {
 
 export default function TradingElements() {
   const utils = trpc.useUtils();
-  
+
   const { data: elements, isLoading } = trpc.tradingElement.list.useQuery();
-  
+
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [editElement, setEditElement] = useState<{ id: number; name: string; description: string | null; confidenceLevel: number } | null>(null);
+  const [editElement, setEditElement] = useState<{
+    id: number;
+    name: string;
+    description: string | null;
+    confidenceLevel: number;
+  } | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
-  
-  const [formData, setFormData] = useState({ name: "", description: "", confidenceLevel: 50 });
+
+  const [formData, setFormData] = useState({
+    name: "",
+    description: "",
+    confidenceLevel: 50,
+  });
 
   const createMutation = trpc.tradingElement.create.useMutation({
     onSuccess: () => {
@@ -61,7 +84,7 @@ export default function TradingElements() {
       setIsCreateOpen(false);
       setFormData({ name: "", description: "", confidenceLevel: 50 });
     },
-    onError: (error) => {
+    onError: error => {
       toast.error(error.message || "Failed to create element");
     },
   });
@@ -73,7 +96,7 @@ export default function TradingElements() {
       setEditElement(null);
       setFormData({ name: "", description: "", confidenceLevel: 50 });
     },
-    onError: (error) => {
+    onError: error => {
       toast.error(error.message || "Failed to update element");
     },
   });
@@ -84,7 +107,7 @@ export default function TradingElements() {
       utils.tradingElement.list.invalidate();
       setDeleteId(null);
     },
-    onError: (error) => {
+    onError: error => {
       toast.error(error.message || "Failed to delete element");
     },
   });
@@ -114,12 +137,17 @@ export default function TradingElements() {
     });
   };
 
-  const openEdit = (element: { id: number; name: string; description: string | null; confidenceLevel: number }) => {
+  const openEdit = (element: {
+    id: number;
+    name: string;
+    description: string | null;
+    confidenceLevel: number;
+  }) => {
     setEditElement(element);
-    setFormData({ 
-      name: element.name, 
-      description: element.description || "", 
-      confidenceLevel: element.confidenceLevel 
+    setFormData({
+      name: element.name,
+      description: element.description || "",
+      confidenceLevel: element.confidenceLevel,
     });
   };
 
@@ -157,7 +185,9 @@ export default function TradingElements() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-heading">Trading Elements</h1>
-          <p className="text-subtitle mt-1">Manage your trading opportunity tags with confidence levels</p>
+          <p className="text-subtitle mt-1">
+            Manage your trading opportunity tags with confidence levels
+          </p>
         </div>
         <Button onClick={() => setIsCreateOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
@@ -174,23 +204,28 @@ export default function TradingElements() {
               <CardTitle className="text-base font-medium">Quick Add</CardTitle>
             </div>
             <CardDescription className="text-subtitle">
-              Click to quickly add common trading elements with preset confidence levels
+              Click to quickly add common trading elements with preset
+              confidence levels
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
-              {availableSuggestions.map((suggestion) => (
+              {availableSuggestions.map(suggestion => (
                 <Button
                   key={suggestion.name}
                   variant="outline"
                   size="sm"
-                  onClick={() => quickCreate(suggestion.name, suggestion.confidence)}
+                  onClick={() =>
+                    quickCreate(suggestion.name, suggestion.confidence)
+                  }
                   disabled={createMutation.isPending}
                   className="gap-2"
                 >
                   <Plus className="h-3 w-3" />
                   {suggestion.name}
-                  <span className={`text-xs ${getConfidenceColor(suggestion.confidence)}`}>
+                  <span
+                    className={`text-xs ${getConfidenceColor(suggestion.confidence)}`}
+                  >
                     {suggestion.confidence}%
                   </span>
                 </Button>
@@ -205,7 +240,8 @@ export default function TradingElements() {
         <CardHeader>
           <CardTitle className="text-lg font-semibold">Your Elements</CardTitle>
           <CardDescription className="text-subtitle">
-            These elements can be assigned to trading systems. Confidence levels help calculate trade confidence.
+            These elements can be assigned to trading systems. Confidence levels
+            help calculate trade confidence.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -215,7 +251,7 @@ export default function TradingElements() {
             </div>
           ) : elements && elements.length > 0 ? (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {elements.map((element) => (
+              {elements.map(element => (
                 <div
                   key={element.id}
                   className="flex items-start justify-between p-4 rounded-lg border bg-card hover:shadow-sm transition-shadow"
@@ -228,7 +264,9 @@ export default function TradingElements() {
                       <p className="font-medium truncate">{element.name}</p>
                       <div className="flex items-center gap-2 mt-1">
                         <Gauge className="h-3 w-3 text-muted-foreground" />
-                        <span className={`text-sm font-medium ${getConfidenceColor(element.confidenceLevel)}`}>
+                        <span
+                          className={`text-sm font-medium ${getConfidenceColor(element.confidenceLevel)}`}
+                        >
                           {element.confidenceLevel}%
                         </span>
                         <span className="text-xs text-muted-foreground">
@@ -282,7 +320,10 @@ export default function TradingElements() {
       </Card>
 
       {/* Create Dialog */}
-      <Dialog open={isCreateOpen} onOpenChange={(open) => !open && closeDialogs()}>
+      <Dialog
+        open={isCreateOpen}
+        onOpenChange={open => !open && closeDialogs()}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create Trading Element</DialogTitle>
@@ -297,19 +338,26 @@ export default function TradingElements() {
                 id="create-name"
                 placeholder="e.g., Gap, Double Top, CVD Divergence"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={e =>
+                  setFormData({ ...formData, name: e.target.value })
+                }
               />
             </div>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <Label>Confidence Level</Label>
-                <span className={`text-sm font-medium ${getConfidenceColor(formData.confidenceLevel)}`}>
-                  {formData.confidenceLevel}% - {getConfidenceLabel(formData.confidenceLevel)}
+                <span
+                  className={`text-sm font-medium ${getConfidenceColor(formData.confidenceLevel)}`}
+                >
+                  {formData.confidenceLevel}% -{" "}
+                  {getConfidenceLabel(formData.confidenceLevel)}
                 </span>
               </div>
               <Slider
                 value={[formData.confidenceLevel]}
-                onValueChange={(value) => setFormData({ ...formData, confidenceLevel: value[0] })}
+                onValueChange={value =>
+                  setFormData({ ...formData, confidenceLevel: value[0] })
+                }
                 min={0}
                 max={100}
                 step={5}
@@ -326,7 +374,9 @@ export default function TradingElements() {
                 placeholder="Describe when this element signals a trading opportunity..."
                 rows={3}
                 value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                onChange={e =>
+                  setFormData({ ...formData, description: e.target.value })
+                }
               />
             </div>
           </div>
@@ -345,7 +395,10 @@ export default function TradingElements() {
       </Dialog>
 
       {/* Edit Dialog */}
-      <Dialog open={editElement !== null} onOpenChange={(open) => !open && closeDialogs()}>
+      <Dialog
+        open={editElement !== null}
+        onOpenChange={open => !open && closeDialogs()}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Trading Element</DialogTitle>
@@ -359,19 +412,26 @@ export default function TradingElements() {
               <Input
                 id="edit-name"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={e =>
+                  setFormData({ ...formData, name: e.target.value })
+                }
               />
             </div>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <Label>Confidence Level</Label>
-                <span className={`text-sm font-medium ${getConfidenceColor(formData.confidenceLevel)}`}>
-                  {formData.confidenceLevel}% - {getConfidenceLabel(formData.confidenceLevel)}
+                <span
+                  className={`text-sm font-medium ${getConfidenceColor(formData.confidenceLevel)}`}
+                >
+                  {formData.confidenceLevel}% -{" "}
+                  {getConfidenceLabel(formData.confidenceLevel)}
                 </span>
               </div>
               <Slider
                 value={[formData.confidenceLevel]}
-                onValueChange={(value) => setFormData({ ...formData, confidenceLevel: value[0] })}
+                onValueChange={value =>
+                  setFormData({ ...formData, confidenceLevel: value[0] })
+                }
                 min={0}
                 max={100}
                 step={5}
@@ -384,7 +444,9 @@ export default function TradingElements() {
                 id="edit-description"
                 rows={3}
                 value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                onChange={e =>
+                  setFormData({ ...formData, description: e.target.value })
+                }
               />
             </div>
           </div>
@@ -403,19 +465,25 @@ export default function TradingElements() {
       </Dialog>
 
       {/* Delete Confirmation */}
-      <AlertDialog open={deleteId !== null} onOpenChange={() => setDeleteId(null)}>
+      <AlertDialog
+        open={deleteId !== null}
+        onOpenChange={() => setDeleteId(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Element</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this trading element? It will be removed from all trading systems.
+              Are you sure you want to delete this trading element? It will be
+              removed from all trading systems.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => deleteId && deleteMutation.mutate({ id: deleteId })}
+              onClick={() =>
+                deleteId && deleteMutation.mutate({ id: deleteId })
+              }
             >
               {deleteMutation.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

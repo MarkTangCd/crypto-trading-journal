@@ -1,5 +1,11 @@
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,7 +32,17 @@ import {
 import { trpc } from "@/lib/trpc";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { Loader2, Plus, Pencil, Trash2, Layers, Power, PowerOff, Tag, CheckCircle2 } from "lucide-react";
+import {
+  Loader2,
+  Plus,
+  Pencil,
+  Trash2,
+  Layers,
+  Power,
+  PowerOff,
+  Tag,
+  CheckCircle2,
+} from "lucide-react";
 import { useLocation } from "wouter";
 
 type TradingElement = {
@@ -46,14 +62,14 @@ type TradingSystem = {
 export default function TradingSystems() {
   const utils = trpc.useUtils();
   const [, setLocation] = useLocation();
-  
+
   const { data: systems, isLoading } = trpc.tradingSystem.list.useQuery();
   const { data: elements } = trpc.tradingElement.list.useQuery();
-  
+
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editSystem, setEditSystem] = useState<TradingSystem | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
-  
+
   const [formData, setFormData] = useState({
     name: "",
     notes: "",
@@ -68,7 +84,7 @@ export default function TradingSystems() {
       setIsCreateOpen(false);
       resetForm();
     },
-    onError: (error) => {
+    onError: error => {
       toast.error(error.message || "Failed to create system");
     },
   });
@@ -81,7 +97,7 @@ export default function TradingSystems() {
       setEditSystem(null);
       resetForm();
     },
-    onError: (error) => {
+    onError: error => {
       toast.error(error.message || "Failed to update system");
     },
   });
@@ -94,7 +110,7 @@ export default function TradingSystems() {
       utils.transaction.getFormDefaults.invalidate();
       setDeleteId(null);
     },
-    onError: (error) => {
+    onError: error => {
       toast.error(error.message || "Failed to delete system");
     },
   });
@@ -106,7 +122,7 @@ export default function TradingSystems() {
       utils.tradingSystem.getActive.invalidate();
       utils.transaction.getFormDefaults.invalidate();
     },
-    onError: (error) => {
+    onError: error => {
       toast.error(error.message || "Failed to activate system");
     },
   });
@@ -118,7 +134,7 @@ export default function TradingSystems() {
       utils.tradingSystem.getActive.invalidate();
       utils.transaction.getFormDefaults.invalidate();
     },
-    onError: (error) => {
+    onError: error => {
       toast.error(error.message || "Failed to deactivate system");
     },
   });
@@ -201,7 +217,9 @@ export default function TradingSystems() {
                   <CheckCircle2 className="h-5 w-5 text-green-600" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Currently Active</p>
+                  <p className="text-sm text-muted-foreground">
+                    Currently Active
+                  </p>
                   <p className="font-semibold">{activeSystem.name}</p>
                 </div>
               </div>
@@ -236,7 +254,11 @@ export default function TradingSystems() {
                   Create trading elements first to assign them to your systems
                 </p>
               </div>
-              <Button variant="outline" size="sm" onClick={() => setLocation("/trading-elements")}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setLocation("/trading-elements")}
+              >
                 Create Elements
               </Button>
             </div>
@@ -259,7 +281,7 @@ export default function TradingSystems() {
             </div>
           ) : systems && systems.length > 0 ? (
             <div className="space-y-4">
-              {systems.map((system) => (
+              {systems.map(system => (
                 <div
                   key={system.id}
                   className={`p-4 rounded-lg border transition-all ${
@@ -286,7 +308,11 @@ export default function TradingSystems() {
                       {system.elements.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-3">
                           {system.elements.map(el => (
-                            <Badge key={el.id} variant="outline" className="text-xs">
+                            <Badge
+                              key={el.id}
+                              variant="outline"
+                              className="text-xs"
+                            >
                               {el.name}
                             </Badge>
                           ))}
@@ -298,7 +324,9 @@ export default function TradingSystems() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => deactivateMutation.mutate({ id: system.id })}
+                          onClick={() =>
+                            deactivateMutation.mutate({ id: system.id })
+                          }
                           disabled={deactivateMutation.isPending}
                         >
                           <PowerOff className="mr-1 h-4 w-4" />
@@ -308,7 +336,9 @@ export default function TradingSystems() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => activateMutation.mutate({ id: system.id })}
+                          onClick={() =>
+                            activateMutation.mutate({ id: system.id })
+                          }
                           disabled={activateMutation.isPending}
                         >
                           <Power className="mr-1 h-4 w-4" />
@@ -355,9 +385,9 @@ export default function TradingSystems() {
       </Card>
 
       {/* Create/Edit Dialog */}
-      <Dialog 
-        open={isCreateOpen || editSystem !== null} 
-        onOpenChange={(open) => !open && closeDialogs()}
+      <Dialog
+        open={isCreateOpen || editSystem !== null}
+        onOpenChange={open => !open && closeDialogs()}
       >
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -365,10 +395,9 @@ export default function TradingSystems() {
               {editSystem ? "Edit Trading System" : "Create Trading System"}
             </DialogTitle>
             <DialogDescription>
-              {editSystem 
+              {editSystem
                 ? "Update your trading system details and elements"
-                : "Define a new trading system with opportunity elements"
-              }
+                : "Define a new trading system with opportunity elements"}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -378,7 +407,9 @@ export default function TradingSystems() {
                 id="system-name"
                 placeholder="e.g., Gap Trading Strategy"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={e =>
+                  setFormData({ ...formData, name: e.target.value })
+                }
               />
             </div>
             <div className="space-y-2">
@@ -388,14 +419,16 @@ export default function TradingSystems() {
                 placeholder="Describe your trading system rules and conditions..."
                 rows={3}
                 value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                onChange={e =>
+                  setFormData({ ...formData, notes: e.target.value })
+                }
               />
             </div>
             <div className="space-y-2">
               <Label>Trading Elements</Label>
               {elements && elements.length > 0 ? (
                 <div className="border rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
-                  {elements.map((element) => (
+                  {elements.map(element => (
                     <div
                       key={element.id}
                       className="flex items-center space-x-3 p-2 rounded hover:bg-muted/50 cursor-pointer"
@@ -448,8 +481,8 @@ export default function TradingSystems() {
             <Button variant="outline" onClick={closeDialogs}>
               Cancel
             </Button>
-            <Button 
-              onClick={editSystem ? handleUpdate : handleCreate} 
+            <Button
+              onClick={editSystem ? handleUpdate : handleCreate}
               disabled={createMutation.isPending || updateMutation.isPending}
             >
               {(createMutation.isPending || updateMutation.isPending) && (
@@ -462,19 +495,26 @@ export default function TradingSystems() {
       </Dialog>
 
       {/* Delete Confirmation */}
-      <AlertDialog open={deleteId !== null} onOpenChange={() => setDeleteId(null)}>
+      <AlertDialog
+        open={deleteId !== null}
+        onOpenChange={() => setDeleteId(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete System</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this trading system? Existing transactions linked to this system will retain their association for historical purposes.
+              Are you sure you want to delete this trading system? Existing
+              transactions linked to this system will retain their association
+              for historical purposes.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => deleteId && deleteMutation.mutate({ id: deleteId })}
+              onClick={() =>
+                deleteId && deleteMutation.mutate({ id: deleteId })
+              }
             >
               {deleteMutation.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

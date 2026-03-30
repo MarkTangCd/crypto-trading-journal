@@ -1,0 +1,8 @@
+Command: npx vitest run server/transaction.lifecycle.test.ts
+
+Result:
+✓ server/transaction.lifecycle.test.ts (7 tests) 1360ms
+
+Summary:
+- Test Files: 1 passed (1)
+- Tests: 7 passed (7)

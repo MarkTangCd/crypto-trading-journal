@@ -1,5 +1,6 @@
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
   createTransactionWithElements,
@@ -32,8 +33,10 @@ import {
   // Transaction Elements
   getTransactionElements,
   calculateConfidenceLevel,
+  replaceTransactionElements,
 } from "./db";
 import { add as addFixedPoint } from "./_core/fixedPoint";
+import { ALLOWED_TRANSITIONS } from "@shared/const";
 
 export const appRouter = router({
   system: systemRouter,
@@ -182,43 +185,20 @@ export const appRouter = router({
     // Create a new transaction
     create: publicProcedure
       .input(
-        z.object({
-          tradingPair: z.string().min(1),
-          timeFrame: z.string().min(1),
-          startTime: z.number(),
-          endTime: z.number(),
-          direction: z.enum(["long", "short"]),
-          tradingLogic: z.string().min(1),
-          outcome: z.enum(["win", "loss", "breakeven"]),
-          riskRewardRatio: z.string(),
-          returnAmount: z.string(),
-          tvUrl: z.string().optional(),
-          tradingSystemId: z.number().optional(),
-          selectedElementIds: z.array(z.number()).default([]),
-        })
+        z
+          .object({
+            tradingPair: z.string().min(1),
+            timeFrame: z.string().min(1),
+            startTime: z.number(),
+            direction: z.enum(["long", "short"]),
+            tradingLogic: z.string().min(1),
+            tvUrl: z.string().optional(),
+            tradingSystemId: z.number().optional(),
+            selectedElementIds: z.array(z.number()).default([]),
+          })
+          .strict()
       )
       .mutation(async ({ ctx, input }) => {
-        const user = await getUserById(ctx.user.id);
-        const initialBalance = user?.initialBalance || "0";
-
-        // Calculate current balance before this trade
-        const currentBalance = await getCurrentBalance(
-          ctx.user.id,
-          initialBalance
-        );
-
-        // Calculate consecutive losses
-        let consecutiveLosses = await getConsecutiveLosses(ctx.user.id);
-        if (input.outcome === "loss") {
-          consecutiveLosses += 1;
-        } else if (input.outcome === "win") {
-          consecutiveLosses = 0;
-        }
-        // breakeven keeps the current streak
-
-        // New balance after this trade
-        const newBalance = addFixedPoint([currentBalance, input.returnAmount]);
-
         // Get active trading system if not specified
         let tradingSystemId: number | undefined = input.tradingSystemId;
         if (tradingSystemId === undefined) {
@@ -235,17 +215,16 @@ export const appRouter = router({
           {
             userId: ctx.user.id,
             tradingSystemId,
-            accountBalance: newBalance,
+            status: "open",
             tradingPair: input.tradingPair.toUpperCase(),
             timeFrame: input.timeFrame,
             startTime: input.startTime,
-            endTime: input.endTime,
+            endTime: null,
             direction: input.direction,
             tradingLogic: input.tradingLogic,
-            outcome: input.outcome,
-            consecutiveLosses,
-            riskRewardRatio: input.riskRewardRatio,
-            returnAmount: input.returnAmount,
+            outcome: null,
+            riskRewardRatio: null,
+            returnAmount: null,
             confidenceLevel,
             tvUrl: input.tvUrl || null,
           },
@@ -287,20 +266,188 @@ export const appRouter = router({
         return getTransactionsByUserId(ctx.user.id, input);
       }),
 
+    close: publicProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          endTime: z.number(),
+          outcome: z.enum(["win", "loss", "breakeven"]),
+          riskRewardRatio: z.string(),
+          returnAmount: z.string(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const transaction = await getTransactionById(input.id, ctx.user.id);
+        if (!transaction) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Transaction not found",
+          });
+        }
+
+        if (!(transaction.status in ALLOWED_TRANSITIONS)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Invalid transaction status: ${transaction.status}`,
+          });
+        }
+
+        const currentStatus =
+          transaction.status as keyof typeof ALLOWED_TRANSITIONS;
+        const allowedTransition = ALLOWED_TRANSITIONS[currentStatus];
+        if (allowedTransition !== "closed") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Cannot transition transaction from ${currentStatus} to closed`,
+          });
+        }
+
+        if (input.endTime <= transaction.startTime) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "endTime must be greater than startTime",
+          });
+        }
+
+        const user = await getUserById(ctx.user.id);
+        const initialBalance = user?.initialBalance || "0";
+        const currentBalance = await getCurrentBalance(
+          ctx.user.id,
+          initialBalance
+        );
+
+        let consecutiveLosses = await getConsecutiveLosses(ctx.user.id);
+        if (input.outcome === "loss") {
+          consecutiveLosses += 1;
+        } else if (input.outcome === "win") {
+          consecutiveLosses = 0;
+        }
+
+        const accountBalance = addFixedPoint([
+          currentBalance,
+          input.returnAmount,
+        ]);
+
+        return updateTransaction(input.id, ctx.user.id, {
+          status: "closed",
+          endTime: input.endTime,
+          outcome: input.outcome,
+          riskRewardRatio: input.riskRewardRatio,
+          returnAmount: input.returnAmount,
+          accountBalance,
+          consecutiveLosses,
+        });
+      }),
+
     // Update transaction (for reviews)
     update: publicProcedure
       .input(
         z.object({
           id: z.number(),
+          tradingPair: z.string().min(1).optional(),
+          timeFrame: z.string().min(1).optional(),
+          startTime: z.number().optional(),
+          endTime: z.number().optional(),
+          direction: z.enum(["long", "short"]).optional(),
+          tradingLogic: z.string().min(1).optional(),
+          outcome: z.enum(["win", "loss", "breakeven"]).optional(),
+          riskRewardRatio: z.string().optional(),
+          returnAmount: z.string().optional(),
+          tvUrl: z.string().optional(),
+          tradingSystemId: z.number().optional(),
+          selectedElementIds: z.array(z.number()).optional(),
           reviewFeedback: z.string().optional(),
           reviewChartUrl: z.string().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
-        const { id, ...data } = input;
+        const { id, selectedElementIds, ...data } = input;
+
+        const existingTransaction = await getTransactionById(id, ctx.user.id);
+        if (!existingTransaction) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Transaction not found",
+          });
+        }
+
+        const hasEntryFieldUpdates =
+          data.tradingPair !== undefined ||
+          data.timeFrame !== undefined ||
+          data.startTime !== undefined ||
+          data.endTime !== undefined ||
+          data.direction !== undefined ||
+          data.tradingLogic !== undefined ||
+          data.outcome !== undefined ||
+          data.riskRewardRatio !== undefined ||
+          data.returnAmount !== undefined ||
+          data.tvUrl !== undefined ||
+          data.tradingSystemId !== undefined ||
+          selectedElementIds !== undefined;
+
+        const hasReviewFieldUpdates =
+          data.reviewFeedback !== undefined ||
+          data.reviewChartUrl !== undefined;
+
+        if (existingTransaction.status === "open") {
+          if (hasReviewFieldUpdates) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Review fields can only be edited after trade is closed",
+            });
+          }
+
+          const confidenceLevel =
+            selectedElementIds !== undefined
+              ? await calculateConfidenceLevel(selectedElementIds)
+              : existingTransaction.confidenceLevel;
+
+          const updatedTransaction = await updateTransaction(id, ctx.user.id, {
+            tradingPair:
+              data.tradingPair !== undefined
+                ? data.tradingPair.toUpperCase()
+                : undefined,
+            timeFrame: data.timeFrame,
+            startTime: data.startTime,
+            endTime: data.endTime,
+            direction: data.direction,
+            tradingLogic: data.tradingLogic,
+            outcome: data.outcome,
+            riskRewardRatio: data.riskRewardRatio,
+            returnAmount: data.returnAmount,
+            tvUrl: data.tvUrl,
+            tradingSystemId: data.tradingSystemId,
+            confidenceLevel,
+          });
+
+          if (selectedElementIds !== undefined) {
+            await replaceTransactionElements(id, selectedElementIds);
+          }
+
+          return updatedTransaction;
+        }
+
+        if (hasEntryFieldUpdates) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "This transaction status only allows review field updates",
+          });
+        }
+
+        if (existingTransaction.status === "closed") {
+          return updateTransaction(id, ctx.user.id, {
+            reviewFeedback: data.reviewFeedback,
+            reviewChartUrl: data.reviewChartUrl,
+            status:
+              data.reviewFeedback !== undefined
+                ? "reviewed"
+                : existingTransaction.status,
+          });
+        }
+
         return updateTransaction(id, ctx.user.id, {
-          ...data,
-          status: "reviewed",
+          reviewFeedback: data.reviewFeedback,
+          reviewChartUrl: data.reviewChartUrl,
         });
       }),
 

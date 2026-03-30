@@ -499,7 +499,7 @@ Wave FINAL (Verification — 4 parallel reviews, then user okay):
   - Files: `server/db.ts`
   - Pre-commit: `npm run test && npm run check`
 
-- [ ] 4. TDD: DB Stat Functions Exclude Open Trades
+- [x] 4. TDD: DB Stat Functions Exclude Open Trades
 
   **What to do**:
   - RED: Write tests in `server/transaction.lifecycle.test.ts` that:
@@ -582,7 +582,7 @@ Wave FINAL (Verification — 4 parallel reviews, then user okay):
   - Files: `server/db.ts`, `server/transaction.lifecycle.test.ts`
   - Pre-commit: `npm run test`
 
-- [ ] 5. TDD: transaction.create as Open-Only Creation
+- [x] 5. TDD: transaction.create as Open-Only Creation
 
   **What to do**:
   - RED: Write tests that:
@@ -664,7 +664,7 @@ Wave FINAL (Verification — 4 parallel reviews, then user okay):
   - Files: `server/routers.ts`, `server/transaction.lifecycle.test.ts`
   - Pre-commit: `npm run test && npm run check`
 
-- [ ] 6. TDD: New transaction.close Procedure
+- [x] 6. TDD: New transaction.close Procedure
 
   **What to do**:
   - RED: Write tests that:
@@ -753,7 +753,7 @@ Wave FINAL (Verification — 4 parallel reviews, then user okay):
   - Files: `server/routers.ts`, `server/db.ts`, `server/transaction.lifecycle.test.ts`
   - Pre-commit: `npm run test && npm run check`
 
-- [ ] 7. TDD: transaction.update Status-Aware + Review Gate
+- [x] 7. TDD: transaction.update Status-Aware + Review Gate
 
   **What to do**:
   - RED: Write tests that:
@@ -863,7 +863,7 @@ Wave FINAL (Verification — 4 parallel reviews, then user okay):
   - Files: `server/routers.ts`, `server/db.ts`, `server/transaction.lifecycle.test.ts`
   - Pre-commit: `npm run test && npm run check`
 
-- [ ] 8. TDD: transaction.list + getFormDefaults Status-Aware
+- [x] 8. TDD: transaction.list + getFormDefaults Status-Aware
 
   **What to do**:
   - RED: Write tests that:

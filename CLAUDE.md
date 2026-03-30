@@ -29,6 +29,7 @@ npm run db:push      # Generate + apply migrations (drizzle-kit generate && driz
 **Stack**: React 19 + Vite (client), Express + tRPC (server), MySQL + Drizzle ORM (database), TypeScript throughout.
 
 **Monorepo layout** (single `package.json`):
+
 - `client/src/` — React frontend; `@/*` path alias maps here
 - `server/` — Express backend; `server/_core/index.ts` is the entry point
 - `shared/` — Types and constants shared between client and server; `@shared/*` alias
@@ -41,6 +42,7 @@ npm run db:push      # Generate + apply migrations (drizzle-kit generate && driz
 **Authentication**: External OAuth server. Sessions stored in a cookie (`app_session_id`, JWT). The tRPC context (`server/_core/context.ts`) extracts the user from the cookie on every request. Protected procedures call `requireUser()`.
 
 **Database layer** (`server/db.ts`): All queries are plain functions (not a class/repository). All are filtered by `userId` — users only see their own data. Key auto-calculations happen here:
+
 - `getCurrentBalance()` — initialBalance + sum of all `returnAmount`s
 - `getConsecutiveLosses()` — count of consecutive losses from most recent trades
 - `calculateConfidenceLevel()` — average confidence of selected trading elements

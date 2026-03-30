@@ -5,7 +5,12 @@
     "ses_2c11263c8ffeJTG8YpRX57ycVK",
     "ses_2c0e0d9feffeVLYahh2PrxG1EO",
     "ses_2c0e10372ffeU5JiYd20DzJNEI",
-    "ses_2c0e0ac37ffeNLOggfO4jcDJED"
+    "ses_2c0e0ac37ffeNLOggfO4jcDJED",
+    "ses_2c0d6fbf5ffeN41ols1D6WfzF0",
+    "ses_2c0d6054dffegFjJuFcq8dC4eU",
+    "ses_2c0d64b5bfferT325ZK5PM3hB8",
+    "ses_2c0d6a25fffeOD7opwzzrL0ZN0",
+    "ses_2c0d5c84dffeB2hNeJXak9JvHj"
   ],
   "plan_name": "trade-lifecycle",
   "agent": "atlas",
@@ -18,6 +23,15 @@
       "agent": "Sisyphus-Junior",
       "category": "quick",
       "updated_at": "2026-03-30T14:28:45.399Z"
+    },
+    "todo:4": {
+      "task_key": "todo:4",
+      "task_label": "4",
+      "task_title": "TDD: DB Stat Functions Exclude Open Trades",
+      "session_id": "ses_2c0d6fbf5ffeN41ols1D6WfzF0",
+      "agent": "Sisyphus-Junior",
+      "category": "deep",
+      "updated_at": "2026-03-30T14:36:40.885Z"
     }
   }
 }
