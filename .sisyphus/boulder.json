@@ -10,7 +10,11 @@
     "ses_2c0d6054dffegFjJuFcq8dC4eU",
     "ses_2c0d64b5bfferT325ZK5PM3hB8",
     "ses_2c0d6a25fffeOD7opwzzrL0ZN0",
-    "ses_2c0d5c84dffeB2hNeJXak9JvHj"
+    "ses_2c0d5c84dffeB2hNeJXak9JvHj",
+    "ses_2c0ca5cb0ffeVdtFfANI7kWFK4",
+    "ses_2c0c97673ffeln3DLhX1mt34t7",
+    "ses_2c0ca10e4ffeqn6uujvMIehO5A",
+    "ses_2c0c9c072ffeoMW2p33T6IQXxN"
   ],
   "plan_name": "trade-lifecycle",
   "agent": "atlas",
@@ -32,6 +36,15 @@
       "agent": "Sisyphus-Junior",
       "category": "deep",
       "updated_at": "2026-03-30T14:36:40.885Z"
+    },
+    "todo:9": {
+      "task_key": "todo:9",
+      "task_label": "9",
+      "task_title": "Simplify NewTransaction Form (Open-Only Fields)",
+      "session_id": "ses_2c0ca5cb0ffeVdtFfANI7kWFK4",
+      "agent": "Sisyphus-Junior",
+      "category": "visual-engineering",
+      "updated_at": "2026-03-30T14:50:30.397Z"
     }
   }
 }

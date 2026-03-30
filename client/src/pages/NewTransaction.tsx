@@ -67,12 +67,8 @@ export default function NewTransaction() {
     tradingPair: "",
     timeFrame: "",
     startTime: "",
-    endTime: "",
     direction: "" as "long" | "short" | "",
     tradingLogic: "",
-    outcome: "" as "win" | "loss" | "breakeven" | "",
-    riskRewardRatio: "",
-    returnAmount: "",
     tvUrl: "",
   });
 
@@ -107,24 +103,14 @@ export default function NewTransaction() {
       !formData.tradingPair ||
       !formData.timeFrame ||
       !formData.startTime ||
-      !formData.endTime ||
       !formData.direction ||
-      !formData.tradingLogic ||
-      !formData.outcome ||
-      !formData.riskRewardRatio ||
-      !formData.returnAmount
+      !formData.tradingLogic
     ) {
       toast.error("Please fill in all required fields");
       return;
     }
 
     const startTimestamp = new Date(formData.startTime).getTime();
-    const endTimestamp = new Date(formData.endTime).getTime();
-
-    if (endTimestamp <= startTimestamp) {
-      toast.error("End time must be after start time");
-      return;
-    }
 
     createMutation.mutate({
       tradingPair: formData.tradingPair,
@@ -149,24 +135,6 @@ export default function NewTransaction() {
     );
   };
 
-  // Calculate preview of new balance
-  const previewBalance =
-    formDefaults && formData.returnAmount
-      ? (
-          parseFloat(formDefaults.currentBalance) +
-          parseFloat(formData.returnAmount || "0")
-        ).toFixed(2)
-      : formDefaults?.currentBalance || "0.00";
-
-  // Calculate preview of consecutive losses
-  const previewConsecutiveLosses = formDefaults
-    ? formData.outcome === "loss"
-      ? formDefaults.consecutiveLosses + 1
-      : formData.outcome === "win"
-        ? 0
-        : formDefaults.consecutiveLosses
-    : 0;
-
   if (loadingDefaults) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -180,7 +148,7 @@ export default function NewTransaction() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-heading">Record Transaction</h1>
+        <h1 className="text-heading">Open Trade</h1>
         <p className="text-subtitle mt-1">
           Log a new trading record with all relevant details
         </p>
@@ -370,25 +338,14 @@ export default function NewTransaction() {
                   </div>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="startTime">Start Time *</Label>
-                    <Input
-                      id="startTime"
-                      type="datetime-local"
-                      value={formData.startTime}
-                      onChange={e => updateField("startTime", e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="endTime">End Time *</Label>
-                    <Input
-                      id="endTime"
-                      type="datetime-local"
-                      value={formData.endTime}
-                      onChange={e => updateField("endTime", e.target.value)}
-                    />
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="startTime">Start Time *</Label>
+                  <Input
+                    id="startTime"
+                    type="datetime-local"
+                    value={formData.startTime}
+                    onChange={e => updateField("startTime", e.target.value)}
+                  />
                 </div>
 
                 <div className="space-y-2">
@@ -422,75 +379,6 @@ export default function NewTransaction() {
                     value={formData.tradingLogic}
                     onChange={e => updateField("tradingLogic", e.target.value)}
                   />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg font-semibold">
-                  Trade Outcome
-                </CardTitle>
-                <CardDescription className="text-subtitle">
-                  Record the result of your trade
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="outcome">Win/Loss/BE *</Label>
-                    <Select
-                      value={formData.outcome}
-                      onValueChange={v => updateField("outcome", v)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select outcome" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="win">
-                          <span className="status-win font-medium">Win</span>
-                        </SelectItem>
-                        <SelectItem value="loss">
-                          <span className="status-loss font-medium">Loss</span>
-                        </SelectItem>
-                        <SelectItem value="breakeven">
-                          <span className="status-breakeven font-medium">
-                            Break Even
-                          </span>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="riskRewardRatio">Risk-Reward Ratio *</Label>
-                    <Input
-                      id="riskRewardRatio"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder="e.g., 2.5"
-                      value={formData.riskRewardRatio}
-                      onChange={e =>
-                        updateField("riskRewardRatio", e.target.value)
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="returnAmount">Return Amount *</Label>
-                    <Input
-                      id="returnAmount"
-                      type="number"
-                      step="0.01"
-                      placeholder="e.g., -50 or 100"
-                      value={formData.returnAmount}
-                      onChange={e =>
-                        updateField("returnAmount", e.target.value)
-                      }
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Negative for loss, positive for profit
-                    </p>
-                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -550,32 +438,12 @@ export default function NewTransaction() {
                       ${formDefaults?.currentBalance || "0.00"}
                     </span>
                   </div>
-                  <div className="flex justify-between items-center py-2 border-b">
-                    <span className="text-sm text-muted-foreground">
-                      New Balance
-                    </span>
-                    <span
-                      className={`font-semibold ${parseFloat(formData.returnAmount || "0") >= 0 ? "status-win" : "status-loss"}`}
-                    >
-                      ${previewBalance}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center py-2 border-b">
+                  <div className="flex justify-between items-center py-2">
                     <span className="text-sm text-muted-foreground">
                       Current Losing Streak
                     </span>
                     <span className="font-semibold">
                       {formDefaults?.consecutiveLosses || 0}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center py-2">
-                    <span className="text-sm text-muted-foreground">
-                      New Losing Streak
-                    </span>
-                    <span
-                      className={`font-semibold ${previewConsecutiveLosses > 0 ? "status-loss" : ""}`}
-                    >
-                      {previewConsecutiveLosses}
                     </span>
                   </div>
                 </div>

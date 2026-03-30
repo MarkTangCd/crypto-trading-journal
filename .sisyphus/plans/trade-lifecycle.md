@@ -944,7 +944,7 @@ Wave FINAL (Verification — 4 parallel reviews, then user okay):
   - Files: `server/routers.ts`, `server/db.ts`, `server/transaction.lifecycle.test.ts`
   - Pre-commit: `npm run test && npm run check`
 
-- [ ] 9. Simplify NewTransaction Form (Open-Only Fields)
+- [x] 9. Simplify NewTransaction Form (Open-Only Fields)
 
   **What to do**:
   - Remove all outcome/close-stage fields from the form:
@@ -1052,7 +1052,7 @@ Wave FINAL (Verification — 4 parallel reviews, then user okay):
   - Files: `client/src/pages/NewTransaction.tsx`
   - Pre-commit: `npm run check`
 
-- [ ] 10. CloseTradeModal Component
+- [x] 10. CloseTradeModal Component
 
   **What to do**:
   - Create `client/src/components/CloseTradeModal.tsx`:
@@ -1167,7 +1167,7 @@ Wave FINAL (Verification — 4 parallel reviews, then user okay):
   - Files: `client/src/components/CloseTradeModal.tsx`, `client/src/pages/Transactions.tsx`, `client/src/pages/TransactionDetail.tsx`
   - Pre-commit: `npm run check`
 
-- [ ] 11. TransactionDetail Status-Aware Rendering
+- [x] 11. TransactionDetail Status-Aware Rendering
 
   **What to do**:
   - Update `client/src/pages/TransactionDetail.tsx`:
@@ -1270,7 +1270,7 @@ Wave FINAL (Verification — 4 parallel reviews, then user okay):
   - Files: `client/src/pages/TransactionDetail.tsx`
   - Pre-commit: `npm run check`
 
-- [ ] 12. Transactions List: Status Badges + Filters
+- [x] 12. Transactions List: Status Badges + Filters
 
   **What to do**:
   - Update `client/src/pages/Transactions.tsx`:

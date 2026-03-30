@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
+import * as db from "./db";
 
 // Mock the database functions
 vi.mock("./db", () => ({
@@ -163,19 +164,14 @@ describe("transaction procedures", () => {
         tradingPair: "BTCUSDT",
         timeFrame: "4H",
         startTime: Date.now(),
-        endTime: Date.now() + 3600000,
         direction: "long",
         tradingLogic: "Bullish breakout pattern",
-        outcome: "win",
-        riskRewardRatio: "2.5",
-        returnAmount: "100",
         tvUrl: "https://tradingview.com/chart/xyz",
       });
 
       expect(result).toBeDefined();
       expect(result.tradingPair).toBe("BTCUSDT");
       expect(result.direction).toBe("long");
-      expect(result.outcome).toBe("win");
     });
 
     it("converts trading pair to uppercase", async () => {
@@ -186,12 +182,8 @@ describe("transaction procedures", () => {
         tradingPair: "btcusdt",
         timeFrame: "1H",
         startTime: Date.now(),
-        endTime: Date.now() + 3600000,
         direction: "short",
         tradingLogic: "Test",
-        outcome: "loss",
-        riskRewardRatio: "1.5",
-        returnAmount: "-50",
       });
 
       expect(result.tradingPair).toBe("BTCUSDT");
@@ -240,6 +232,30 @@ describe("transaction procedures", () => {
     it("updates transaction review", async () => {
       const ctx = createAuthContext();
       const caller = appRouter.createCaller(ctx);
+
+      vi.mocked(db.getTransactionById).mockResolvedValueOnce({
+        id: 1,
+        userId: 1,
+        tradingPair: "BTCUSDT",
+        timeFrame: "4H",
+        startTime: Date.now(),
+        endTime: Date.now() + 3600000,
+        direction: "long",
+        tradingLogic: "Test trade",
+        outcome: "win",
+        status: "closed",
+        consecutiveLosses: 0,
+        riskRewardRatio: "2.5",
+        returnAmount: "100",
+        accountBalance: "10100",
+        tvUrl: null,
+        reviewFeedback: null,
+        reviewChartUrl: null,
+        tradingSystemId: null,
+        confidenceLevel: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
 
       const result = await caller.transaction.update({
         id: 1,

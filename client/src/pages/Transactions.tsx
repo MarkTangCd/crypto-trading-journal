@@ -45,11 +45,13 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { CloseTradeModal } from "@/components/CloseTradeModal";
 
 type SortBy = "createdAt" | "startTime" | "endTime" | "returnAmount";
 type SortOrder = "asc" | "desc";
 type Outcome = "win" | "loss" | "breakeven" | undefined;
 type Direction = "long" | "short" | undefined;
+type Status = "open" | "closed" | "reviewed" | undefined;
 
 function getConfidenceColor(level: number): string {
   if (level >= 80) return "text-green-600";
@@ -67,6 +69,19 @@ function getConfidenceBgColor(level: number): string {
   return "bg-red-100";
 }
 
+function getStatusBadgeClass(status: string): string {
+  switch (status) {
+    case "open":
+      return "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800";
+    case "closed":
+      return "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800";
+    case "reviewed":
+      return "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800";
+    default:
+      return "bg-secondary text-secondary-foreground";
+  }
+}
+
 export default function Transactions() {
   const [, setLocation] = useLocation();
   const utils = trpc.useUtils();
@@ -75,14 +90,23 @@ export default function Transactions() {
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [outcomeFilter, setOutcomeFilter] = useState<Outcome>(undefined);
   const [directionFilter, setDirectionFilter] = useState<Direction>(undefined);
+  const [statusFilter, setStatusFilter] = useState<Status>(undefined);
   const [pairFilter, setPairFilter] = useState<string>("");
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [closeTrade, setCloseTrade] = useState<{
+    id: number;
+    tradingPair: string;
+    direction: string;
+    timeFrame: string;
+    startTime: number;
+  } | null>(null);
 
   const { data: transactions, isLoading } = trpc.transaction.list.useQuery({
     sortBy,
     sortOrder,
     outcome: outcomeFilter,
     direction: directionFilter,
+    status: statusFilter,
     tradingPair: pairFilter || undefined,
   });
 
@@ -113,10 +137,12 @@ export default function Transactions() {
   const clearFilters = () => {
     setOutcomeFilter(undefined);
     setDirectionFilter(undefined);
+    setStatusFilter(undefined);
     setPairFilter("");
   };
 
-  const hasFilters = outcomeFilter || directionFilter || pairFilter;
+  const hasFilters =
+    outcomeFilter || directionFilter || statusFilter || pairFilter;
 
   return (
     <div className="space-y-6">
@@ -146,7 +172,26 @@ export default function Transactions() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-2">
+              <label className="text-sm text-muted-foreground">Status</label>
+              <Select
+                value={statusFilter || "all"}
+                onValueChange={v =>
+                  setStatusFilter(v === "all" ? undefined : (v as Status))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="open">Open</SelectItem>
+                  <SelectItem value="closed">Closed</SelectItem>
+                  <SelectItem value="reviewed">Reviewed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2">
               <label className="text-sm text-muted-foreground">Outcome</label>
               <Select
@@ -255,7 +300,7 @@ export default function Transactions() {
                     </TableHead>
                     <TableHead>Balance</TableHead>
                     <TableHead>Streak</TableHead>
-                    <TableHead>Reviewed</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -282,22 +327,26 @@ export default function Transactions() {
                       </TableCell>
                       <TableCell>{tx.timeFrame}</TableCell>
                       <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={
-                            tx.outcome === "win"
-                              ? "status-win border-current"
-                              : tx.outcome === "loss"
-                                ? "status-loss border-current"
-                                : "status-breakeven border-current"
-                          }
-                        >
-                          {tx.outcome
-                            ? tx.outcome === "breakeven"
+                        {tx.outcome ? (
+                          <Badge
+                            variant="outline"
+                            className={
+                              tx.outcome === "win"
+                                ? "status-win border-current"
+                                : tx.outcome === "loss"
+                                  ? "status-loss border-current"
+                                  : "status-breakeven border-current"
+                            }
+                          >
+                            {tx.outcome === "breakeven"
                               ? "BE"
-                              : tx.outcome.toUpperCase()
-                            : "—"}
-                        </Badge>
+                              : tx.outcome.toUpperCase()}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">
+                            —
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {tx.confidenceLevel !== null ? (
@@ -320,16 +369,23 @@ export default function Transactions() {
                         )}
                       </TableCell>
                       <TableCell>{tx.riskRewardRatio ?? "—"}</TableCell>
-                      <TableCell
-                        className={
-                          tx.returnAmount && parseFloat(tx.returnAmount) >= 0
-                            ? "status-win font-medium"
-                            : "status-loss font-medium"
-                        }
-                      >
-                        {tx.returnAmount
-                          ? `${parseFloat(tx.returnAmount) >= 0 ? "+" : ""}${tx.returnAmount}`
-                          : "—"}
+                      <TableCell>
+                        {tx.returnAmount ? (
+                          <span
+                            className={
+                              parseFloat(tx.returnAmount) >= 0
+                                ? "status-win font-medium"
+                                : "status-loss font-medium"
+                            }
+                          >
+                            {parseFloat(tx.returnAmount) >= 0 ? "+" : ""}
+                            {tx.returnAmount}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">
+                            —
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {tx.accountBalance ? `$${tx.accountBalance}` : "—"}
@@ -346,18 +402,25 @@ export default function Transactions() {
                         )}
                       </TableCell>
                       <TableCell>
-                        {tx.status !== "open" ? (
-                          <Badge variant="secondary" className="bg-accent">
-                            {tx.status.toUpperCase()}
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">
-                            —
-                          </span>
-                        )}
+                        <Badge
+                          variant="outline"
+                          className={getStatusBadgeClass(tx.status)}
+                        >
+                          {tx.status.toUpperCase()}
+                        </Badge>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
+                          {tx.status === "open" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 mr-2"
+                              onClick={() => setCloseTrade(tx)}
+                            >
+                              Close Trade
+                            </Button>
+                          )}
                           {tx.tvUrl && (
                             <Button
                               variant="ghost"
@@ -441,6 +504,12 @@ export default function Transactions() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <CloseTradeModal
+        open={closeTrade !== null}
+        onOpenChange={open => !open && setCloseTrade(null)}
+        trade={closeTrade}
+      />
     </div>
   );
 }

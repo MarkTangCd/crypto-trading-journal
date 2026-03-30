@@ -17,6 +17,7 @@ import { useLocation, useParams } from "wouter";
 import { format } from "date-fns";
 import { ArrowLeft, ExternalLink, Loader2, Gauge, Tag } from "lucide-react";
 import { toast } from "sonner";
+import { CloseTradeModal } from "@/components/CloseTradeModal";
 
 function getConfidenceColor(level: number): string {
   if (level >= 80) return "text-green-600";
@@ -42,6 +43,19 @@ function getConfidenceBgColor(level: number): string {
   return "bg-red-100";
 }
 
+function getStatusBadgeClass(status: string): string {
+  switch (status) {
+    case "open":
+      return "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800";
+    case "closed":
+      return "bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700";
+    case "reviewed":
+      return "bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-800";
+    default:
+      return "bg-secondary text-secondary-foreground";
+  }
+}
+
 export default function TransactionDetail() {
   const [, setLocation] = useLocation();
   const params = useParams<{ id: string }>();
@@ -55,6 +69,13 @@ export default function TransactionDetail() {
 
   const [reviewFeedback, setReviewFeedback] = useState("");
   const [reviewChartUrl, setReviewChartUrl] = useState("");
+  const [closeTrade, setCloseTrade] = useState<{
+    id: number;
+    tradingPair: string;
+    direction: string;
+    timeFrame: string;
+    startTime: number;
+  } | null>(null);
 
   useEffect(() => {
     if (transaction) {
@@ -109,36 +130,58 @@ export default function TransactionDetail() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setLocation("/transactions")}
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-heading flex items-center gap-3">
-            {transaction.tradingPair}
-            <Badge
-              variant="outline"
-              className={
-                transaction.direction === "long"
-                  ? "direction-long border-current"
-                  : "direction-short border-current"
-              }
-            >
-              {transaction.direction.toUpperCase()}
-            </Badge>
-            {transaction.status !== "open" ? (
-              <Badge variant="secondary" className="bg-accent">
-                {transaction.status.toUpperCase()}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setLocation("/transactions")}
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-heading flex items-center gap-3">
+              {transaction.tradingPair}
+              <Badge
+                variant="outline"
+                className={
+                  transaction.direction === "long"
+                    ? "direction-long border-current"
+                    : "direction-short border-current"
+                }
+              >
+                {transaction.direction.toUpperCase()}
               </Badge>
-            ) : null}
-          </h1>
-          <p className="text-subtitle mt-1">
-            {format(new Date(transaction.startTime), "MMMM d, yyyy 'at' HH:mm")}
-          </p>
+              {transaction.status !== "open" ? (
+                <Badge variant="secondary" className="bg-accent">
+                  {transaction.status.toUpperCase()}
+                </Badge>
+              ) : null}
+            </h1>
+            <p className="text-subtitle mt-1">
+              {format(
+                new Date(transaction.startTime),
+                "MMMM d, yyyy 'at' HH:mm"
+              )}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            disabled={transaction.status !== "open"}
+            onClick={() => {
+              // Future task: inline edit form
+              toast.info("Edit functionality coming soon");
+            }}
+          >
+            Edit
+          </Button>
+          {transaction.status === "open" && (
+            <Button onClick={() => setCloseTrade(transaction)}>
+              Close Trade
+            </Button>
+          )}
         </div>
       </div>
 
@@ -277,74 +320,76 @@ export default function TransactionDetail() {
           )}
 
           {/* Review Section */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold">
-                Trade Review
-              </CardTitle>
-              <CardDescription className="text-subtitle">
-                Add your post-trade analysis and feedback
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="reviewFeedback">Review Feedback</Label>
-                <Textarea
-                  id="reviewFeedback"
-                  placeholder="What did you learn from this trade? What could you have done better?"
-                  rows={5}
-                  value={reviewFeedback}
-                  onChange={e => setReviewFeedback(e.target.value)}
-                />
-              </div>
+          {transaction.status !== "open" && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold">
+                  Trade Review
+                </CardTitle>
+                <CardDescription className="text-subtitle">
+                  Add your post-trade analysis and feedback
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="reviewFeedback">Review Feedback</Label>
+                  <Textarea
+                    id="reviewFeedback"
+                    placeholder="What did you learn from this trade? What could you have done better?"
+                    rows={5}
+                    value={reviewFeedback}
+                    onChange={e => setReviewFeedback(e.target.value)}
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="reviewChartUrl">
-                  Post-Review Chart URL (Optional)
-                </Label>
-                <Input
-                  id="reviewChartUrl"
-                  type="url"
-                  placeholder="https://www.tradingview.com/chart/..."
-                  value={reviewChartUrl}
-                  onChange={e => setReviewChartUrl(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Attach a TradingView chart showing your post-trade analysis
-                </p>
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="reviewChartUrl">
+                    Post-Review Chart URL (Optional)
+                  </Label>
+                  <Input
+                    id="reviewChartUrl"
+                    type="url"
+                    placeholder="https://www.tradingview.com/chart/..."
+                    value={reviewChartUrl}
+                    onChange={e => setReviewChartUrl(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Attach a TradingView chart showing your post-trade analysis
+                  </p>
+                </div>
 
-              {transaction.reviewChartUrl && (
-                <div>
+                {transaction.reviewChartUrl && (
+                  <div>
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        window.open(transaction.reviewChartUrl!, "_blank")
+                      }
+                    >
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      View Review Chart
+                    </Button>
+                  </div>
+                )}
+
+                <div className="pt-2">
                   <Button
-                    variant="outline"
-                    onClick={() =>
-                      window.open(transaction.reviewChartUrl!, "_blank")
-                    }
+                    onClick={handleSaveReview}
+                    disabled={updateMutation.isPending}
                   >
-                    <ExternalLink className="mr-2 h-4 w-4" />
-                    View Review Chart
+                    {updateMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      "Save Review"
+                    )}
                   </Button>
                 </div>
-              )}
-
-              <div className="pt-2">
-                <Button
-                  onClick={handleSaveReview}
-                  disabled={updateMutation.isPending}
-                >
-                  {updateMutation.isPending ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    "Save Review"
-                  )}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Right column - Outcome summary */}
@@ -354,83 +399,96 @@ export default function TransactionDetail() {
               <CardTitle className="text-lg font-semibold">Outcome</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex justify-between items-center py-2 border-b">
-                <span className="text-sm text-muted-foreground">Result</span>
-                <Badge
-                  variant="outline"
-                  className={
-                    transaction.outcome === "win"
-                      ? "status-win border-current"
-                      : transaction.outcome === "loss"
-                        ? "status-loss border-current"
-                        : "status-breakeven border-current"
-                  }
-                >
-                  {transaction.outcome
-                    ? transaction.outcome === "breakeven"
-                      ? "BREAK EVEN"
-                      : transaction.outcome.toUpperCase()
-                    : "—"}
-                </Badge>
-              </div>
-              {transaction.confidenceLevel !== null && (
-                <div className="flex justify-between items-center py-2 border-b">
-                  <span className="text-sm text-muted-foreground flex items-center gap-1">
-                    <Gauge className="h-3 w-3" />
-                    Confidence
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`font-semibold ${getConfidenceColor(transaction.confidenceLevel)}`}
-                    >
-                      {transaction.confidenceLevel}%
+              {transaction.status === "open" ? (
+                <div className="flex flex-col items-center justify-center py-6 text-muted-foreground">
+                  <Loader2 className="h-8 w-8 animate-spin mb-2 opacity-50" />
+                  <p>Trade is currently open</p>
+                </div>
+              ) : (
+                <>
+                  <div className="flex justify-between items-center py-2 border-b">
+                    <span className="text-sm text-muted-foreground">
+                      Result
                     </span>
-                    <span
-                      className={`text-xs ${getConfidenceColor(transaction.confidenceLevel)}`}
+                    <Badge
+                      variant="outline"
+                      className={
+                        transaction.outcome === "win"
+                          ? "status-win border-current"
+                          : transaction.outcome === "loss"
+                            ? "status-loss border-current"
+                            : "status-breakeven border-current"
+                      }
                     >
-                      ({getConfidenceLabel(transaction.confidenceLevel)})
+                      {transaction.outcome
+                        ? transaction.outcome === "breakeven"
+                          ? "BREAK EVEN"
+                          : transaction.outcome.toUpperCase()
+                        : "—"}
+                    </Badge>
+                  </div>
+                  {transaction.confidenceLevel !== null && (
+                    <div className="flex justify-between items-center py-2 border-b">
+                      <span className="text-sm text-muted-foreground flex items-center gap-1">
+                        <Gauge className="h-3 w-3" />
+                        Confidence
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`font-semibold ${getConfidenceColor(transaction.confidenceLevel)}`}
+                        >
+                          {transaction.confidenceLevel}%
+                        </span>
+                        <span
+                          className={`text-xs ${getConfidenceColor(transaction.confidenceLevel)}`}
+                        >
+                          ({getConfidenceLabel(transaction.confidenceLevel)})
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center py-2 border-b">
+                    <span className="text-sm text-muted-foreground">
+                      Risk-Reward
+                    </span>
+                    <span className="font-semibold">
+                      {transaction.riskRewardRatio ?? "—"}
                     </span>
                   </div>
-                </div>
+                  <div className="flex justify-between items-center py-2 border-b">
+                    <span className="text-sm text-muted-foreground">
+                      Return
+                    </span>
+                    <span
+                      className={`font-semibold ${transaction.returnAmount && parseFloat(transaction.returnAmount) >= 0 ? "status-win" : "status-loss"}`}
+                    >
+                      {transaction.returnAmount
+                        ? `${parseFloat(transaction.returnAmount) >= 0 ? "+" : ""}$${transaction.returnAmount}`
+                        : "—"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b">
+                    <span className="text-sm text-muted-foreground">
+                      Balance After
+                    </span>
+                    <span className="font-semibold">
+                      {transaction.accountBalance
+                        ? `$${transaction.accountBalance}`
+                        : "—"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center py-2">
+                    <span className="text-sm text-muted-foreground">
+                      Losing Streak
+                    </span>
+                    <span
+                      className={`font-semibold ${transaction.consecutiveLosses && transaction.consecutiveLosses > 0 ? "status-loss" : ""}`}
+                    >
+                      {transaction.consecutiveLosses ?? "—"}
+                    </span>
+                  </div>
+                </>
               )}
-              <div className="flex justify-between items-center py-2 border-b">
-                <span className="text-sm text-muted-foreground">
-                  Risk-Reward
-                </span>
-                <span className="font-semibold">
-                  {transaction.riskRewardRatio ?? "—"}
-                </span>
-              </div>
-              <div className="flex justify-between items-center py-2 border-b">
-                <span className="text-sm text-muted-foreground">Return</span>
-                <span
-                  className={`font-semibold ${transaction.returnAmount && parseFloat(transaction.returnAmount) >= 0 ? "status-win" : "status-loss"}`}
-                >
-                  {transaction.returnAmount
-                    ? `${parseFloat(transaction.returnAmount) >= 0 ? "+" : ""}$${transaction.returnAmount}`
-                    : "—"}
-                </span>
-              </div>
-              <div className="flex justify-between items-center py-2 border-b">
-                <span className="text-sm text-muted-foreground">
-                  Balance After
-                </span>
-                <span className="font-semibold">
-                  {transaction.accountBalance
-                    ? `$${transaction.accountBalance}`
-                    : "—"}
-                </span>
-              </div>
-              <div className="flex justify-between items-center py-2">
-                <span className="text-sm text-muted-foreground">
-                  Losing Streak
-                </span>
-                <span
-                  className={`font-semibold ${transaction.consecutiveLosses && transaction.consecutiveLosses > 0 ? "status-loss" : ""}`}
-                >
-                  {transaction.consecutiveLosses ?? "—"}
-                </span>
-              </div>
             </CardContent>
           </Card>
 
@@ -455,6 +513,12 @@ export default function TransactionDetail() {
           </Card>
         </div>
       </div>
+
+      <CloseTradeModal
+        open={closeTrade !== null}
+        onOpenChange={open => !open && setCloseTrade(null)}
+        trade={closeTrade}
+      />
     </div>
   );
 }

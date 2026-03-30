@@ -1039,7 +1039,7 @@ export async function createTransactionWithElements(
 ): Promise<Transaction> {
   const insertData: InsertTransaction = {
     ...data,
-    status: "open",
+    status: data.status ?? "open",
     endTime: data.endTime ?? null,
     outcome: data.outcome ?? null,
     riskRewardRatio: data.riskRewardRatio ?? null,
