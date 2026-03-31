@@ -14,7 +14,10 @@
     "ses_2c0ca5cb0ffeVdtFfANI7kWFK4",
     "ses_2c0c97673ffeln3DLhX1mt34t7",
     "ses_2c0ca10e4ffeqn6uujvMIehO5A",
-    "ses_2c0c9c072ffeoMW2p33T6IQXxN"
+    "ses_2c0c9c072ffeoMW2p33T6IQXxN",
+    "ses_2c0bb5634ffeH9iUhpKBviEnfA",
+    "ses_2c0baa43effe1ZXMDPhJiaqG3v",
+    "ses_2c0baf568ffedLyAuFX0pvmW1G"
   ],
   "plan_name": "trade-lifecycle",
   "agent": "atlas",
@@ -45,6 +48,15 @@
       "agent": "Sisyphus-Junior",
       "category": "visual-engineering",
       "updated_at": "2026-03-30T14:50:30.397Z"
+    },
+    "final-wave:f1": {
+      "task_key": "final-wave:f1",
+      "task_label": "F1",
+      "task_title": "**Plan Compliance Audit** — `oracle`",
+      "session_id": "ses_2c0bb5634ffeH9iUhpKBviEnfA",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-03-30T15:05:13.500Z"
     }
   }
 }

@@ -397,6 +397,18 @@ export const appRouter = router({
             });
           }
 
+          if (
+            data.endTime !== undefined ||
+            data.outcome !== undefined ||
+            data.riskRewardRatio !== undefined ||
+            data.returnAmount !== undefined
+          ) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Close-stage fields cannot be edited on open trades",
+            });
+          }
+
           const confidenceLevel =
             selectedElementIds !== undefined
               ? await calculateConfidenceLevel(selectedElementIds)
@@ -409,12 +421,8 @@ export const appRouter = router({
                 : undefined,
             timeFrame: data.timeFrame,
             startTime: data.startTime,
-            endTime: data.endTime,
             direction: data.direction,
             tradingLogic: data.tradingLogic,
-            outcome: data.outcome,
-            riskRewardRatio: data.riskRewardRatio,
-            returnAmount: data.returnAmount,
             tvUrl: data.tvUrl,
             tradingSystemId: data.tradingSystemId,
             confidenceLevel,

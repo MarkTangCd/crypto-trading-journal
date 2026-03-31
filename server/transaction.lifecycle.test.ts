@@ -719,7 +719,6 @@ describe("transaction.update lifecycle rules", () => {
         tradingPair: "ethusdt",
         timeFrame: "4H",
         tradingLogic: "Updated logic",
-        outcome: "loss",
         selectedElementIds: [2, 3],
       },
     });
@@ -730,7 +729,6 @@ describe("transaction.update lifecycle rules", () => {
       tradingPair: "ETHUSDT",
       timeFrame: "4H",
       tradingLogic: "Updated logic",
-      outcome: "loss",
       confidenceLevel: 95,
     });
     expect(result.elements).toEqual([

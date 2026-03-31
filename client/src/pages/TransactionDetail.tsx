@@ -152,11 +152,12 @@ export default function TransactionDetail() {
               >
                 {transaction.direction.toUpperCase()}
               </Badge>
-              {transaction.status !== "open" ? (
-                <Badge variant="secondary" className="bg-accent">
-                  {transaction.status.toUpperCase()}
-                </Badge>
-              ) : null}
+              <Badge
+                variant="secondary"
+                className={getStatusBadgeClass(transaction.status)}
+              >
+                {transaction.status.toUpperCase()}
+              </Badge>
             </h1>
             <p className="text-subtitle mt-1">
               {format(
@@ -171,7 +172,6 @@ export default function TransactionDetail() {
             variant="outline"
             disabled={transaction.status !== "open"}
             onClick={() => {
-              // Future task: inline edit form
               toast.info("Edit functionality coming soon");
             }}
           >
