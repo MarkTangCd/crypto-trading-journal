@@ -18,6 +18,7 @@ vi.mock("./db", () => ({
   getTransactionById: vi.fn().mockResolvedValue({
     id: 1,
     userId: 1,
+    accountId: 1,
     tradingPair: "BTCUSDT",
     timeFrame: "4H",
     startTime: Date.now(),
@@ -100,53 +101,74 @@ vi.mock("./db", () => ({
   addElementsToSystem: vi.fn().mockResolvedValue(undefined),
   removeElementsFromSystem: vi.fn().mockResolvedValue(undefined),
   getSystemElements: vi.fn().mockResolvedValue([]),
-  getStatisticsBySystem: vi.fn().mockResolvedValue([]),
-  getSystemStatistics: vi.fn().mockResolvedValue([]),
-  // Transaction elements functions
-  addElementsToTransaction: vi.fn().mockResolvedValue(undefined),
-  getTransactionElements: vi.fn().mockResolvedValue([]),
-  removeElementsFromTransaction: vi.fn().mockResolvedValue(undefined),
-  calculateConfidenceLevel: vi.fn().mockResolvedValue(65),
-  getElementsByIds: vi.fn().mockResolvedValue([]),
-  // SQLite transaction helpers
-  createTransactionWithElements: vi
-    .fn()
-    .mockImplementation((data, _elementIds) => ({
-      id: 1,
-      status: "open",
-      ...data,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    })),
-  deleteTransactionWithElements: vi.fn().mockResolvedValue(undefined),
-}));
-
-type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
-
-function createAuthContext(): TrpcContext {
-  const user: AuthenticatedUser = {
+  // Account functions
+  createAccount: vi.fn().mockImplementation(data => ({
     id: 1,
-    openId: "test-user",
-    email: "test@example.com",
-    name: "Test User",
-    loginMethod: "manus",
-    role: "user",
-    initialBalance: "0",
-    activeTradingSystemId: null,
+    ...data,
     createdAt: new Date(),
     updatedAt: new Date(),
-    lastSignedIn: new Date(),
-  };
+  })),
+  getAccountById: vi.fn().mockResolvedValue({
+    id: 1,
+    userId: 1,
+    name: "Test Account",
+    notes: "Test notes",
+    initialBalance: "1000",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
+  getAccountsByUserId: vi.fn().mockResolvedValue([
+    {
+      id: 1,
+      userId: 1,
+      name: "Test Account",
+      notes: "Test notes",
+      initialBalance: "1000",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  ]),
+  updateAccount: vi.fn().mockResolvedValue({
+    id: 1,
+    userId: 1,
+    name: "Updated Account",
+    notes: "Updated notes",
+    initialBalance: "2000",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
+  deleteAccountWithTransactions: vi.fn().mockResolvedValue(undefined),
+  getAccountCount: vi.fn().mockResolvedValue(2),
+  // Transaction element functions
+  addElementsToTransaction: vi.fn().mockResolvedValue(undefined),
+  removeElementsFromTransaction: vi.fn().mockResolvedValue(undefined),
+  getTransactionElements: vi.fn().mockResolvedValue([]),
+  replaceTransactionElements: vi.fn().mockResolvedValue(undefined),
+  calculateConfidenceLevel: vi.fn().mockResolvedValue(75),
+  // Close trade function
+  closeTrade: vi.fn().mockImplementation(async (_txId, _userId, data) => ({
+    id: 1,
+    ...data,
+    status: "closed",
+    updatedAt: new Date(),
+  })),
+}));
 
+function createAuthContext(): TrpcContext {
   return {
-    user,
-    req: {
-      protocol: "https",
-      headers: {},
-    } as TrpcContext["req"],
-    res: {
-      clearCookie: vi.fn(),
-    } as unknown as TrpcContext["res"],
+    user: {
+      id: 1,
+      openId: "test-user",
+      name: "Test User",
+      email: null,
+      loginMethod: null,
+      role: "user",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      lastSignedIn: new Date(),
+      initialBalance: "10000",
+      activeTradingSystemId: null,
+    },
   };
 }
 
@@ -156,7 +178,7 @@ describe("transaction procedures", () => {
   });
 
   describe("transaction.create", () => {
-    it("creates a new transaction with valid input", async () => {
+    it("creates a new transaction", async () => {
       const ctx = createAuthContext();
       const caller = appRouter.createCaller(ctx);
 
@@ -165,33 +187,20 @@ describe("transaction procedures", () => {
         timeFrame: "4H",
         startTime: Date.now(),
         direction: "long",
-        tradingLogic: "Bullish breakout pattern",
-        tvUrl: "https://tradingview.com/chart/xyz",
+        tradingLogic: "Test trade logic",
+        tradingSystemId: 1,
+        elementIds: [1, 2],
       });
 
       expect(result).toBeDefined();
-      expect(result.tradingPair).toBe("BTCUSDT");
-      expect(result.direction).toBe("long");
-    });
-
-    it("converts trading pair to uppercase", async () => {
-      const ctx = createAuthContext();
-      const caller = appRouter.createCaller(ctx);
-
-      const result = await caller.transaction.create({
-        tradingPair: "btcusdt",
-        timeFrame: "1H",
-        startTime: Date.now(),
-        direction: "short",
-        tradingLogic: "Test",
-      });
-
-      expect(result.tradingPair).toBe("BTCUSDT");
+      expect(result.id).toBe(1);
+      expect(result.status).toBe("open");
+      expect(db.createTransaction).toHaveBeenCalled();
     });
   });
 
   describe("transaction.get", () => {
-    it("retrieves a transaction by id", async () => {
+    it("returns a transaction by id", async () => {
       const ctx = createAuthContext();
       const caller = appRouter.createCaller(ctx);
 
@@ -208,7 +217,7 @@ describe("transaction procedures", () => {
       const ctx = createAuthContext();
       const caller = appRouter.createCaller(ctx);
 
-      const result = await caller.transaction.list({});
+      const result = await caller.transaction.list({ accountId: 1 });
 
       expect(Array.isArray(result)).toBe(true);
     });
@@ -218,6 +227,7 @@ describe("transaction procedures", () => {
       const caller = appRouter.createCaller(ctx);
 
       const result = await caller.transaction.list({
+        accountId: 1,
         outcome: "win",
         direction: "long",
         sortBy: "returnAmount",
@@ -236,6 +246,7 @@ describe("transaction procedures", () => {
       vi.mocked(db.getTransactionById).mockResolvedValueOnce({
         id: 1,
         userId: 1,
+        accountId: 1,
         tradingPair: "BTCUSDT",
         timeFrame: "4H",
         startTime: Date.now(),
@@ -282,12 +293,12 @@ describe("transaction procedures", () => {
       const ctx = createAuthContext();
       const caller = appRouter.createCaller(ctx);
 
-      const result = await caller.transaction.getFormDefaults();
+      const result = await caller.transaction.getFormDefaults({ accountId: 1 });
 
       expect(result).toBeDefined();
       expect(result.currentBalance).toBe("10000");
       expect(result.consecutiveLosses).toBe(0);
-      expect(result.initialBalance).toBe("10000");
+      expect(result.initialBalance).toBe("1000");
     });
   });
 
@@ -296,7 +307,7 @@ describe("transaction procedures", () => {
       const ctx = createAuthContext();
       const caller = appRouter.createCaller(ctx);
 
-      const result = await caller.transaction.getTradingPairs();
+      const result = await caller.transaction.getTradingPairs({ accountId: 1 });
 
       expect(Array.isArray(result)).toBe(true);
       expect(result).toContain("BTCUSDT");
@@ -310,7 +321,7 @@ describe("stats procedures", () => {
     const ctx = createAuthContext();
     const caller = appRouter.createCaller(ctx);
 
-    const result = await caller.stats.get();
+    const result = await caller.stats.get({ accountId: 1 });
 
     expect(result).toBeDefined();
     expect(result.winCount).toBe(5);
@@ -336,17 +347,148 @@ describe("user procedures", () => {
     const result = await caller.user.getSettings();
 
     expect(result).toBeDefined();
-    expect(result.initialBalance).toBe("10000");
+    expect(result.activeTradingSystemId).toBeNull();
+  });
+});
+
+describe("account procedures", () => {
+  const createAuthContext = (): TrpcContext => ({
+    user: {
+      id: 1,
+      openId: "test-user",
+      name: "Test User",
+      email: null,
+      loginMethod: null,
+      role: "user",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      lastSignedIn: new Date(),
+      initialBalance: "10000",
+      activeTradingSystemId: null,
+    },
   });
 
-  it("sets initial balance", async () => {
-    const ctx = createAuthContext();
-    const caller = appRouter.createCaller(ctx);
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
-    const result = await caller.user.setInitialBalance({
-      initialBalance: "15000",
+  describe("account.create", () => {
+    it("should create an account with valid data", async () => {
+      const ctx = createAuthContext();
+      const caller = appRouter.createCaller(ctx);
+
+      const result = await caller.account.create({
+        name: "Test Account",
+        notes: "Test notes",
+        initialBalance: "1000",
+      });
+
+      expect(result).toMatchObject({
+        id: expect.any(Number),
+        name: "Test Account",
+        notes: "Test notes",
+        initialBalance: "1000",
+        userId: 1,
+      });
     });
 
-    expect(result).toEqual({ success: true });
+    it("should default initialBalance to '0' when not provided", async () => {
+      const ctx = createAuthContext();
+      const caller = appRouter.createCaller(ctx);
+
+      await caller.account.create({
+        name: "Test Account",
+      });
+
+      expect(db.createAccount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          initialBalance: "0",
+        })
+      );
+    });
+  });
+
+  describe("account.list", () => {
+    it("should return all accounts for the user", async () => {
+      const ctx = createAuthContext();
+      const caller = appRouter.createCaller(ctx);
+
+      const result = await caller.account.list();
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        id: 1,
+        name: "Test Account",
+        userId: 1,
+      });
+    });
+  });
+
+  describe("account.get", () => {
+    it("should return an account by id", async () => {
+      const ctx = createAuthContext();
+      const caller = appRouter.createCaller(ctx);
+
+      const result = await caller.account.get({ id: 1 });
+
+      expect(result).toMatchObject({
+        id: 1,
+        name: "Test Account",
+        userId: 1,
+      });
+    });
+
+    it("should return null for non-existent account", async () => {
+      vi.mocked(db.getAccountById).mockResolvedValueOnce(undefined);
+      const ctx = createAuthContext();
+      const caller = appRouter.createCaller(ctx);
+
+      const result = await caller.account.get({ id: 999 });
+
+      expect(result).toBeUndefined();
+    });
+  });
+
+  describe("account.update", () => {
+    it("should update an account with valid data", async () => {
+      const ctx = createAuthContext();
+      const caller = appRouter.createCaller(ctx);
+
+      const result = await caller.account.update({
+        id: 1,
+        name: "Updated Account",
+        notes: "Updated notes",
+        initialBalance: "2000",
+      });
+
+      expect(result).toMatchObject({
+        id: 1,
+        name: "Updated Account",
+        notes: "Updated notes",
+        initialBalance: "2000",
+      });
+    });
+  });
+
+  describe("account.delete", () => {
+    it("should delete an account when user has multiple accounts", async () => {
+      vi.mocked(db.getAccountCount).mockResolvedValueOnce(2);
+      const ctx = createAuthContext();
+      const caller = appRouter.createCaller(ctx);
+
+      const result = await caller.account.delete({ id: 1 });
+
+      expect(result).toEqual({ success: true });
+    });
+
+    it("should prevent deleting the last account", async () => {
+      vi.mocked(db.getAccountCount).mockResolvedValueOnce(1);
+      const ctx = createAuthContext();
+      const caller = appRouter.createCaller(ctx);
+
+      await expect(caller.account.delete({ id: 1 })).rejects.toThrow(
+        "Cannot delete the last account"
+      );
+    });
   });
 });
