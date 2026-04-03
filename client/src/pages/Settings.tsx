@@ -6,40 +6,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
-import { useState, useEffect } from "react";
-import { toast } from "sonner";
-import { Loader2, Save, Wallet } from "lucide-react";
+import { useLocation } from "wouter";
+import { Loader2, Wallet, ArrowRight } from "lucide-react";
 
 export default function Settings() {
-  const utils = trpc.useUtils();
-
+  const [, setLocation] = useLocation();
   const { data: settings, isLoading } = trpc.user.getSettings.useQuery();
-  const [initialBalance, setInitialBalance] = useState("");
-
-  useEffect(() => {
-    if (settings) {
-      setInitialBalance(settings.initialBalance || "0");
-    }
-  }, [settings]);
-
-  const updateMutation = trpc.user.setInitialBalance.useMutation({
-    onSuccess: () => {
-      toast.success("Settings saved successfully");
-      utils.user.getSettings.invalidate();
-      utils.transaction.getFormDefaults.invalidate();
-      utils.stats.get.invalidate();
-    },
-    onError: error => {
-      toast.error(error.message || "Failed to save settings");
-    },
-  });
-
-  const handleSave = () => {
-    updateMutation.mutate({ initialBalance });
-  };
 
   if (isLoading) {
     return (
@@ -61,50 +34,23 @@ export default function Settings() {
       <div className="max-w-2xl">
         <Card>
           <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-muted p-2">
-                <Wallet className="h-5 w-5 text-muted-foreground" />
-              </div>
-              <div>
-                <CardTitle className="text-lg font-semibold">
-                  Account Balance
-                </CardTitle>
-                <CardDescription className="text-subtitle">
-                  Set your initial trading account balance
-                </CardDescription>
-              </div>
-            </div>
+            <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+              <Wallet className="h-5 w-5" />
+              Account Management
+            </CardTitle>
+            <CardDescription className="text-subtitle">
+              Manage your trading accounts and initial balances
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="initialBalance">Initial Balance ($)</Label>
-              <Input
-                id="initialBalance"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="e.g., 10000"
-                value={initialBalance}
-                onChange={e => setInitialBalance(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                This is your starting account balance. All statistics will be
-                calculated relative to this amount.
-              </p>
-            </div>
-
-            <Button onClick={handleSave} disabled={updateMutation.isPending}>
-              {updateMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="mr-2 h-4 w-4" />
-                  Save Settings
-                </>
-              )}
+            <p className="text-sm text-muted-foreground">
+              Initial balance settings have been moved to the Account Management
+              page. You can now create multiple accounts, each with its own
+              initial balance and transaction history.
+            </p>
+            <Button onClick={() => setLocation("/accounts")}>
+              Go to Account Management
+              <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </CardContent>
         </Card>

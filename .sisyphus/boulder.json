@@ -1,62 +1,28 @@
 {
-  "active_plan": "/Users/marktang/programming/personal-projects/crypto-trading-journal/.sisyphus/plans/trade-lifecycle.md",
-  "started_at": "2026-03-30T14:19:34.695Z",
+  "active_plan": "/Users/marktang/programming/personal-projects/crypto-trading-journal/.sisyphus/plans/multi-account.md",
+  "started_at": "2026-04-03T04:03:50.556Z",
   "session_ids": [
-    "ses_2c11263c8ffeJTG8YpRX57ycVK",
-    "ses_2c0e0d9feffeVLYahh2PrxG1EO",
-    "ses_2c0e10372ffeU5JiYd20DzJNEI",
-    "ses_2c0e0ac37ffeNLOggfO4jcDJED",
-    "ses_2c0d6fbf5ffeN41ols1D6WfzF0",
-    "ses_2c0d6054dffegFjJuFcq8dC4eU",
-    "ses_2c0d64b5bfferT325ZK5PM3hB8",
-    "ses_2c0d6a25fffeOD7opwzzrL0ZN0",
-    "ses_2c0d5c84dffeB2hNeJXak9JvHj",
-    "ses_2c0ca5cb0ffeVdtFfANI7kWFK4",
-    "ses_2c0c97673ffeln3DLhX1mt34t7",
-    "ses_2c0ca10e4ffeqn6uujvMIehO5A",
-    "ses_2c0c9c072ffeoMW2p33T6IQXxN",
-    "ses_2c0bb5634ffeH9iUhpKBviEnfA",
-    "ses_2c0baa43effe1ZXMDPhJiaqG3v",
-    "ses_2c0baf568ffedLyAuFX0pvmW1G"
+    "ses_2b16767eaffexOX4nXbDfC5wu3",
+    "ses_2ae7ae294ffeUnga2CCoAJCjDu",
+    "ses_2adf7a707ffeent3lgNtsIZFMQ",
+    "ses_2adf74ce4ffesDXdPWCkuqXSFC",
+    "ses_2adf7e0ffffeycDhBr51zIHhZO",
+    "ses_2adf13c7dffemCbYuinltwTN7H",
+    "ses_2adf70d3dffei5219TEU3O1wQ0",
+    "ses_2adf0b826ffeKdwx6nbV9T552d",
+    "ses_2add36b7bffeuYz7B30SsMkF24"
   ],
-  "plan_name": "trade-lifecycle",
+  "plan_name": "multi-account",
   "agent": "atlas",
   "task_sessions": {
     "todo:1": {
       "task_key": "todo:1",
       "task_label": "1",
-      "task_title": "Schema Migration: Add `status` Column + Nullable Outcome Fields",
-      "session_id": "ses_2c0e10372ffeU5JiYd20DzJNEI",
+      "task_title": "Database Schema Changes + Shared Type Exports",
+      "session_id": "ses_2ae7ae294ffeUnga2CCoAJCjDu",
       "agent": "Sisyphus-Junior",
       "category": "quick",
-      "updated_at": "2026-03-30T14:28:45.399Z"
-    },
-    "todo:4": {
-      "task_key": "todo:4",
-      "task_label": "4",
-      "task_title": "TDD: DB Stat Functions Exclude Open Trades",
-      "session_id": "ses_2c0d6fbf5ffeN41ols1D6WfzF0",
-      "agent": "Sisyphus-Junior",
-      "category": "deep",
-      "updated_at": "2026-03-30T14:36:40.885Z"
-    },
-    "todo:9": {
-      "task_key": "todo:9",
-      "task_label": "9",
-      "task_title": "Simplify NewTransaction Form (Open-Only Fields)",
-      "session_id": "ses_2c0ca5cb0ffeVdtFfANI7kWFK4",
-      "agent": "Sisyphus-Junior",
-      "category": "visual-engineering",
-      "updated_at": "2026-03-30T14:50:30.397Z"
-    },
-    "final-wave:f1": {
-      "task_key": "final-wave:f1",
-      "task_label": "F1",
-      "task_title": "**Plan Compliance Audit** — `oracle`",
-      "session_id": "ses_2c0bb5634ffeH9iUhpKBviEnfA",
-      "agent": "Sisyphus-Junior",
-      "category": "unspecified-high",
-      "updated_at": "2026-03-30T15:05:13.500Z"
+      "updated_at": "2026-04-03T04:29:54.768Z"
     }
   }
 }

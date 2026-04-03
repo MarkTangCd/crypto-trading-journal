@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { trpc } from "@/lib/trpc";
+import { useAccount } from "@/contexts/AccountContext";
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
@@ -45,9 +46,14 @@ function getConfidenceLabel(level: number): string {
 export default function NewTransaction() {
   const [, setLocation] = useLocation();
   const utils = trpc.useUtils();
+  const { selectedAccount } = useAccount();
+  const accountId = selectedAccount?.id;
 
   const { data: formDefaults, isLoading: loadingDefaults } =
-    trpc.transaction.getFormDefaults.useQuery();
+    trpc.transaction.getFormDefaults.useQuery(
+      { accountId: accountId! },
+      { enabled: !!accountId }
+    );
 
   const createMutation = trpc.transaction.create.useMutation({
     onSuccess: () => {

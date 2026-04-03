@@ -8,6 +8,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
+import { useAccount } from "@/contexts/AccountContext";
 import {
   Loader2,
   TrendingUp,
@@ -27,9 +28,18 @@ import { useLocation } from "wouter";
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
-  const { data: stats, isLoading: statsLoading } = trpc.stats.get.useQuery();
+  const { selectedAccount } = useAccount();
+  const accountId = selectedAccount?.id;
+
+  const { data: stats, isLoading: statsLoading } = trpc.stats.get.useQuery(
+    { accountId: accountId! },
+    { enabled: !!accountId }
+  );
   const { data: systemStats, isLoading: systemStatsLoading } =
-    trpc.stats.getBySystem.useQuery();
+    trpc.stats.getBySystem.useQuery(
+      { accountId: accountId! },
+      { enabled: !!accountId }
+    );
 
   const isLoading = statsLoading || systemStatsLoading;
 

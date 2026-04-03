@@ -20,7 +20,9 @@ import {
   TrendingUp,
   Tag,
   Layers,
+  Wallet,
 } from "lucide-react";
+import { AccountSwitcher } from "./AccountSwitcher";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 
@@ -30,6 +32,7 @@ const menuItems = [
   { icon: Plus, label: "New Trade", path: "/transactions/new" },
   { icon: Layers, label: "Trading Systems", path: "/trading-systems" },
   { icon: Tag, label: "Elements", path: "/trading-elements" },
+  { icon: Wallet, label: "Accounts", path: "/accounts" },
   { icon: Settings, label: "Settings", path: "/settings" },
 ];
 
@@ -150,6 +153,12 @@ function DashboardLayoutContent({
               ) : null}
             </div>
           </SidebarHeader>
+
+          {!isCollapsed && (
+            <div className="px-2 pb-2">
+              <AccountSwitcher />
+            </div>
+          )}
 
           <SidebarContent className="gap-0">
             <SidebarMenu className="px-2 py-1">

@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
+import { useAccount } from "@/contexts/AccountContext";
 import { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
@@ -41,10 +42,12 @@ export function CloseTradeModal({
   trade,
 }: CloseTradeModalProps) {
   const utils = trpc.useUtils();
+  const { selectedAccount } = useAccount();
+  const accountId = selectedAccount?.id;
 
   const { data: formDefaults } = trpc.transaction.getFormDefaults.useQuery(
-    undefined,
-    { enabled: open }
+    { accountId: accountId! },
+    { enabled: open && !!accountId }
   );
 
   const [formData, setFormData] = useState({

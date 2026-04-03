@@ -111,6 +111,8 @@ export const transactions = sqliteTable(
     userId: integer("userId").notNull(),
     /** Foreign key to trading systems (optional, for binding trades to systems) */
     tradingSystemId: integer("tradingSystemId"),
+    /** Foreign key to accounts (nullable initially for migration) */
+    accountId: integer("accountId"),
     status: text("status").notNull().default("open"),
     /** Account balance at time of trade */
     accountBalance: text("accountBalance"),
@@ -184,3 +186,29 @@ export const transactionElements = sqliteTable("transaction_elements", {
 
 export type TransactionElement = typeof transactionElements.$inferSelect;
 export type InsertTransactionElement = typeof transactionElements.$inferInsert;
+
+/**
+ * Trading accounts - users can have multiple accounts with separate balances and transactions
+ */
+export const accounts = sqliteTable("accounts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  /** Foreign key to users table */
+  userId: integer("userId").notNull(),
+  /** Account nickname e.g., "Main Account", "Swing Trading" */
+  name: text("name").notNull(),
+  /** Optional notes/description */
+  notes: text("notes"),
+  /** Initial balance for this account */
+  initialBalance: text("initialBalance").notNull().default("0"),
+  /** Record creation timestamp */
+  createdAt: integer("createdAt", { mode: "timestamp_ms" })
+    .default(sql`(unixepoch() * 1000)`)
+    .notNull(),
+  /** Record update timestamp */
+  updatedAt: integer("updatedAt", { mode: "timestamp_ms" })
+    .default(sql`(unixepoch() * 1000)`)
+    .notNull(),
+});
+
+export type Account = typeof accounts.$inferSelect;
+export type InsertAccount = typeof accounts.$inferInsert;

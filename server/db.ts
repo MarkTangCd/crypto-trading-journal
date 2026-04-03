@@ -18,6 +18,9 @@ import {
   TradingSystem,
   tradingSystemElements,
   transactionElements,
+  accounts,
+  InsertAccount,
+  Account,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { ANONYMOUS_OPEN_ID, ANONYMOUS_USER_NAME } from "@shared/const";
@@ -596,6 +599,7 @@ export async function getTransactionById(id: number, userId: number) {
 export async function getTransactionsByUserId(
   userId: number,
   options?: {
+    accountId?: number;
     sortBy?: "createdAt" | "startTime" | "endTime" | "returnAmount";
     sortOrder?: "asc" | "desc";
     outcome?: "win" | "loss" | "breakeven";
@@ -610,6 +614,9 @@ export async function getTransactionsByUserId(
 
   const conditions = [eq(transactions.userId, userId)];
 
+  if (options?.accountId !== undefined) {
+    conditions.push(eq(transactions.accountId, options.accountId));
+  }
   if (options?.outcome) {
     conditions.push(eq(transactions.outcome, options.outcome));
   }
@@ -725,7 +732,7 @@ export async function getLastTransaction(userId: number) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-export async function getConsecutiveLosses(userId: number): Promise<number> {
+export async function getConsecutiveLosses(accountId: number): Promise<number> {
   const db = await getDb();
   if (!db) return 0;
 
@@ -735,7 +742,7 @@ export async function getConsecutiveLosses(userId: number): Promise<number> {
     .from(transactions)
     .where(
       and(
-        eq(transactions.userId, userId),
+        eq(transactions.accountId, accountId),
         inArray(transactions.status, CLOSED_TRADE_STATUSES)
       )
     )
@@ -755,7 +762,7 @@ export async function getConsecutiveLosses(userId: number): Promise<number> {
 }
 
 export async function getCurrentBalance(
-  userId: number,
+  accountId: number,
   initialBalance: string
 ): Promise<string> {
   const db = await getDb();
@@ -766,7 +773,7 @@ export async function getCurrentBalance(
     .from(transactions)
     .where(
       and(
-        eq(transactions.userId, userId),
+        eq(transactions.accountId, accountId),
         inArray(transactions.status, CLOSED_TRADE_STATUSES)
       )
     );
@@ -778,7 +785,7 @@ export async function getCurrentBalance(
   return addDecimalStrings([initialBalance || ZERO_DECIMAL, totalReturn]);
 }
 
-export async function getStatistics(userId: number, initialBalance: string) {
+export async function getStatistics(accountId: number, initialBalance: string) {
   const normalizedInitialBalance = normalizeFixedPoint(
     initialBalance || ZERO_DECIMAL
   );
@@ -809,7 +816,7 @@ export async function getStatistics(userId: number, initialBalance: string) {
     .from(transactions)
     .where(
       and(
-        eq(transactions.userId, userId),
+        eq(transactions.accountId, accountId),
         inArray(transactions.status, CLOSED_TRADE_STATUSES)
       )
     )
@@ -893,7 +900,7 @@ export async function getStatistics(userId: number, initialBalance: string) {
   };
 }
 
-export async function getSystemStatistics(userId: number) {
+export async function getSystemStatistics(accountId: number, userId: number) {
   const db = await getDb();
   if (!db) return [];
 
@@ -908,7 +915,7 @@ export async function getSystemStatistics(userId: number) {
         .from(transactions)
         .where(
           and(
-            eq(transactions.userId, userId),
+            eq(transactions.accountId, accountId),
             eq(transactions.tradingSystemId, system.id),
             inArray(transactions.status, CLOSED_TRADE_STATUSES)
           )
@@ -950,14 +957,22 @@ export async function getSystemStatistics(userId: number) {
   return systemStats;
 }
 
-export async function getUniqueTradingPairs(userId: number): Promise<string[]> {
+export async function getUniqueTradingPairs(
+  userId: number,
+  accountId?: number
+): Promise<string[]> {
   const db = await getDb();
   if (!db) return [];
+
+  const conditions = [eq(transactions.userId, userId)];
+  if (accountId !== undefined) {
+    conditions.push(eq(transactions.accountId, accountId));
+  }
 
   const result = await db
     .selectDistinct({ tradingPair: transactions.tradingPair })
     .from(transactions)
-    .where(eq(transactions.userId, userId));
+    .where(and(...conditions));
 
   return result.map(r => r.tradingPair);
 }
@@ -1123,4 +1138,110 @@ export async function getElementsByIds(
     .select()
     .from(tradingElements)
     .where(inArray(tradingElements.id, elementIds));
+}
+
+// ============ Account CRUD ============
+
+export async function createAccount(data: InsertAccount): Promise<Account> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(accounts).values(data).returning();
+
+  return result[0];
+}
+
+export async function getAccountById(
+  id: number,
+  userId: number
+): Promise<Account | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db
+    .select()
+    .from(accounts)
+    .where(and(eq(accounts.id, id), eq(accounts.userId, userId)))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getAccountsByUserId(userId: number): Promise<Account[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(accounts)
+    .where(eq(accounts.userId, userId))
+    .orderBy(asc(accounts.createdAt));
+}
+
+export async function updateAccount(
+  id: number,
+  userId: number,
+  data: Partial<InsertAccount>
+): Promise<Account | undefined> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(accounts)
+    .set({ ...data, updatedAt: new Date() })
+    .where(and(eq(accounts.id, id), eq(accounts.userId, userId)));
+
+  return getAccountById(id, userId);
+}
+
+export async function deleteAccountWithTransactions(
+  id: number,
+  userId: number
+): Promise<void> {
+  const accountCount = await getAccountCount(userId);
+  if (accountCount < 2) {
+    throw new Error("Cannot delete the last account");
+  }
+
+  await runInSqliteTransaction(async db => {
+    // Delete transaction_elements for transactions in this account
+    const accountTransactions = await db
+      .select({ id: transactions.id })
+      .from(transactions)
+      .where(
+        and(eq(transactions.accountId, id), eq(transactions.userId, userId))
+      );
+
+    const transactionIds = accountTransactions.map(t => t.id);
+
+    if (transactionIds.length > 0) {
+      await db
+        .delete(transactionElements)
+        .where(inArray(transactionElements.transactionId, transactionIds));
+    }
+
+    // Delete all transactions for this account
+    await db
+      .delete(transactions)
+      .where(
+        and(eq(transactions.accountId, id), eq(transactions.userId, userId))
+      );
+
+    // Delete the account
+    await db
+      .delete(accounts)
+      .where(and(eq(accounts.id, id), eq(accounts.userId, userId)));
+  });
+}
+
+export async function getAccountCount(userId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const result = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(accounts)
+    .where(eq(accounts.userId, userId));
+
+  return result[0]?.count ?? 0;
 }

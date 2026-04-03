@@ -13,7 +13,6 @@ import {
   getStatistics,
   getSystemStatistics,
   getUniqueTradingPairs,
-  updateUserInitialBalance,
   getUserById,
   // Trading Elements
   createTradingElement,
@@ -34,6 +33,13 @@ import {
   getTransactionElements,
   calculateConfidenceLevel,
   replaceTransactionElements,
+  // Accounts
+  createAccount,
+  getAccountById,
+  getAccountsByUserId,
+  updateAccount,
+  deleteAccountWithTransactions,
+  getAccountCount,
 } from "./db";
 import { add as addFixedPoint } from "./_core/fixedPoint";
 import { ALLOWED_TRANSITIONS } from "@shared/const";
@@ -46,17 +52,9 @@ export const appRouter = router({
     getSettings: publicProcedure.query(async ({ ctx }) => {
       const user = await getUserById(ctx.user.id);
       return {
-        initialBalance: user?.initialBalance || "0",
         activeTradingSystemId: user?.activeTradingSystemId || null,
       };
     }),
-
-    setInitialBalance: publicProcedure
-      .input(z.object({ initialBalance: z.string() }))
-      .mutation(async ({ ctx, input }) => {
-        await updateUserInitialBalance(ctx.user.id, input.initialBalance);
-        return { success: true };
-      }),
   }),
 
   // Trading Elements (opportunity tags)
@@ -248,22 +246,30 @@ export const appRouter = router({
     // List transactions with filters
     list: publicProcedure
       .input(
-        z
-          .object({
-            sortBy: z
-              .enum(["createdAt", "startTime", "endTime", "returnAmount"])
-              .optional(),
-            sortOrder: z.enum(["asc", "desc"]).optional(),
-            outcome: z.enum(["win", "loss", "breakeven"]).optional(),
-            direction: z.enum(["long", "short"]).optional(),
-            tradingPair: z.string().optional(),
-            status: z.enum(["open", "closed", "reviewed"]).optional(),
-            tradingSystemId: z.number().optional(),
-          })
-          .optional()
+        z.object({
+          accountId: z.number(),
+          sortBy: z
+            .enum(["createdAt", "startTime", "endTime", "returnAmount"])
+            .optional(),
+          sortOrder: z.enum(["asc", "desc"]).optional(),
+          outcome: z.enum(["win", "loss", "breakeven"]).optional(),
+          direction: z.enum(["long", "short"]).optional(),
+          tradingPair: z.string().optional(),
+          status: z.enum(["open", "closed", "reviewed"]).optional(),
+          tradingSystemId: z.number().optional(),
+        })
       )
       .query(async ({ ctx, input }) => {
-        return getTransactionsByUserId(ctx.user.id, input);
+        const { accountId, ...options } = input;
+        // Verify account ownership
+        const account = await getAccountById(accountId, ctx.user.id);
+        if (!account) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Account not found",
+          });
+        }
+        return getTransactionsByUserId(ctx.user.id, { ...options, accountId });
       }),
 
     close: publicProcedure
@@ -468,34 +474,50 @@ export const appRouter = router({
       }),
 
     // Get current state for new transaction form
-    getFormDefaults: publicProcedure.query(async ({ ctx }) => {
-      const user = await getUserById(ctx.user.id);
-      const initialBalance = user?.initialBalance || "0";
-      const currentBalance = await getCurrentBalance(
-        ctx.user.id,
-        initialBalance
-      );
-      const consecutiveLosses = await getConsecutiveLosses(ctx.user.id);
-      const activeSystem = await getActiveTradingSystem(ctx.user.id);
+    getFormDefaults: publicProcedure
+      .input(z.object({ accountId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const account = await getAccountById(input.accountId, ctx.user.id);
+        if (!account) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Account not found",
+          });
+        }
+        const currentBalance = await getCurrentBalance(
+          account.id,
+          account.initialBalance
+        );
+        const consecutiveLosses = await getConsecutiveLosses(account.id);
+        const activeSystem = await getActiveTradingSystem(ctx.user.id);
 
-      return {
-        currentBalance,
-        consecutiveLosses,
-        initialBalance,
-        activeSystem: activeSystem
-          ? {
-              id: activeSystem.id,
-              name: activeSystem.name,
-              elements: activeSystem.elements || [],
-            }
-          : null,
-      };
-    }),
+        return {
+          currentBalance,
+          consecutiveLosses,
+          initialBalance: account.initialBalance,
+          activeSystem: activeSystem
+            ? {
+                id: activeSystem.id,
+                name: activeSystem.name,
+                elements: activeSystem.elements || [],
+              }
+            : null,
+        };
+      }),
 
     // Get unique trading pairs for filter dropdown
-    getTradingPairs: publicProcedure.query(async ({ ctx }) => {
-      return getUniqueTradingPairs(ctx.user.id);
-    }),
+    getTradingPairs: publicProcedure
+      .input(z.object({ accountId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const account = await getAccountById(input.accountId, ctx.user.id);
+        if (!account) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Account not found",
+          });
+        }
+        return getUniqueTradingPairs(ctx.user.id, input.accountId);
+      }),
 
     // Get elements for a transaction
     getElements: publicProcedure
@@ -507,15 +529,106 @@ export const appRouter = router({
 
   // Statistics
   stats: router({
-    get: publicProcedure.query(async ({ ctx }) => {
-      const user = await getUserById(ctx.user.id);
-      const initialBalance = user?.initialBalance || "0";
-      return getStatistics(ctx.user.id, initialBalance);
+    get: publicProcedure
+      .input(z.object({ accountId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const account = await getAccountById(input.accountId, ctx.user.id);
+        if (!account) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Account not found",
+          });
+        }
+        return getStatistics(account.id, account.initialBalance);
+      }),
+
+    getBySystem: publicProcedure
+      .input(z.object({ accountId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return getSystemStatistics(input.accountId, ctx.user.id);
+      }),
+  }),
+
+  // Accounts
+  account: router({
+    create: publicProcedure
+      .input(
+        z.object({
+          name: z.string().min(1).max(100),
+          notes: z.string().optional(),
+          initialBalance: z.string().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const trimmedName = input.name.trim();
+        if (trimmedName.length === 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Account name cannot be empty",
+          });
+        }
+
+        return createAccount({
+          userId: ctx.user.id,
+          name: trimmedName,
+          notes: input.notes || null,
+          initialBalance: input.initialBalance || "0",
+        });
+      }),
+
+    list: publicProcedure.query(async ({ ctx }) => {
+      return getAccountsByUserId(ctx.user.id);
     }),
 
-    getBySystem: publicProcedure.query(async ({ ctx }) => {
-      return getSystemStatistics(ctx.user.id);
-    }),
+    get: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return getAccountById(input.id, ctx.user.id);
+      }),
+
+    update: publicProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          name: z.string().min(1).max(100).optional(),
+          notes: z.string().optional(),
+          initialBalance: z.string().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { id, ...data } = input;
+
+        if (data.name !== undefined) {
+          const trimmedName = data.name.trim();
+          if (trimmedName.length === 0) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Account name cannot be empty",
+            });
+          }
+          data.name = trimmedName;
+        }
+
+        return updateAccount(id, ctx.user.id, {
+          ...data,
+          notes: data.notes !== undefined ? data.notes || null : undefined,
+        });
+      }),
+
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const accountCount = await getAccountCount(ctx.user.id);
+        if (accountCount < 2) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Cannot delete the last account",
+          });
+        }
+
+        await deleteAccountWithTransactions(input.id, ctx.user.id);
+        return { success: true };
+      }),
   }),
 });
 

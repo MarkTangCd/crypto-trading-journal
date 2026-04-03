@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
+import { useAccount } from "@/contexts/AccountContext";
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
@@ -85,6 +86,8 @@ function getStatusBadgeClass(status: string): string {
 export default function Transactions() {
   const [, setLocation] = useLocation();
   const utils = trpc.useUtils();
+  const { selectedAccount } = useAccount();
+  const accountId = selectedAccount?.id;
 
   const [sortBy, setSortBy] = useState<SortBy>("createdAt");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
@@ -101,16 +104,23 @@ export default function Transactions() {
     startTime: number;
   } | null>(null);
 
-  const { data: transactions, isLoading } = trpc.transaction.list.useQuery({
-    sortBy,
-    sortOrder,
-    outcome: outcomeFilter,
-    direction: directionFilter,
-    status: statusFilter,
-    tradingPair: pairFilter || undefined,
-  });
+  const { data: transactions, isLoading } = trpc.transaction.list.useQuery(
+    {
+      accountId: accountId!,
+      sortBy,
+      sortOrder,
+      outcome: outcomeFilter,
+      direction: directionFilter,
+      status: statusFilter,
+      tradingPair: pairFilter || undefined,
+    },
+    { enabled: !!accountId }
+  );
 
-  const { data: tradingPairs } = trpc.transaction.getTradingPairs.useQuery();
+  const { data: tradingPairs } = trpc.transaction.getTradingPairs.useQuery(
+    { accountId: accountId! },
+    { enabled: !!accountId }
+  );
 
   const deleteMutation = trpc.transaction.delete.useMutation({
     onSuccess: () => {
