@@ -10,7 +10,17 @@
     "ses_2adf13c7dffemCbYuinltwTN7H",
     "ses_2adf70d3dffei5219TEU3O1wQ0",
     "ses_2adf0b826ffeKdwx6nbV9T552d",
-    "ses_2add36b7bffeuYz7B30SsMkF24"
+    "ses_2add36b7bffeuYz7B30SsMkF24",
+    "ses_2ac324d61ffelw0FLFiTNIPHeD",
+    "ses_2a9a357c9ffeKx8DMQmLJbau2g",
+    "ses_2a9a386eeffeBGynu0pShQBGI2",
+    "ses_2a9a2ff91ffeUzwxOl41h6iqYt",
+    "ses_2a9a325f8ffeyLbxZXbX3mpyrl",
+    "ses_2a9a10348ffe1oAPrJi8hgg0hN",
+    "ses_2a9991c87ffeXzHAt6hsw7FE14",
+    "ses_2a999493fffeODN1fkNZyl8Nud",
+    "ses_2a998ed13ffesryFWxd7m4n9Og",
+    "ses_2a98f9d9affelMQFzKXdI5OVel"
   ],
   "plan_name": "multi-account",
   "agent": "atlas",
@@ -19,10 +29,10 @@
       "task_key": "todo:1",
       "task_label": "1",
       "task_title": "Database Schema Changes + Shared Type Exports",
-      "session_id": "ses_2ae7ae294ffeUnga2CCoAJCjDu",
+      "session_id": "ses_2a98f9d9affelMQFzKXdI5OVel",
       "agent": "Sisyphus-Junior",
-      "category": "quick",
-      "updated_at": "2026-04-03T04:29:54.768Z"
+      "category": "deep",
+      "updated_at": "2026-04-04T03:03:23.612Z"
     }
   }
 }

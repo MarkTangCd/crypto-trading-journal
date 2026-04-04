@@ -9,7 +9,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Slider } from "@/components/ui/slider";
 import {
   Dialog,
   DialogContent,
@@ -28,6 +27,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { getConfidenceColor, getConfidenceLabel } from "@/lib/confidence";
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -40,22 +40,6 @@ import {
   Sparkles,
   Gauge,
 } from "lucide-react";
-
-function getConfidenceColor(level: number): string {
-  if (level >= 80) return "text-green-600";
-  if (level >= 60) return "text-emerald-500";
-  if (level >= 40) return "text-yellow-500";
-  if (level >= 20) return "text-orange-500";
-  return "text-red-500";
-}
-
-function getConfidenceLabel(level: number): string {
-  if (level >= 80) return "Very High";
-  if (level >= 60) return "High";
-  if (level >= 40) return "Medium";
-  if (level >= 20) return "Low";
-  return "Very Low";
-}
 
 export default function TradingElements() {
   const utils = trpc.useUtils();
@@ -74,7 +58,7 @@ export default function TradingElements() {
   const [formData, setFormData] = useState({
     name: "",
     description: "",
-    confidenceLevel: 50,
+    confidenceLevel: 3,
   });
 
   const createMutation = trpc.tradingElement.create.useMutation({
@@ -82,7 +66,7 @@ export default function TradingElements() {
       toast.success("Trading element created");
       utils.tradingElement.list.invalidate();
       setIsCreateOpen(false);
-      setFormData({ name: "", description: "", confidenceLevel: 50 });
+      setFormData({ name: "", description: "", confidenceLevel: 3 });
     },
     onError: error => {
       toast.error(error.message || "Failed to create element");
@@ -94,7 +78,7 @@ export default function TradingElements() {
       toast.success("Trading element updated");
       utils.tradingElement.list.invalidate();
       setEditElement(null);
-      setFormData({ name: "", description: "", confidenceLevel: 50 });
+      setFormData({ name: "", description: "", confidenceLevel: 3 });
     },
     onError: error => {
       toast.error(error.message || "Failed to update element");
@@ -154,21 +138,21 @@ export default function TradingElements() {
   const closeDialogs = () => {
     setIsCreateOpen(false);
     setEditElement(null);
-    setFormData({ name: "", description: "", confidenceLevel: 50 });
+    setFormData({ name: "", description: "", confidenceLevel: 3 });
   };
 
   // Suggested elements for quick creation
   const suggestedElements = [
-    { name: "Gap", confidence: 70 },
-    { name: "Double Top/Bottom", confidence: 75 },
-    { name: "CVD Divergence", confidence: 65 },
-    { name: "Support/Resistance", confidence: 60 },
-    { name: "Trend Line Break", confidence: 55 },
-    { name: "Volume Spike", confidence: 50 },
-    { name: "Fibonacci Retracement", confidence: 60 },
-    { name: "Moving Average Cross", confidence: 55 },
-    { name: "RSI Divergence", confidence: 65 },
-    { name: "Order Block", confidence: 70 },
+    { name: "Gap", confidence: 4 },
+    { name: "Double Top/Bottom", confidence: 4 },
+    { name: "CVD Divergence", confidence: 3 },
+    { name: "Support/Resistance", confidence: 3 },
+    { name: "Trend Line Break", confidence: 3 },
+    { name: "Volume Spike", confidence: 3 },
+    { name: "Fibonacci Retracement", confidence: 3 },
+    { name: "Moving Average Cross", confidence: 3 },
+    { name: "RSI Divergence", confidence: 3 },
+    { name: "Order Block", confidence: 4 },
   ];
 
   const existingNames = elements?.map(e => e.name.toLowerCase()) || [];
@@ -186,7 +170,7 @@ export default function TradingElements() {
         <div>
           <h1 className="text-heading">Trading Elements</h1>
           <p className="text-subtitle mt-1">
-            Manage your trading opportunity tags with confidence levels
+            Manage your trading opportunity tags with confidence scores
           </p>
         </div>
         <Button onClick={() => setIsCreateOpen(true)}>
@@ -205,7 +189,7 @@ export default function TradingElements() {
             </div>
             <CardDescription className="text-subtitle">
               Click to quickly add common trading elements with preset
-              confidence levels
+              confidence scores
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -226,7 +210,7 @@ export default function TradingElements() {
                   <span
                     className={`text-xs ${getConfidenceColor(suggestion.confidence)}`}
                   >
-                    {suggestion.confidence}%
+                    {suggestion.confidence}/5
                   </span>
                 </Button>
               ))}
@@ -240,7 +224,7 @@ export default function TradingElements() {
         <CardHeader>
           <CardTitle className="text-lg font-semibold">Your Elements</CardTitle>
           <CardDescription className="text-subtitle">
-            These elements can be assigned to trading systems. Confidence levels
+            These elements can be assigned to trading systems. Confidence scores
             help calculate trade confidence.
           </CardDescription>
         </CardHeader>
@@ -267,7 +251,7 @@ export default function TradingElements() {
                         <span
                           className={`text-sm font-medium ${getConfidenceColor(element.confidenceLevel)}`}
                         >
-                          {element.confidenceLevel}%
+                          {element.confidenceLevel}/5
                         </span>
                         <span className="text-xs text-muted-foreground">
                           ({getConfidenceLabel(element.confidenceLevel)})
@@ -328,7 +312,7 @@ export default function TradingElements() {
           <DialogHeader>
             <DialogTitle>Create Trading Element</DialogTitle>
             <DialogDescription>
-              Add a new trading opportunity element with a confidence level
+              Add a new trading opportunity element with a confidence score
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -345,26 +329,34 @@ export default function TradingElements() {
             </div>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label>Confidence Level</Label>
+                <Label>Confidence Score</Label>
                 <span
                   className={`text-sm font-medium ${getConfidenceColor(formData.confidenceLevel)}`}
                 >
-                  {formData.confidenceLevel}% -{" "}
+                  {formData.confidenceLevel}/5 -{" "}
                   {getConfidenceLabel(formData.confidenceLevel)}
                 </span>
               </div>
-              <Slider
-                value={[formData.confidenceLevel]}
-                onValueChange={value =>
-                  setFormData({ ...formData, confidenceLevel: value[0] })
-                }
-                min={0}
-                max={100}
-                step={5}
-                className="w-full"
-              />
+              <div className="flex gap-2">
+                {[1, 2, 3, 4, 5].map(score => (
+                  <Button
+                    key={score}
+                    type="button"
+                    variant={
+                      formData.confidenceLevel === score ? "default" : "outline"
+                    }
+                    size="sm"
+                    onClick={() =>
+                      setFormData({ ...formData, confidenceLevel: score })
+                    }
+                    className="flex-1"
+                  >
+                    {score}
+                  </Button>
+                ))}
+              </div>
               <p className="text-xs text-muted-foreground">
-                How confident are you when this element appears? (0-100)
+                Rate your confidence when this element appears (1-5)
               </p>
             </div>
             <div className="space-y-2">
@@ -403,7 +395,7 @@ export default function TradingElements() {
           <DialogHeader>
             <DialogTitle>Edit Trading Element</DialogTitle>
             <DialogDescription>
-              Update the element details and confidence level
+              Update the element details and confidence score
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -419,24 +411,32 @@ export default function TradingElements() {
             </div>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label>Confidence Level</Label>
+                <Label>Confidence Score</Label>
                 <span
                   className={`text-sm font-medium ${getConfidenceColor(formData.confidenceLevel)}`}
                 >
-                  {formData.confidenceLevel}% -{" "}
+                  {formData.confidenceLevel}/5 -{" "}
                   {getConfidenceLabel(formData.confidenceLevel)}
                 </span>
               </div>
-              <Slider
-                value={[formData.confidenceLevel]}
-                onValueChange={value =>
-                  setFormData({ ...formData, confidenceLevel: value[0] })
-                }
-                min={0}
-                max={100}
-                step={5}
-                className="w-full"
-              />
+              <div className="flex gap-2">
+                {[1, 2, 3, 4, 5].map(score => (
+                  <Button
+                    key={score}
+                    type="button"
+                    variant={
+                      formData.confidenceLevel === score ? "default" : "outline"
+                    }
+                    size="sm"
+                    onClick={() =>
+                      setFormData({ ...formData, confidenceLevel: score })
+                    }
+                    className="flex-1"
+                  >
+                    {score}
+                  </Button>
+                ))}
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-description">Description (Optional)</Label>

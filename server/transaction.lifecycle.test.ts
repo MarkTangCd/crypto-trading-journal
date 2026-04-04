@@ -55,6 +55,15 @@ function buildDbMock(overrides: Record<string, unknown> = {}) {
     getUniqueTradingPairs: vi.fn().mockResolvedValue([]),
     updateUserInitialBalance: vi.fn().mockResolvedValue(undefined),
     getUserById: vi.fn().mockResolvedValue({ id: 1, initialBalance: "1000" }),
+    getAccountById: vi.fn().mockResolvedValue({
+      id: 1,
+      userId: 1,
+      name: "Test Account",
+      notes: null,
+      initialBalance: "1000",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }),
     createTradingElement: vi.fn().mockResolvedValue(null),
     getTradingElementById: vi.fn().mockResolvedValue(null),
     getTradingElementsByUserId: vi.fn().mockResolvedValue([]),
@@ -106,7 +115,7 @@ async function setupCreateCaller() {
   vi.doMock("./db", () =>
     buildDbMock({
       getActiveTradingSystem: vi.fn().mockResolvedValue(null),
-      calculateConfidenceLevel: vi.fn().mockResolvedValue(75),
+      calculateConfidenceLevel: vi.fn().mockResolvedValue(4),
       createTransactionWithElements,
     })
   );
@@ -171,7 +180,7 @@ async function setupCloseCaller(options?: {
       getTransactionById,
       updateTransaction,
       getActiveTradingSystem: vi.fn().mockResolvedValue(null),
-      calculateConfidenceLevel: vi.fn().mockResolvedValue(75),
+      calculateConfidenceLevel: vi.fn().mockResolvedValue(4),
       createTransactionWithElements: vi
         .fn()
         .mockImplementation(async (data, _elementIds) => ({
@@ -318,24 +327,24 @@ function runStatsScenario(
   const inserts = rows
     .map(
       row =>
-        `db.prepare("INSERT INTO transactions (userId, tradingSystemId, status, accountBalance, tradingPair, timeFrame, startTime, endTime, direction, tradingLogic, outcome, returnAmount, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(1, 1, ${JSON.stringify(row.status)}, '1000.00', 'BTCUSDT', '1H', ${row.createdAt - 60000}, ${row.createdAt}, 'long', 'Test trade', ${JSON.stringify(row.outcome)}, ${JSON.stringify(row.returnAmount)}, ${row.createdAt}, ${row.createdAt});`
+        `db.prepare("INSERT INTO transactions (userId, accountId, tradingSystemId, status, accountBalance, tradingPair, timeFrame, startTime, endTime, direction, tradingLogic, outcome, returnAmount, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(1, 1, 1, ${JSON.stringify(row.status)}, '1000.00', 'BTCUSDT', '1H', ${row.createdAt - 60000}, ${row.createdAt}, 'long', 'Test trade', ${JSON.stringify(row.outcome)}, ${JSON.stringify(row.returnAmount)}, ${row.createdAt}, ${row.createdAt});`
     )
     .join("\n");
 
   const script = `
     const { DatabaseSync } = await import("node:sqlite");
     const db = new DatabaseSync(process.env.DATABASE_URL);
-    db.exec("CREATE TABLE trading_elements (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, description TEXT, confidenceLevel INTEGER NOT NULL DEFAULT 50, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));");
+    db.exec("CREATE TABLE trading_elements (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, description TEXT, confidenceLevel INTEGER NOT NULL DEFAULT 3, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));");
     db.exec("CREATE TABLE trading_systems (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, notes TEXT, isActive INTEGER NOT NULL DEFAULT 0, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));");
     db.exec("CREATE TABLE trading_system_elements (id INTEGER PRIMARY KEY AUTOINCREMENT, tradingSystemId INTEGER NOT NULL, tradingElementId INTEGER NOT NULL);");
-    db.exec("CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, tradingSystemId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, confidenceLevel INTEGER, tvUrl TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));");
+    db.exec("CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER, tradingSystemId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, confidenceLevel INTEGER, tvUrl TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));");
     db.prepare("INSERT INTO trading_systems (id, userId, name, notes, isActive, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)").run(1, 1, 'System A', null, 1, 1000, 1000);
     ${inserts}
     const { getCurrentBalance, getConsecutiveLosses, getStatistics, getSystemStatistics } = await import(${JSON.stringify(dbModuleUrl)});
     const currentBalance = await getCurrentBalance(1, '1000.00');
     const consecutiveLosses = await getConsecutiveLosses(1);
     const statistics = await getStatistics(1, '1000.00');
-    const systemStatistics = await getSystemStatistics(1);
+    const systemStatistics = await getSystemStatistics(1, 1);
     db.close();
     console.log(JSON.stringify({ currentBalance, consecutiveLosses, statistics, systemStatistics }));
   `;
@@ -404,9 +413,7 @@ function runUpdateScenario(
     rmSync(databasePath);
   }
 
-  const elementConfidenceLevels = options.elementConfidenceLevels ?? [
-    50, 80, 100,
-  ];
+  const elementConfidenceLevels = options.elementConfidenceLevels ?? [3, 4, 5];
   const initialElementIds = options.initialElementIds ?? [1];
 
   const elementInserts = elementConfidenceLevels
@@ -426,10 +433,10 @@ function runUpdateScenario(
   const script = `
     const { DatabaseSync } = await import("node:sqlite");
     const db = new DatabaseSync(process.env.DATABASE_URL);
-    db.exec("CREATE TABLE trading_elements (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, description TEXT, confidenceLevel INTEGER NOT NULL DEFAULT 50, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));");
+    db.exec("CREATE TABLE trading_elements (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, description TEXT, confidenceLevel INTEGER NOT NULL DEFAULT 3, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));");
     db.exec("CREATE TABLE transaction_elements (id INTEGER PRIMARY KEY AUTOINCREMENT, transactionId INTEGER NOT NULL, tradingElementId INTEGER NOT NULL);");
-    db.exec("CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, tradingSystemId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, confidenceLevel INTEGER, tvUrl TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));");
-    db.prepare("INSERT INTO transactions (id, userId, tradingSystemId, status, accountBalance, tradingPair, timeFrame, startTime, endTime, direction, tradingLogic, outcome, consecutiveLosses, riskRewardRatio, returnAmount, confidenceLevel, tvUrl, reviewFeedback, reviewChartUrl, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(1, 1, null, ${JSON.stringify(options.status)}, '1000.00', 'BTCUSDT', '1H', 1000, 2000, 'long', 'Initial logic', ${JSON.stringify(options.outcome ?? "win")}, 0, '2.0', '50.00', 10, null, ${JSON.stringify(options.reviewFeedback ?? null)}, ${JSON.stringify(options.reviewChartUrl ?? null)}, 1000, 1000);
+    db.exec("CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER, tradingSystemId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, confidenceLevel INTEGER, tvUrl TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));");
+    db.prepare("INSERT INTO transactions (id, userId, accountId, tradingSystemId, status, accountBalance, tradingPair, timeFrame, startTime, endTime, direction, tradingLogic, outcome, consecutiveLosses, riskRewardRatio, returnAmount, confidenceLevel, tvUrl, reviewFeedback, reviewChartUrl, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(1, 1, 1, null, ${JSON.stringify(options.status)}, '1000.00', 'BTCUSDT', '1H', 1000, 2000, 'long', 'Initial logic', ${JSON.stringify(options.outcome ?? "win")}, 0, '2.0', '50.00', 3, null, ${JSON.stringify(options.reviewFeedback ?? null)}, ${JSON.stringify(options.reviewChartUrl ?? null)}, 1000, 1000);
     ${elementInserts}
     ${transactionElementInserts}
     const { appRouter } = await import(${JSON.stringify(pathToFileURL(join(repoRoot, "server", "routers.ts")).href)});
@@ -713,7 +720,7 @@ describe("transaction.update lifecycle rules", () => {
     const result = runUpdateScenario("task-10-open-entry-edit.sqlite", {
       status: "open",
       initialElementIds: [1],
-      elementConfidenceLevels: [20, 90, 100],
+      elementConfidenceLevels: [1, 4, 5],
       updateInput: {
         id: 1,
         tradingPair: "ethusdt",
@@ -729,7 +736,7 @@ describe("transaction.update lifecycle rules", () => {
       tradingPair: "ETHUSDT",
       timeFrame: "4H",
       tradingLogic: "Updated logic",
-      confidenceLevel: 95,
+      confidenceLevel: 4.5,
     });
     expect(result.elements).toEqual([
       { tradingElementId: 2 },
@@ -917,17 +924,17 @@ function runListScenario(
   const inserts = rows
     .map(
       row =>
-        `db.prepare("INSERT INTO transactions (userId, tradingSystemId, status, accountBalance, tradingPair, timeFrame, startTime, endTime, direction, tradingLogic, outcome, returnAmount, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(1, 1, ${JSON.stringify(row.status)}, '1000.00', 'BTCUSDT', '1H', ${row.createdAt - 60000}, ${row.endTime === null ? "null" : row.endTime}, 'long', 'Test trade', 'win', '100.00', ${row.createdAt}, ${row.createdAt});`
+        `db.prepare("INSERT INTO transactions (userId, accountId, tradingSystemId, status, accountBalance, tradingPair, timeFrame, startTime, endTime, direction, tradingLogic, outcome, returnAmount, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(1, 1, 1, ${JSON.stringify(row.status)}, '1000.00', 'BTCUSDT', '1H', ${row.createdAt - 60000}, ${row.endTime === null ? "null" : row.endTime}, 'long', 'Test trade', 'win', '100.00', ${row.createdAt}, ${row.createdAt});`
     )
     .join("\n");
 
   const script = `
     const { DatabaseSync } = await import("node:sqlite");
     const db = new DatabaseSync(process.env.DATABASE_URL);
-    db.exec("CREATE TABLE trading_elements (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, description TEXT, confidenceLevel INTEGER NOT NULL DEFAULT 50, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));");
+    db.exec("CREATE TABLE trading_elements (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, description TEXT, confidenceLevel INTEGER NOT NULL DEFAULT 3, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));");
     db.exec("CREATE TABLE trading_systems (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, notes TEXT, isActive INTEGER NOT NULL DEFAULT 0, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));");
     db.exec("CREATE TABLE trading_system_elements (id INTEGER PRIMARY KEY AUTOINCREMENT, tradingSystemId INTEGER NOT NULL, tradingElementId INTEGER NOT NULL);");
-    db.exec("CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, tradingSystemId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, confidenceLevel INTEGER, tvUrl TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));");
+    db.exec("CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER, tradingSystemId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, confidenceLevel INTEGER, tvUrl TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));");
     db.prepare("INSERT INTO trading_systems (id, userId, name, notes, isActive, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)").run(1, 1, 'System A', null, 1, 1000, 1000);
     ${inserts}
     const { getTransactionsByUserId } = await import(${JSON.stringify(dbModuleUrl)});
@@ -1056,7 +1063,7 @@ describe("transaction.list status-aware filtering", () => {
 describe("transaction.getFormDefaults", () => {
   it("excludes open trades from balance and streaks", async () => {
     const caller = await setupGetFormDefaultsCaller();
-    const result = await caller.transaction.getFormDefaults();
+    const result = await caller.transaction.getFormDefaults({ accountId: 1 });
 
     // The mocked stat functions already exclude open trades (Task 4)
     // Verify the values match what the mocked stat functions return

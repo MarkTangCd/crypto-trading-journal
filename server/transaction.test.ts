@@ -8,6 +8,15 @@ vi.mock("./db", () => ({
   getUserById: vi.fn().mockResolvedValue({ id: 1, initialBalance: "10000" }),
   getCurrentBalance: vi.fn().mockResolvedValue("10000"),
   getConsecutiveLosses: vi.fn().mockResolvedValue(0),
+  getAccountById: vi.fn().mockResolvedValue({
+    id: 1,
+    userId: 1,
+    name: "Test Account",
+    notes: "Test notes",
+    initialBalance: "1000",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
   createTransaction: vi.fn().mockImplementation(data => ({
     id: 1,
     status: "open",
@@ -44,6 +53,13 @@ vi.mock("./db", () => ({
     reviewFeedback: "Good trade",
   }),
   deleteTransaction: vi.fn().mockResolvedValue(undefined),
+  createTransactionWithElements: vi.fn().mockImplementation(data => ({
+    id: 1,
+    ...data,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  })),
+  deleteTransactionWithElements: vi.fn().mockResolvedValue(undefined),
   getUniqueTradingPairs: vi.fn().mockResolvedValue(["BTCUSDT", "ETHUSDT"]),
   getStatistics: vi.fn().mockResolvedValue({
     winCount: 5,
@@ -108,15 +124,6 @@ vi.mock("./db", () => ({
     createdAt: new Date(),
     updatedAt: new Date(),
   })),
-  getAccountById: vi.fn().mockResolvedValue({
-    id: 1,
-    userId: 1,
-    name: "Test Account",
-    notes: "Test notes",
-    initialBalance: "1000",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  }),
   getAccountsByUserId: vi.fn().mockResolvedValue([
     {
       id: 1,
@@ -144,7 +151,7 @@ vi.mock("./db", () => ({
   removeElementsFromTransaction: vi.fn().mockResolvedValue(undefined),
   getTransactionElements: vi.fn().mockResolvedValue([]),
   replaceTransactionElements: vi.fn().mockResolvedValue(undefined),
-  calculateConfidenceLevel: vi.fn().mockResolvedValue(75),
+  calculateConfidenceLevel: vi.fn().mockResolvedValue(4),
   // Close trade function
   closeTrade: vi.fn().mockImplementation(async (_txId, _userId, data) => ({
     id: 1,
@@ -156,6 +163,8 @@ vi.mock("./db", () => ({
 
 function createAuthContext(): TrpcContext {
   return {
+    req: {} as TrpcContext["req"],
+    res: {} as TrpcContext["res"],
     user: {
       id: 1,
       openId: "test-user",
@@ -189,13 +198,13 @@ describe("transaction procedures", () => {
         direction: "long",
         tradingLogic: "Test trade logic",
         tradingSystemId: 1,
-        elementIds: [1, 2],
+        selectedElementIds: [1, 2],
       });
 
       expect(result).toBeDefined();
       expect(result.id).toBe(1);
       expect(result.status).toBe("open");
-      expect(db.createTransaction).toHaveBeenCalled();
+      expect(db.createTransactionWithElements).toHaveBeenCalled();
     });
   });
 
@@ -353,6 +362,8 @@ describe("user procedures", () => {
 
 describe("account procedures", () => {
   const createAuthContext = (): TrpcContext => ({
+    req: {} as TrpcContext["req"],
+    res: {} as TrpcContext["res"],
     user: {
       id: 1,
       openId: "test-user",

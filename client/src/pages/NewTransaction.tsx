@@ -18,6 +18,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { getConfidenceColor, getConfidenceLabel } from "@/lib/confidence";
 import { trpc } from "@/lib/trpc";
 import { useAccount } from "@/contexts/AccountContext";
 import { useState, useMemo } from "react";
@@ -26,22 +27,6 @@ import { toast } from "sonner";
 import { Loader2, Layers, AlertCircle, Gauge, Tag } from "lucide-react";
 
 const TIME_FRAMES = ["1m", "5m", "15m", "30m", "1H", "4H", "1D", "1W", "1M"];
-
-function getConfidenceColor(level: number): string {
-  if (level >= 80) return "text-green-600";
-  if (level >= 60) return "text-emerald-500";
-  if (level >= 40) return "text-yellow-500";
-  if (level >= 20) return "text-orange-500";
-  return "text-red-500";
-}
-
-function getConfidenceLabel(level: number): string {
-  if (level >= 80) return "Very High";
-  if (level >= 60) return "High";
-  if (level >= 40) return "Medium";
-  if (level >= 20) return "Low";
-  return "Very Low";
-}
 
 export default function NewTransaction() {
   const [, setLocation] = useLocation();
@@ -99,7 +84,7 @@ export default function NewTransaction() {
         sum + el.confidenceLevel,
       0
     );
-    return Math.round(totalConfidence / selectedElements.length);
+    return parseFloat((totalConfidence / selectedElements.length).toFixed(1));
   }, [formDefaults?.activeSystem?.elements, selectedElementIds]);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -261,7 +246,7 @@ export default function NewTransaction() {
                               <span
                                 className={`text-xs ${getConfidenceColor(element.confidenceLevel)}`}
                               >
-                                {element.confidenceLevel}%
+                                {element.confidenceLevel}/5
                               </span>
                             </div>
                             {element.description && (
@@ -281,14 +266,14 @@ export default function NewTransaction() {
                         <div className="flex items-center gap-2">
                           <Gauge className="h-4 w-4 text-muted-foreground" />
                           <span className="text-sm text-muted-foreground">
-                            Overall Confidence Level
+                            Overall Confidence Score
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
                           <span
                             className={`text-lg font-bold ${getConfidenceColor(calculatedConfidence)}`}
                           >
-                            {calculatedConfidence}%
+                            {calculatedConfidence}/5
                           </span>
                           <span
                             className={`text-sm ${getConfidenceColor(calculatedConfidence)}`}
@@ -427,12 +412,12 @@ export default function NewTransaction() {
                   {calculatedConfidence !== null && (
                     <div className="flex justify-between items-center py-2 border-b">
                       <span className="text-sm text-muted-foreground">
-                        Confidence Level
+                        Confidence Score
                       </span>
                       <span
                         className={`font-semibold ${getConfidenceColor(calculatedConfidence)}`}
                       >
-                        {calculatedConfidence}%
+                        {calculatedConfidence}/5
                       </span>
                     </div>
                   )}

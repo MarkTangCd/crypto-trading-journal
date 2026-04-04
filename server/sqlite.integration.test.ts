@@ -25,10 +25,10 @@ function runNodeEval(script: string, databaseUrl: string): string {
 function bootstrapSqlite(databaseUrl: string): void {
   const schemaSql =
     "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, openId TEXT NOT NULL UNIQUE, name TEXT, email TEXT, loginMethod TEXT, role TEXT NOT NULL DEFAULT 'user', createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), lastSignedIn INTEGER NOT NULL DEFAULT (unixepoch() * 1000), initialBalance TEXT DEFAULT '0', activeTradingSystemId INTEGER); " +
-    "CREATE TABLE IF NOT EXISTS trading_elements (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, description TEXT, confidenceLevel INTEGER NOT NULL DEFAULT 50, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000)); " +
+    "CREATE TABLE IF NOT EXISTS trading_elements (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, description TEXT, confidenceLevel INTEGER NOT NULL DEFAULT 3, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000)); " +
     "CREATE TABLE IF NOT EXISTS trading_systems (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, notes TEXT, isActive INTEGER NOT NULL DEFAULT 0, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000)); " +
     "CREATE TABLE IF NOT EXISTS trading_system_elements (id INTEGER PRIMARY KEY AUTOINCREMENT, tradingSystemId INTEGER NOT NULL, tradingElementId INTEGER NOT NULL); " +
-    "CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, tradingSystemId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, confidenceLevel INTEGER, tvUrl TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000)); " +
+    "CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER, tradingSystemId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, confidenceLevel INTEGER, tvUrl TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000)); " +
     "CREATE TABLE IF NOT EXISTS transaction_elements (id INTEGER PRIMARY KEY AUTOINCREMENT, transactionId INTEGER NOT NULL, tradingElementId INTEGER NOT NULL);";
 
   runNodeEval(
@@ -216,8 +216,8 @@ if (!userRow || typeof userRow.id !== "number") throw new Error("missing-user");
 
 const seedElementsDb = new DatabaseSync(process.env.DATABASE_URL);
 const insertElement = seedElementsDb.prepare("insert into trading_elements (userId, name, description, confidenceLevel) values (?, ?, ?, ?)");
-const elementAResult = insertElement.run(userRow.id, "Setup A", null, 60);
-const elementBResult = insertElement.run(userRow.id, "Setup B", null, 70);
+const elementAResult = insertElement.run(userRow.id, "Setup A", null, 3);
+const elementBResult = insertElement.run(userRow.id, "Setup B", null, 4);
 seedElementsDb.close();
 
 const elementAId = Number(elementAResult.lastInsertRowid);
@@ -237,7 +237,7 @@ await createTransactionWithElements({
   consecutiveLosses: 0,
   riskRewardRatio: "2.00",
   returnAmount: "5.00",
-  confidenceLevel: 65,
+  confidenceLevel: 4,
   tvUrl: null,
 }, [elementAId, elementBId]);
 
@@ -449,7 +449,7 @@ for (const [index, trade] of trades.entries()) {
 
 const currentBalance = await getCurrentBalance(user.id, "1000.10");
 const stats = await getStatistics(user.id, "1000.10");
-const bySystem = await getSystemStatistics(user.id);
+const bySystem = await getSystemStatistics(user.id, user.id);
 closeDb();
 
 if (currentBalance !== "1001.21") throw new Error("bad-current-balance:" + currentBalance);
@@ -509,7 +509,7 @@ const element = await createTradingElement({
   userId: user.id,
   name: "Element",
   description: null,
-  confidenceLevel: 50,
+  confidenceLevel: 3,
 });
 const system = await createTradingSystem({
   userId: user.id,

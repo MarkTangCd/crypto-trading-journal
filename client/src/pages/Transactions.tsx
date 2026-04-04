@@ -47,28 +47,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { CloseTradeModal } from "@/components/CloseTradeModal";
+import { getConfidenceBgColor, getConfidenceColor } from "@/lib/confidence";
 
 type SortBy = "createdAt" | "startTime" | "endTime" | "returnAmount";
 type SortOrder = "asc" | "desc";
 type Outcome = "win" | "loss" | "breakeven" | undefined;
 type Direction = "long" | "short" | undefined;
 type Status = "open" | "closed" | "reviewed" | undefined;
-
-function getConfidenceColor(level: number): string {
-  if (level >= 80) return "text-green-600";
-  if (level >= 60) return "text-emerald-500";
-  if (level >= 40) return "text-yellow-500";
-  if (level >= 20) return "text-orange-500";
-  return "text-red-500";
-}
-
-function getConfidenceBgColor(level: number): string {
-  if (level >= 80) return "bg-green-100";
-  if (level >= 60) return "bg-emerald-100";
-  if (level >= 40) return "bg-yellow-100";
-  if (level >= 20) return "bg-orange-100";
-  return "bg-red-100";
-}
 
 function getStatusBadgeClass(status: string): string {
   switch (status) {
@@ -365,11 +350,11 @@ export default function Transactions() {
                               <span
                                 className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${getConfidenceBgColor(tx.confidenceLevel)} ${getConfidenceColor(tx.confidenceLevel)}`}
                               >
-                                {tx.confidenceLevel}%
+                                {tx.confidenceLevel}/5
                               </span>
                             </TooltipTrigger>
                             <TooltipContent>
-                              Confidence Level: {tx.confidenceLevel}%
+                              Confidence Score: {tx.confidenceLevel}/5
                             </TooltipContent>
                           </Tooltip>
                         ) : (

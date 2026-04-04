@@ -1,5 +1,11 @@
 import { sql } from "drizzle-orm";
-import { check, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  check,
+  integer,
+  real,
+  sqliteTable,
+  text,
+} from "drizzle-orm/sqlite-core";
 
 /**
  * Core user table backing auth flow.
@@ -44,8 +50,8 @@ export const tradingElements = sqliteTable("trading_elements", {
   name: text("name").notNull(),
   /** Optional description/notes */
   description: text("description"),
-  /** Confidence level for this element (0-100) */
-  confidenceLevel: integer("confidenceLevel").notNull().default(50),
+  /** Confidence score for this element (1-5) */
+  confidenceLevel: integer("confidenceLevel").notNull().default(3),
   /** Record creation timestamp */
   createdAt: integer("createdAt", { mode: "timestamp_ms" })
     .default(sql`(unixepoch() * 1000)`)
@@ -136,8 +142,8 @@ export const transactions = sqliteTable(
     riskRewardRatio: text("riskRewardRatio"),
     /** Return amount - negative for loss, positive for profit */
     returnAmount: text("returnAmount"),
-    /** Overall confidence level calculated from selected elements (0-100) */
-    confidenceLevel: integer("confidenceLevel"),
+    /** Overall confidence score calculated from selected elements (1.0-5.0) */
+    confidenceLevel: real("confidenceLevel"),
     /** Optional TradingView URL */
     tvUrl: text("tvUrl"),
     /** Review feedback text */

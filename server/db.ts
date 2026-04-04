@@ -1054,6 +1054,7 @@ export async function createTransactionWithElements(
 ): Promise<Transaction> {
   const insertData: InsertTransaction = {
     ...data,
+    accountId: data.accountId ?? data.userId,
     status: data.status ?? "open",
     endTime: data.endTime ?? null,
     outcome: data.outcome ?? null,
@@ -1120,10 +1121,10 @@ export async function calculateConfidenceLevel(
 
   // Calculate average confidence level from selected elements
   const totalConfidence = elements.reduce(
-    (sum, el) => sum + (el.confidenceLevel || 50),
+    (sum, el) => sum + (el.confidenceLevel || 3),
     0
   );
-  return Math.round(totalConfidence / elements.length);
+  return parseFloat((totalConfidence / elements.length).toFixed(1));
 }
 
 export async function getElementsByIds(

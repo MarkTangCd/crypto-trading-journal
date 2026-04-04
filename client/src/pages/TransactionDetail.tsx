@@ -11,6 +11,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import {
+  getConfidenceBgColor,
+  getConfidenceColor,
+  getConfidenceLabel,
+} from "@/lib/confidence";
 import { trpc } from "@/lib/trpc";
 import { useState, useEffect } from "react";
 import { useLocation, useParams } from "wouter";
@@ -18,30 +23,6 @@ import { format } from "date-fns";
 import { ArrowLeft, ExternalLink, Loader2, Gauge, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { CloseTradeModal } from "@/components/CloseTradeModal";
-
-function getConfidenceColor(level: number): string {
-  if (level >= 80) return "text-green-600";
-  if (level >= 60) return "text-emerald-500";
-  if (level >= 40) return "text-yellow-500";
-  if (level >= 20) return "text-orange-500";
-  return "text-red-500";
-}
-
-function getConfidenceLabel(level: number): string {
-  if (level >= 80) return "Very High";
-  if (level >= 60) return "High";
-  if (level >= 40) return "Medium";
-  if (level >= 20) return "Low";
-  return "Very Low";
-}
-
-function getConfidenceBgColor(level: number): string {
-  if (level >= 80) return "bg-green-100";
-  if (level >= 60) return "bg-emerald-100";
-  if (level >= 40) return "bg-yellow-100";
-  if (level >= 20) return "bg-orange-100";
-  return "bg-red-100";
-}
 
 function getStatusBadgeClass(status: string): string {
   switch (status) {
@@ -309,7 +290,7 @@ export default function TransactionDetail() {
                         <span
                           className={`text-xs px-1.5 py-0.5 rounded ${getConfidenceBgColor(element.confidenceLevel)} ${getConfidenceColor(element.confidenceLevel)}`}
                         >
-                          {element.confidenceLevel}%
+                          {element.confidenceLevel}/5
                         </span>
                       </div>
                     )
@@ -437,7 +418,7 @@ export default function TransactionDetail() {
                         <span
                           className={`font-semibold ${getConfidenceColor(transaction.confidenceLevel)}`}
                         >
-                          {transaction.confidenceLevel}%
+                          {transaction.confidenceLevel.toFixed(1)}/5
                         </span>
                         <span
                           className={`text-xs ${getConfidenceColor(transaction.confidenceLevel)}`}

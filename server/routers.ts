@@ -64,7 +64,7 @@ export const appRouter = router({
         z.object({
           name: z.string().min(1).max(100),
           description: z.string().optional(),
-          confidenceLevel: z.number().min(0).max(100).default(50),
+          confidenceLevel: z.number().int().min(1).max(5).default(3),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -92,7 +92,7 @@ export const appRouter = router({
           id: z.number(),
           name: z.string().min(1).max(100).optional(),
           description: z.string().optional(),
-          confidenceLevel: z.number().min(0).max(100).optional(),
+          confidenceLevel: z.number().int().min(1).max(5).optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
