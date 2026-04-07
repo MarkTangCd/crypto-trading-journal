@@ -48,6 +48,12 @@ import {
 } from "@/components/ui/tooltip";
 import { CloseTradeModal } from "@/components/CloseTradeModal";
 import { getConfidenceBgColor, getConfidenceColor } from "@/lib/confidence";
+import {
+  MARKET_CYCLES,
+  TRANSACTION_TYPES,
+  type MarketCycle,
+  type TransactionType,
+} from "@shared/const";
 
 type SortBy = "createdAt" | "startTime" | "endTime" | "returnAmount";
 type SortOrder = "asc" | "desc";
@@ -79,6 +85,12 @@ export default function Transactions() {
   const [outcomeFilter, setOutcomeFilter] = useState<Outcome>(undefined);
   const [directionFilter, setDirectionFilter] = useState<Direction>(undefined);
   const [statusFilter, setStatusFilter] = useState<Status>(undefined);
+  const [marketCycleFilter, setMarketCycleFilter] = useState<
+    MarketCycle | undefined
+  >(undefined);
+  const [transactionTypeFilter, setTransactionTypeFilter] = useState<
+    TransactionType | undefined
+  >(undefined);
   const [pairFilter, setPairFilter] = useState<string>("");
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [closeTrade, setCloseTrade] = useState<{
@@ -97,6 +109,8 @@ export default function Transactions() {
       outcome: outcomeFilter,
       direction: directionFilter,
       status: statusFilter,
+      marketCycle: marketCycleFilter,
+      transactionType: transactionTypeFilter,
       tradingPair: pairFilter || undefined,
     },
     { enabled: !!accountId }
@@ -133,11 +147,18 @@ export default function Transactions() {
     setOutcomeFilter(undefined);
     setDirectionFilter(undefined);
     setStatusFilter(undefined);
+    setMarketCycleFilter(undefined);
+    setTransactionTypeFilter(undefined);
     setPairFilter("");
   };
 
   const hasFilters =
-    outcomeFilter || directionFilter || statusFilter || pairFilter;
+    outcomeFilter ||
+    directionFilter ||
+    statusFilter ||
+    marketCycleFilter ||
+    transactionTypeFilter ||
+    pairFilter;
 
   return (
     <div className="space-y-6">
@@ -167,7 +188,7 @@ export default function Transactions() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
             <div className="space-y-2">
               <label className="text-sm text-muted-foreground">Status</label>
               <Select
@@ -184,6 +205,56 @@ export default function Transactions() {
                   <SelectItem value="open">Open</SelectItem>
                   <SelectItem value="closed">Closed</SelectItem>
                   <SelectItem value="reviewed">Reviewed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm text-muted-foreground">
+                Market Cycle
+              </label>
+              <Select
+                value={marketCycleFilter || "all"}
+                onValueChange={v =>
+                  setMarketCycleFilter(
+                    v === "all" ? undefined : (v as MarketCycle)
+                  )
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All market cycles" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All market cycles</SelectItem>
+                  {MARKET_CYCLES.map(cycle => (
+                    <SelectItem key={cycle} value={cycle}>
+                      {cycle}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm text-muted-foreground">
+                Transaction Type
+              </label>
+              <Select
+                value={transactionTypeFilter || "all"}
+                onValueChange={v =>
+                  setTransactionTypeFilter(
+                    v === "all" ? undefined : (v as TransactionType)
+                  )
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All types" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All types</SelectItem>
+                  {TRANSACTION_TYPES.map(type => (
+                    <SelectItem key={type} value={type}>
+                      {type}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -273,6 +344,8 @@ export default function Transactions() {
                       </button>
                     </TableHead>
                     <TableHead>Time Frame</TableHead>
+                    <TableHead>Cycle</TableHead>
+                    <TableHead>Type</TableHead>
                     <TableHead>Outcome</TableHead>
                     <TableHead>
                       <Tooltip>
@@ -321,6 +394,8 @@ export default function Transactions() {
                         {format(new Date(tx.startTime), "MMM d, yyyy HH:mm")}
                       </TableCell>
                       <TableCell>{tx.timeFrame}</TableCell>
+                      <TableCell>{tx.marketCycle || "—"}</TableCell>
+                      <TableCell>{tx.transactionType || "—"}</TableCell>
                       <TableCell>
                         {tx.outcome ? (
                           <Badge

@@ -28,7 +28,7 @@ function bootstrapSqlite(databaseUrl: string): void {
     "CREATE TABLE IF NOT EXISTS trading_elements (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, description TEXT, confidenceLevel INTEGER NOT NULL DEFAULT 3, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000)); " +
     "CREATE TABLE IF NOT EXISTS trading_systems (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, notes TEXT, isActive INTEGER NOT NULL DEFAULT 0, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000)); " +
     "CREATE TABLE IF NOT EXISTS trading_system_elements (id INTEGER PRIMARY KEY AUTOINCREMENT, tradingSystemId INTEGER NOT NULL, tradingElementId INTEGER NOT NULL); " +
-    "CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER, tradingSystemId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, confidenceLevel INTEGER, tvUrl TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000)); " +
+    "CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER, tradingSystemId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, confidenceLevel INTEGER, tvUrl TEXT, marketCycle TEXT, transactionType TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000)); " +
     "CREATE TABLE IF NOT EXISTS transaction_elements (id INTEGER PRIMARY KEY AUTOINCREMENT, transactionId INTEGER NOT NULL, tradingElementId INTEGER NOT NULL);";
 
   runNodeEval(
@@ -233,6 +233,8 @@ await createTransactionWithElements({
   endTime: 1700003600000,
   direction: "long",
   tradingLogic: "test logic",
+  marketCycle: "Trading Range",
+  transactionType: "Trend",
   outcome: "win",
   consecutiveLosses: 0,
   riskRewardRatio: "2.00",
@@ -251,6 +253,8 @@ await createTransactionWithElements({
   endTime: 1700010800000,
   direction: "short",
   tradingLogic: "test logic 2",
+  marketCycle: "Trading Range",
+  transactionType: "Trend",
   outcome: "breakeven",
   consecutiveLosses: 0,
   riskRewardRatio: "1.00",
@@ -358,6 +362,8 @@ for (const [index, returnAmount] of rows.entries()) {
     endTime: 1700000001000 + index,
     direction: "long",
     tradingLogic: "sort-test",
+    marketCycle: "Trading Range",
+    transactionType: "Trend",
     status: "closed",
     outcome: "win",
     consecutiveLosses: 0,
@@ -437,6 +443,8 @@ for (const [index, trade] of trades.entries()) {
     endTime: 1710000001000 + index,
     direction: "long",
     tradingLogic: "stats-test",
+    marketCycle: "Trading Range",
+    transactionType: "Trend",
     status: "closed",
     outcome: trade.outcome,
     consecutiveLosses: 0,
@@ -526,6 +534,8 @@ const transaction = await createTransactionWithElements({
   endTime: 1720000001000,
   direction: "long",
   tradingLogic: "updatedAt-test",
+  marketCycle: "Trading Range",
+  transactionType: "Trend",
   status: "closed",
   outcome: "win",
   consecutiveLosses: 0,

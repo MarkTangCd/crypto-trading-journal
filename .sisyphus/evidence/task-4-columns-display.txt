@@ -1,0 +1,3 @@
+2026-04-07
+Verified `client/src/pages/Transactions.tsx` now renders Market Cycle and Transaction Type columns after Time Frame.
+Null values are displayed as `—`.

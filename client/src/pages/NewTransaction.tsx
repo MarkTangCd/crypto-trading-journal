@@ -60,6 +60,16 @@ export default function NewTransaction() {
     startTime: "",
     direction: "" as "long" | "short" | "",
     tradingLogic: "",
+    marketCycle: "" as
+      | "Trading Range"
+      | "Upward Tight Channel"
+      | "Downward Tight Channel"
+      | "Upward Channel"
+      | "Downward Channel"
+      | "Upward Trend"
+      | "Downward Trend"
+      | "",
+    transactionType: "" as "Trend" | "Reversal" | "",
     tvUrl: "",
   });
 
@@ -95,7 +105,9 @@ export default function NewTransaction() {
       !formData.timeFrame ||
       !formData.startTime ||
       !formData.direction ||
-      !formData.tradingLogic
+      !formData.tradingLogic ||
+      !formData.marketCycle ||
+      !formData.transactionType
     ) {
       toast.error("Please fill in all required fields");
       return;
@@ -109,6 +121,8 @@ export default function NewTransaction() {
       startTime: startTimestamp,
       direction: formData.direction as "long" | "short",
       tradingLogic: formData.tradingLogic,
+      marketCycle: formData.marketCycle,
+      transactionType: formData.transactionType,
       tvUrl: formData.tvUrl || undefined,
       selectedElementIds,
     });
@@ -359,6 +373,56 @@ export default function NewTransaction() {
                       </SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="marketCycle">Market Cycle *</Label>
+                    <Select
+                      value={formData.marketCycle}
+                      onValueChange={v => updateField("marketCycle", v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select market cycle" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Trading Range">
+                          Trading Range
+                        </SelectItem>
+                        <SelectItem value="Upward Tight Channel">
+                          Upward Tight Channel
+                        </SelectItem>
+                        <SelectItem value="Downward Tight Channel">
+                          Downward Tight Channel
+                        </SelectItem>
+                        <SelectItem value="Upward Channel">
+                          Upward Channel
+                        </SelectItem>
+                        <SelectItem value="Downward Channel">
+                          Downward Channel
+                        </SelectItem>
+                        <SelectItem value="Upward Trend">Upward Trend</SelectItem>
+                        <SelectItem value="Downward Trend">
+                          Downward Trend
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="transactionType">Transaction Type *</Label>
+                    <Select
+                      value={formData.transactionType}
+                      onValueChange={v => updateField("transactionType", v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Trend">Trend</SelectItem>
+                        <SelectItem value="Reversal">Reversal</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 <div className="space-y-2">

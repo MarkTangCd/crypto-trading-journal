@@ -1,0 +1,2 @@
+- 2026-04-07: `npm run db:push` requires `DATABASE_URL`; using a local sqlite file URL let migration application complete, but drizzle-kit attempted an interactive prompt during generate in the non-TTY shell.
+- 2026-04-07: No issues during the sqlite integration test sync; the targeted Vitest run and full suite both passed after adding the missing fields.

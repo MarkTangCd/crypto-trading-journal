@@ -42,7 +42,11 @@ import {
   getAccountCount,
 } from "./db";
 import { add as addFixedPoint } from "./_core/fixedPoint";
-import { ALLOWED_TRANSITIONS } from "@shared/const";
+import {
+  ALLOWED_TRANSITIONS,
+  MARKET_CYCLES,
+  TRANSACTION_TYPES,
+} from "@shared/const";
 
 export const appRouter = router({
   system: systemRouter,
@@ -190,6 +194,8 @@ export const appRouter = router({
             startTime: z.number(),
             direction: z.enum(["long", "short"]),
             tradingLogic: z.string().min(1),
+            marketCycle: z.enum(MARKET_CYCLES),
+            transactionType: z.enum(TRANSACTION_TYPES),
             tvUrl: z.string().optional(),
             tradingSystemId: z.number().optional(),
             selectedElementIds: z.array(z.number()).default([]),
@@ -220,6 +226,8 @@ export const appRouter = router({
             endTime: null,
             direction: input.direction,
             tradingLogic: input.tradingLogic,
+            marketCycle: input.marketCycle,
+            transactionType: input.transactionType,
             outcome: null,
             riskRewardRatio: null,
             returnAmount: null,
@@ -257,6 +265,8 @@ export const appRouter = router({
           tradingPair: z.string().optional(),
           status: z.enum(["open", "closed", "reviewed"]).optional(),
           tradingSystemId: z.number().optional(),
+          marketCycle: z.enum(MARKET_CYCLES).optional(),
+          transactionType: z.enum(TRANSACTION_TYPES).optional(),
         })
       )
       .query(async ({ ctx, input }) => {

@@ -34,6 +34,8 @@ vi.mock("./db", () => ({
     endTime: Date.now() + 3600000,
     direction: "long",
     tradingLogic: "Test trade",
+    marketCycle: "Upward Trend",
+    transactionType: "Trend",
     outcome: "win",
     status: "open",
     consecutiveLosses: 0,
@@ -187,7 +189,7 @@ describe("transaction procedures", () => {
   });
 
   describe("transaction.create", () => {
-    it("creates a new transaction", async () => {
+    it("creates a new transaction with marketCycle and transactionType", async () => {
       const ctx = createAuthContext();
       const caller = appRouter.createCaller(ctx);
 
@@ -197,6 +199,8 @@ describe("transaction procedures", () => {
         startTime: Date.now(),
         direction: "long",
         tradingLogic: "Test trade logic",
+        marketCycle: "Upward Trend",
+        transactionType: "Trend",
         tradingSystemId: 1,
         selectedElementIds: [1, 2],
       });
@@ -205,6 +209,42 @@ describe("transaction procedures", () => {
       expect(result.id).toBe(1);
       expect(result.status).toBe("open");
       expect(db.createTransactionWithElements).toHaveBeenCalled();
+    });
+
+    it("rejects create without marketCycle", async () => {
+      const ctx = createAuthContext();
+      const caller = appRouter.createCaller(ctx);
+
+      await expect(
+        caller.transaction.create({
+          tradingPair: "BTCUSDT",
+          timeFrame: "4H",
+          startTime: Date.now(),
+          direction: "long",
+          tradingLogic: "Test trade logic",
+          transactionType: "Trend",
+          tradingSystemId: 1,
+          selectedElementIds: [],
+        } as any)
+      ).rejects.toThrow();
+    });
+
+    it("rejects create without transactionType", async () => {
+      const ctx = createAuthContext();
+      const caller = appRouter.createCaller(ctx);
+
+      await expect(
+        caller.transaction.create({
+          tradingPair: "BTCUSDT",
+          timeFrame: "4H",
+          startTime: Date.now(),
+          direction: "long",
+          tradingLogic: "Test trade logic",
+          marketCycle: "Upward Trend",
+          tradingSystemId: 1,
+          selectedElementIds: [],
+        } as any)
+      ).rejects.toThrow();
     });
   });
 
@@ -245,6 +285,159 @@ describe("transaction procedures", () => {
 
       expect(Array.isArray(result)).toBe(true);
     });
+
+    it("filters by marketCycle correctly", async () => {
+      const ctx = createAuthContext();
+      const caller = appRouter.createCaller(ctx);
+
+      vi.mocked(db.getTransactionsByUserId).mockResolvedValueOnce([
+        {
+          id: 1,
+          userId: 1,
+          accountId: 1,
+          tradingPair: "BTCUSDT",
+          timeFrame: "4H",
+          startTime: Date.now(),
+          endTime: null,
+          direction: "long",
+          tradingLogic: "Test trade",
+          marketCycle: "Upward Trend",
+          transactionType: "Trend",
+          outcome: null,
+          status: "open",
+          consecutiveLosses: 0,
+          riskRewardRatio: null,
+          returnAmount: null,
+          accountBalance: null,
+          tvUrl: null,
+          reviewFeedback: null,
+          reviewChartUrl: null,
+          tradingSystemId: null,
+          confidenceLevel: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]);
+
+      const result = await caller.transaction.list({
+        accountId: 1,
+        marketCycle: "Upward Trend",
+      });
+
+      expect(Array.isArray(result)).toBe(true);
+      expect(result).toHaveLength(1);
+      expect(result[0].marketCycle).toBe("Upward Trend");
+    });
+
+    it("filters by transactionType correctly", async () => {
+      const ctx = createAuthContext();
+      const caller = appRouter.createCaller(ctx);
+
+      vi.mocked(db.getTransactionsByUserId).mockResolvedValueOnce([
+        {
+          id: 1,
+          userId: 1,
+          accountId: 1,
+          tradingPair: "BTCUSDT",
+          timeFrame: "4H",
+          startTime: Date.now(),
+          endTime: null,
+          direction: "long",
+          tradingLogic: "Test trade",
+          marketCycle: "Upward Trend",
+          transactionType: "Reversal",
+          outcome: null,
+          status: "open",
+          consecutiveLosses: 0,
+          riskRewardRatio: null,
+          returnAmount: null,
+          accountBalance: null,
+          tvUrl: null,
+          reviewFeedback: null,
+          reviewChartUrl: null,
+          tradingSystemId: null,
+          confidenceLevel: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]);
+
+      const result = await caller.transaction.list({
+        accountId: 1,
+        transactionType: "Reversal",
+      });
+
+      expect(Array.isArray(result)).toBe(true);
+      expect(result).toHaveLength(1);
+      expect(result[0].transactionType).toBe("Reversal");
+    });
+
+    it("returns all rows including legacy nulls with no filters", async () => {
+      const ctx = createAuthContext();
+      const caller = appRouter.createCaller(ctx);
+
+      vi.mocked(db.getTransactionsByUserId).mockResolvedValueOnce([
+        {
+          id: 1,
+          userId: 1,
+          accountId: 1,
+          tradingPair: "BTCUSDT",
+          timeFrame: "4H",
+          startTime: Date.now(),
+          endTime: null,
+          direction: "long",
+          tradingLogic: "Test trade",
+          marketCycle: "Upward Trend",
+          transactionType: "Trend",
+          outcome: null,
+          status: "open",
+          consecutiveLosses: 0,
+          riskRewardRatio: null,
+          returnAmount: null,
+          accountBalance: null,
+          tvUrl: null,
+          reviewFeedback: null,
+          reviewChartUrl: null,
+          tradingSystemId: null,
+          confidenceLevel: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: 2,
+          userId: 1,
+          accountId: 1,
+          tradingPair: "ETHUSDT",
+          timeFrame: "1H",
+          startTime: Date.now(),
+          endTime: null,
+          direction: "short",
+          tradingLogic: "Legacy trade",
+          marketCycle: null,
+          transactionType: null,
+          outcome: null,
+          status: "open",
+          consecutiveLosses: 0,
+          riskRewardRatio: null,
+          returnAmount: null,
+          accountBalance: null,
+          tvUrl: null,
+          reviewFeedback: null,
+          reviewChartUrl: null,
+          tradingSystemId: null,
+          confidenceLevel: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]);
+
+      const result = await caller.transaction.list({ accountId: 1 });
+
+      expect(Array.isArray(result)).toBe(true);
+      expect(result).toHaveLength(2);
+      expect(result[0].marketCycle).toBe("Upward Trend");
+      expect(result[1].marketCycle).toBeNull();
+    });
   });
 
   describe("transaction.update", () => {
@@ -262,6 +455,8 @@ describe("transaction procedures", () => {
         endTime: Date.now() + 3600000,
         direction: "long",
         tradingLogic: "Test trade",
+        marketCycle: "Upward Trend",
+        transactionType: "Trend",
         outcome: "win",
         status: "closed",
         consecutiveLosses: 0,

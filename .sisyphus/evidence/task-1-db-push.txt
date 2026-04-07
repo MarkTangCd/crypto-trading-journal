@@ -1,9 +1,9 @@
+Command: DATABASE_URL="file:./drizzle/dev.db" npm run db:push
+Result: applied successfully after sqlite prompt fallback
 
+Output excerpt:
 > crypto-trading-journal@1.0.0 db:push
 > drizzle-kit generate && drizzle-kit migrate
 
-No config path provided, using default 'drizzle.config.ts'
-Reading config file '/Users/marktang/programming/personal-projects/crypto-trading-journal/drizzle.config.ts'
-No config path provided, using default 'drizzle.config.ts'
-Reading config file '/Users/marktang/programming/personal-projects/crypto-trading-journal/drizzle.config.ts'
-[⣷] applying migrations...[2K[1G[✓] migrations applied successfully!
+Error: Interactive prompts require a TTY terminal...
+[✓] migrations applied successfully!

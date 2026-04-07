@@ -607,6 +607,8 @@ export async function getTransactionsByUserId(
     tradingPair?: string;
     status?: "open" | "closed" | "reviewed";
     tradingSystemId?: number;
+    marketCycle?: string;
+    transactionType?: string;
   }
 ) {
   const db = await getDb();
@@ -631,6 +633,12 @@ export async function getTransactionsByUserId(
   }
   if (options?.tradingSystemId !== undefined) {
     conditions.push(eq(transactions.tradingSystemId, options.tradingSystemId));
+  }
+  if (options?.marketCycle) {
+    conditions.push(eq(transactions.marketCycle, options.marketCycle));
+  }
+  if (options?.transactionType) {
+    conditions.push(eq(transactions.transactionType, options.transactionType));
   }
 
   const sortColumn = options?.sortBy || "createdAt";

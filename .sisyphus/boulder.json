@@ -1,38 +1,50 @@
 {
-  "active_plan": "/Users/marktang/programming/personal-projects/crypto-trading-journal/.sisyphus/plans/multi-account.md",
-  "started_at": "2026-04-03T04:03:50.556Z",
+  "active_plan": "/Users/marktang/programming/personal-projects/crypto-trading-journal/.sisyphus/plans/add-market-cycle-and-transaction-type.md",
+  "started_at": "2026-04-07T03:32:43.601Z",
   "session_ids": [
-    "ses_2b16767eaffexOX4nXbDfC5wu3",
-    "ses_2ae7ae294ffeUnga2CCoAJCjDu",
-    "ses_2adf7a707ffeent3lgNtsIZFMQ",
-    "ses_2adf74ce4ffesDXdPWCkuqXSFC",
-    "ses_2adf7e0ffffeycDhBr51zIHhZO",
-    "ses_2adf13c7dffemCbYuinltwTN7H",
-    "ses_2adf70d3dffei5219TEU3O1wQ0",
-    "ses_2adf0b826ffeKdwx6nbV9T552d",
-    "ses_2add36b7bffeuYz7B30SsMkF24",
-    "ses_2ac324d61ffelw0FLFiTNIPHeD",
-    "ses_2a9a357c9ffeKx8DMQmLJbau2g",
-    "ses_2a9a386eeffeBGynu0pShQBGI2",
-    "ses_2a9a2ff91ffeUzwxOl41h6iqYt",
-    "ses_2a9a325f8ffeyLbxZXbX3mpyrl",
-    "ses_2a9a10348ffe1oAPrJi8hgg0hN",
-    "ses_2a9991c87ffeXzHAt6hsw7FE14",
-    "ses_2a999493fffeODN1fkNZyl8Nud",
-    "ses_2a998ed13ffesryFWxd7m4n9Og",
-    "ses_2a98f9d9affelMQFzKXdI5OVel"
+    "ses_29cb0340affe8ghI3xjfV2Tqkp"
   ],
-  "plan_name": "multi-account",
+  "plan_name": "add-market-cycle-and-transaction-type",
   "agent": "atlas",
+  "session_origins": {
+    "ses_29cb0340affe8ghI3xjfV2Tqkp": "direct"
+  },
   "task_sessions": {
     "todo:1": {
       "task_key": "todo:1",
       "task_label": "1",
-      "task_title": "Database Schema Changes + Shared Type Exports",
-      "session_id": "ses_2a98f9d9affelMQFzKXdI5OVel",
+      "task_title": "Add shared constants + DB schema columns",
+      "session_id": "ses_299faac55ffeWDPdUw5daVHhfK",
       "agent": "Sisyphus-Junior",
-      "category": "deep",
-      "updated_at": "2026-04-04T03:03:23.612Z"
+      "category": "quick",
+      "updated_at": "2026-04-07T03:42:20.778Z"
+    },
+    "todo:3": {
+      "task_key": "todo:3",
+      "task_label": "3",
+      "task_title": "Add Market Cycle + Transaction Type Selects to New Trade form",
+      "session_id": "ses_299f5e1afffezDrylSb48Cff0t",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-04-07T03:51:45.532Z"
+    },
+    "todo:4": {
+      "task_key": "todo:4",
+      "task_label": "4",
+      "task_title": "Display + filter Market Cycle and Transaction Type in Transactions list",
+      "session_id": "ses_299ecfe5cffejCJziA9dB3aeFq",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-04-07T03:55:09.679Z"
+    },
+    "final-wave:f1": {
+      "task_key": "final-wave:f1",
+      "task_label": "F1",
+      "task_title": "**Plan Compliance Audit** — `oracle`",
+      "session_id": "ses_299e807e6ffe3icT9Rwh8ngt3F",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-04-07T04:01:28.183Z"
     }
   }
 }

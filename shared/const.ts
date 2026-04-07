@@ -5,6 +5,22 @@ export const TRADE_STATUSES = ["open", "closed", "reviewed"] as const;
 
 export type TradeStatus = (typeof TRADE_STATUSES)[number];
 
+export const MARKET_CYCLES = [
+  "Trading Range",
+  "Upward Tight Channel",
+  "Downward Tight Channel",
+  "Upward Channel",
+  "Downward Channel",
+  "Upward Trend",
+  "Downward Trend",
+] as const;
+
+export type MarketCycle = (typeof MARKET_CYCLES)[number];
+
+export const TRANSACTION_TYPES = ["Trend", "Reversal"] as const;
+
+export type TransactionType = (typeof TRANSACTION_TYPES)[number];
+
 export const ALLOWED_TRANSITIONS: Record<TradeStatus, TradeStatus | null> = {
   open: "closed",
   closed: "reviewed",

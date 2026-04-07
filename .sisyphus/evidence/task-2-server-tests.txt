@@ -1,0 +1,10 @@
+
+ RUN  v2.1.9 /Users/marktang/programming/personal-projects/crypto-trading-journal
+
+ ✓ server/transaction.test.ts (23 tests) 10ms
+
+ Test Files  1 passed (1)
+      Tests  23 passed (23)
+   Start at  11:51:14
+   Duration  311ms (transform 73ms, setup 0ms, collect 116ms, tests 10ms, environment 0ms, prepare 38ms)
+

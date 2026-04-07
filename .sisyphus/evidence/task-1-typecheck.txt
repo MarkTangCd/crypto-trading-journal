@@ -1,5 +1,6 @@
+Command: npm run check
+Result: passed
 
+Output:
 > crypto-trading-journal@1.0.0 check
 > tsc --noEmit
-
-Exit code: 0

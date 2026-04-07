@@ -1090,6 +1090,8 @@ describe("transaction.create open-only lifecycle", () => {
       tradingPair: "btcusdt",
       direction: "long",
       timeFrame: "4H",
+      marketCycle: "Trading Range",
+      transactionType: "Trend",
       startTime: Date.now(),
       tradingLogic: "Breakout and retest",
     });
@@ -1114,6 +1116,8 @@ describe("transaction.create open-only lifecycle", () => {
       tradingPair: "ETHUSDT",
       direction: "short",
       timeFrame: "1H",
+      marketCycle: "Trading Range",
+      transactionType: "Trend",
       startTime: Date.now(),
       tradingLogic: "Rejection at resistance",
     });
@@ -1131,6 +1135,8 @@ describe("transaction.create open-only lifecycle", () => {
       tradingPair: "BTCUSDT",
       direction: "long",
       timeFrame: "4H",
+      marketCycle: "Trading Range",
+      transactionType: "Trend",
       startTime: Date.now(),
       tradingLogic: "Trend continuation",
       outcome: "win",

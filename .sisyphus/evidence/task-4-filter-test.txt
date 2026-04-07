@@ -1,0 +1,3 @@
+2026-04-07
+Verified the Transactions filter bar includes Market Cycle and Transaction Type dropdowns.
+Both use `all` -> `undefined` mapping and feed `transaction.list` query params.

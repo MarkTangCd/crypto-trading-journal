@@ -146,6 +146,8 @@ export const transactions = sqliteTable(
     confidenceLevel: real("confidenceLevel"),
     /** Optional TradingView URL */
     tvUrl: text("tvUrl"),
+    marketCycle: text("marketCycle"),
+    transactionType: text("transactionType"),
     /** Review feedback text */
     reviewFeedback: text("reviewFeedback"),
     /** Post-review TradingView chart URL */
@@ -171,6 +173,14 @@ export const transactions = sqliteTable(
     check(
       "transactions_outcome_check",
       sql`${table.outcome} in ('win', 'loss', 'breakeven')`
+    ),
+    check(
+      "transactions_market_cycle_check",
+      sql`${table.marketCycle} is null or ${table.marketCycle} in ('Trading Range', 'Upward Tight Channel', 'Downward Tight Channel', 'Upward Channel', 'Downward Channel', 'Upward Trend', 'Downward Trend')`
+    ),
+    check(
+      "transactions_transaction_type_check",
+      sql`${table.transactionType} is null or ${table.transactionType} in ('Trend', 'Reversal')`
     ),
   ]
 );
