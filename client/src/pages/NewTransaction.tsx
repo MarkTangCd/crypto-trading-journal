@@ -24,7 +24,16 @@ import { useAccount } from "@/contexts/AccountContext";
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
-import { Loader2, Layers, AlertCircle, Gauge, Tag } from "lucide-react";
+import {
+  Loader2,
+  Layers,
+  AlertCircle,
+  Gauge,
+  Tag,
+  BarChart3,
+} from "lucide-react";
+import CandlestickChart from "@/components/CandlestickChart";
+import { MOCK_CANDLE_DATA } from "@/lib/mockCandleData";
 
 const TIME_FRAMES = ["1m", "5m", "15m", "30m", "1H", "4H", "1D", "1W", "1M"];
 
@@ -301,6 +310,21 @@ export default function NewTransaction() {
               </Card>
             )}
 
+            <Card data-testid="candlestick-chart-card">
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5" />
+                  Price Chart
+                </CardTitle>
+                <CardDescription className="text-subtitle">
+                  Click a candle to mark the entry point
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <CandlestickChart data={MOCK_CANDLE_DATA} />
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg font-semibold">
@@ -401,7 +425,9 @@ export default function NewTransaction() {
                         <SelectItem value="Downward Channel">
                           Downward Channel
                         </SelectItem>
-                        <SelectItem value="Upward Trend">Upward Trend</SelectItem>
+                        <SelectItem value="Upward Trend">
+                          Upward Trend
+                        </SelectItem>
                         <SelectItem value="Downward Trend">
                           Downward Trend
                         </SelectItem>
