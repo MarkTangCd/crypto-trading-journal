@@ -1056,13 +1056,30 @@ export async function replaceTransactionElements(
   });
 }
 
+export type AccountScopedInsertTransaction = Omit<
+  InsertTransaction,
+  "accountId"
+> & { accountId: number };
+
 export async function createTransactionWithElements(
-  data: InsertTransaction,
+  data: AccountScopedInsertTransaction,
   elementIds: number[]
 ): Promise<Transaction> {
+  // Guard: never silently fall back to userId for accountId. Callers must
+  // pass the validated accountId for the trade's owning account.
+  if (
+    data.accountId === null ||
+    data.accountId === undefined ||
+    Number.isNaN(data.accountId)
+  ) {
+    throw new Error(
+      "createTransactionWithElements requires a valid accountId"
+    );
+  }
+
   const insertData: InsertTransaction = {
     ...data,
-    accountId: data.accountId ?? data.userId,
+    accountId: data.accountId,
     status: data.status ?? "open",
     endTime: data.endTime ?? null,
     outcome: data.outcome ?? null,

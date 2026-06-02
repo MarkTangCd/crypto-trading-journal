@@ -189,6 +189,7 @@ export const appRouter = router({
       .input(
         z
           .object({
+            accountId: z.number().int().positive(),
             tradingPair: z.string().min(1),
             timeFrame: z.string().min(1),
             startTime: z.number(),
@@ -203,6 +204,15 @@ export const appRouter = router({
           .strict()
       )
       .mutation(async ({ ctx, input }) => {
+        // Validate account ownership before doing any other work
+        const account = await getAccountById(input.accountId, ctx.user.id);
+        if (!account) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Account not found",
+          });
+        }
+
         // Get active trading system if not specified
         let tradingSystemId: number | undefined = input.tradingSystemId;
         if (tradingSystemId === undefined) {
@@ -218,6 +228,7 @@ export const appRouter = router({
         const transaction = await createTransactionWithElements(
           {
             userId: ctx.user.id,
+            accountId: account.id,
             tradingSystemId,
             status: "open",
             tradingPair: input.tradingPair.toUpperCase(),

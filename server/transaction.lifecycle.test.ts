@@ -1087,6 +1087,7 @@ describe("transaction.create open-only lifecycle", () => {
     const { caller, createTransactionWithElements } = await setupCreateCaller();
 
     const result = await caller.transaction.create({
+      accountId: 1,
       tradingPair: "btcusdt",
       direction: "long",
       timeFrame: "4H",
@@ -1113,6 +1114,7 @@ describe("transaction.create open-only lifecycle", () => {
     const { caller } = await setupCreateCaller();
 
     const result = await caller.transaction.create({
+      accountId: 1,
       tradingPair: "ETHUSDT",
       direction: "short",
       timeFrame: "1H",
@@ -1132,6 +1134,7 @@ describe("transaction.create open-only lifecycle", () => {
     const { caller, createTransactionWithElements } = await setupCreateCaller();
 
     const invalidCreateInput = {
+      accountId: 1,
       tradingPair: "BTCUSDT",
       direction: "long",
       timeFrame: "4H",

@@ -25,6 +25,7 @@ function runNodeEval(script: string, databaseUrl: string): string {
 function bootstrapSqlite(databaseUrl: string): void {
   const schemaSql =
     "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, openId TEXT NOT NULL UNIQUE, name TEXT, email TEXT, loginMethod TEXT, role TEXT NOT NULL DEFAULT 'user', createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), lastSignedIn INTEGER NOT NULL DEFAULT (unixepoch() * 1000), initialBalance TEXT DEFAULT '0', activeTradingSystemId INTEGER); " +
+    "CREATE TABLE IF NOT EXISTS accounts (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, notes TEXT, initialBalance TEXT NOT NULL DEFAULT '0', createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000)); " +
     "CREATE TABLE IF NOT EXISTS trading_elements (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, description TEXT, confidenceLevel INTEGER NOT NULL DEFAULT 3, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000)); " +
     "CREATE TABLE IF NOT EXISTS trading_systems (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, notes TEXT, isActive INTEGER NOT NULL DEFAULT 0, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000)); " +
     "CREATE TABLE IF NOT EXISTS trading_system_elements (id INTEGER PRIMARY KEY AUTOINCREMENT, tradingSystemId INTEGER NOT NULL, tradingElementId INTEGER NOT NULL); " +
@@ -70,6 +71,7 @@ describe("SQLite Integration Tests", () => {
           (table: string) => table !== "sqlite_sequence"
         )
       ).toEqual([
+        "accounts",
         "trading_elements",
         "trading_system_elements",
         "trading_systems",
@@ -214,6 +216,12 @@ const userRow = userLookupDb.prepare("select id from users where openId = ?").ge
 userLookupDb.close();
 if (!userRow || typeof userRow.id !== "number") throw new Error("missing-user");
 
+const seedAccountsDb = new DatabaseSync(process.env.DATABASE_URL);
+const insertAccount = seedAccountsDb.prepare("insert into accounts (userId, name, notes, initialBalance) values (?, ?, ?, ?)");
+const accountResult = insertAccount.run(userRow.id, "Atomic Account", null, "1000.00");
+seedAccountsDb.close();
+const accountId = Number(accountResult.lastInsertRowid);
+
 const seedElementsDb = new DatabaseSync(process.env.DATABASE_URL);
 const insertElement = seedElementsDb.prepare("insert into trading_elements (userId, name, description, confidenceLevel) values (?, ?, ?, ?)");
 const elementAResult = insertElement.run(userRow.id, "Setup A", null, 3);
@@ -225,6 +233,7 @@ const elementBId = Number(elementBResult.lastInsertRowid);
 
 await createTransactionWithElements({
   userId: userRow.id,
+  accountId,
   tradingSystemId: null,
   accountBalance: "1005.00",
   tradingPair: "BTCUSD",
@@ -245,6 +254,7 @@ await createTransactionWithElements({
 
 await createTransactionWithElements({
   userId: userRow.id,
+  accountId,
   tradingSystemId: null,
   accountBalance: "1002.50",
   tradingPair: "ETHUSD",
@@ -346,6 +356,8 @@ closeDb();
 
 const sqlite = new DatabaseSync(process.env.DATABASE_URL);
 const user = sqlite.prepare("select id from users where openId = ?").get("oid-task6-sort");
+const accountSeed = sqlite.prepare("insert into accounts (userId, name, notes, initialBalance) values (?, ?, ?, ?)").run(user.id, "Sort Account", null, "1000.00");
+const accountId = Number(accountSeed.lastInsertRowid);
 sqlite.close();
 
 if (!user || typeof user.id !== "number") throw new Error("missing-user");
@@ -354,6 +366,7 @@ const rows = ["2.00", "10.00", "-1.00", "100.00", "20.00"];
 for (const [index, returnAmount] of rows.entries()) {
   await createTransactionWithElements({
     userId: user.id,
+    accountId,
     tradingSystemId: null,
     accountBalance: "1000.00",
     tradingPair: "PAIR" + index,
@@ -419,6 +432,8 @@ closeDb();
 
 const sqlite = new DatabaseSync(process.env.DATABASE_URL);
 const user = sqlite.prepare("select id from users where openId = ?").get("oid-task6-stats");
+const accountSeed = sqlite.prepare("insert into accounts (userId, name, notes, initialBalance) values (?, ?, ?, ?)").run(user.id, "Stats Account", null, "1000.10");
+const accountId = Number(accountSeed.lastInsertRowid);
 sqlite.close();
 if (!user || typeof user.id !== "number") throw new Error("missing-user");
 
@@ -435,6 +450,7 @@ const trades = [
 for (const [index, trade] of trades.entries()) {
   await createTransactionWithElements({
     userId: user.id,
+    accountId,
     tradingSystemId: trade.systemId,
     accountBalance: "1000.00",
     tradingPair: "STAT" + index,
@@ -510,6 +526,8 @@ closeDb();
 
 const sqlite = new DatabaseSync(process.env.DATABASE_URL);
 const user = sqlite.prepare("select id from users where openId = ?").get("oid-task6-updated");
+const accountSeed = sqlite.prepare("insert into accounts (userId, name, notes, initialBalance) values (?, ?, ?, ?)").run(user.id, "Updated Account", null, "1000.00");
+const accountId = Number(accountSeed.lastInsertRowid);
 sqlite.close();
 if (!user || typeof user.id !== "number") throw new Error("missing-user");
 
@@ -526,6 +544,7 @@ const system = await createTradingSystem({
 }, [element.id]);
 const transaction = await createTransactionWithElements({
   userId: user.id,
+  accountId,
   tradingSystemId: system.id,
   accountBalance: "1000.00",
   tradingPair: "UPD",
@@ -571,6 +590,150 @@ if (!elementUpdated || elementUpdated.updatedAt <= 1) throw new Error("element-u
 if (!systemUpdated || systemUpdated.updatedAt <= 1) throw new Error("system-updatedAt-not-updated");
 if (!transactionUpdated || transactionUpdated.updatedAt <= 1) throw new Error("transaction-updatedAt-not-updated");
 
+console.log("ok");`;
+
+      const result = runNodeEval(script, tempDbPath);
+      expect(result).toContain("ok");
+    });
+  });
+
+  describe("createTransactionWithElements honors selected account", () => {
+    const tempDbPath = join(tmpDir, "account-routing.sqlite");
+
+    beforeAll(() => {
+      if (!existsSync(tmpDir)) {
+        mkdirSync(tmpDir, { recursive: true });
+      }
+      if (existsSync(tempDbPath)) {
+        rmSync(tempDbPath);
+      }
+      bootstrapSqlite(tempDbPath);
+    });
+
+    afterAll(() => {
+      if (existsSync(tempDbPath)) {
+        rmSync(tempDbPath);
+      }
+    });
+
+    it("persists transactions under the explicit accountId, not userId", () => {
+      const script = `
+const {
+  upsertUser,
+  createAccount,
+  createTransactionWithElements,
+  getTransactionsByUserId,
+  closeDb,
+} = await import("./server/db.ts");
+const { DatabaseSync } = await import("node:sqlite");
+
+await upsertUser({ openId: "oid-account-routing", name: "Routing User", loginMethod: "oidc" });
+closeDb();
+
+const sqlite = new DatabaseSync(process.env.DATABASE_URL);
+const user = sqlite.prepare("select id from users where openId = ?").get("oid-account-routing");
+sqlite.close();
+if (!user || typeof user.id !== "number" || user.id !== 1) {
+  throw new Error("expected-userId-1:" + JSON.stringify(user));
+}
+
+const firstAccount = await createAccount({ userId: user.id, name: "Primary", notes: null, initialBalance: "1000.00" });
+const secondAccount = await createAccount({ userId: user.id, name: "Swing", notes: null, initialBalance: "2000.00" });
+if (firstAccount.id !== 1 || secondAccount.id !== 2) {
+  throw new Error("unexpected-account-ids:" + JSON.stringify({ firstAccount, secondAccount }));
+}
+
+await createTransactionWithElements({
+  userId: user.id,
+  accountId: secondAccount.id,
+  tradingSystemId: null,
+  accountBalance: "2000.00",
+  tradingPair: "BTCUSDT",
+  timeFrame: "4H",
+  startTime: 1700000000000,
+  endTime: null,
+  direction: "long",
+  tradingLogic: "switched-account",
+  marketCycle: "Trading Range",
+  transactionType: "Trend",
+  status: "open",
+  outcome: null,
+  consecutiveLosses: 0,
+  riskRewardRatio: null,
+  returnAmount: null,
+  confidenceLevel: null,
+  tvUrl: null,
+}, []);
+
+const verifyDb = new DatabaseSync(process.env.DATABASE_URL);
+const persisted = verifyDb.prepare("select id, userId, accountId from transactions where tradingPair = ?").get("BTCUSDT");
+verifyDb.close();
+if (!persisted || persisted.accountId !== 2) {
+  throw new Error("wrong-accountId-persisted:" + JSON.stringify(persisted));
+}
+if (persisted.userId !== 1) {
+  throw new Error("wrong-userId-persisted:" + JSON.stringify(persisted));
+}
+
+const onSecondAccount = await getTransactionsByUserId(user.id, { accountId: secondAccount.id });
+const onFirstAccount = await getTransactionsByUserId(user.id, { accountId: firstAccount.id });
+closeDb();
+
+if (onSecondAccount.length !== 1 || onFirstAccount.length !== 0) {
+  throw new Error("bad-list-isolation:" + JSON.stringify({ onSecondAccount, onFirstAccount }));
+}
+
+console.log("ok");`;
+
+      const result = runNodeEval(script, tempDbPath);
+      expect(result).toContain("ok");
+    });
+
+    it("rejects createTransactionWithElements when accountId is missing", () => {
+      const script = `
+const {
+  upsertUser,
+  createTransactionWithElements,
+  closeDb,
+} = await import("./server/db.ts");
+const { DatabaseSync } = await import("node:sqlite");
+
+await upsertUser({ openId: "oid-account-missing", name: "Missing Account User", loginMethod: "oidc" });
+closeDb();
+
+const sqlite = new DatabaseSync(process.env.DATABASE_URL);
+const user = sqlite.prepare("select id from users where openId = ?").get("oid-account-missing");
+sqlite.close();
+if (!user || typeof user.id !== "number") throw new Error("missing-user");
+
+let threw = false;
+try {
+  await createTransactionWithElements({
+    userId: user.id,
+    tradingSystemId: null,
+    accountBalance: "1000.00",
+    tradingPair: "ETHUSDT",
+    timeFrame: "1H",
+    startTime: 1700000000000,
+    endTime: null,
+    direction: "short",
+    tradingLogic: "should-fail",
+    marketCycle: "Trading Range",
+    transactionType: "Trend",
+    status: "open",
+    outcome: null,
+    consecutiveLosses: 0,
+    riskRewardRatio: null,
+    returnAmount: null,
+    confidenceLevel: null,
+    tvUrl: null,
+  }, []);
+} catch (err) {
+  threw = true;
+}
+closeDb();
+
+if (!threw) throw new Error("expected-guard-to-throw");
 console.log("ok");`;
 
       const result = runNodeEval(script, tempDbPath);

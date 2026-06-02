@@ -109,6 +109,11 @@ export default function NewTransaction() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!accountId) {
+      toast.error("Please select an account before recording a trade");
+      return;
+    }
+
     if (
       !formData.tradingPair ||
       !formData.timeFrame ||
@@ -124,7 +129,10 @@ export default function NewTransaction() {
 
     const startTimestamp = new Date(formData.startTime).getTime();
 
+    // Snapshot the selected accountId at submit time so a later account
+    // switch cannot misroute this in-flight create request.
     createMutation.mutate({
+      accountId,
       tradingPair: formData.tradingPair,
       timeFrame: formData.timeFrame,
       startTime: startTimestamp,
@@ -556,7 +564,7 @@ export default function NewTransaction() {
                   <Button
                     type="submit"
                     className="w-full"
-                    disabled={createMutation.isPending}
+                    disabled={createMutation.isPending || !accountId}
                   >
                     {createMutation.isPending ? (
                       <>

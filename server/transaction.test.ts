@@ -194,6 +194,7 @@ describe("transaction procedures", () => {
       const caller = appRouter.createCaller(ctx);
 
       const result = await caller.transaction.create({
+        accountId: 1,
         tradingPair: "BTCUSDT",
         timeFrame: "4H",
         startTime: Date.now(),
@@ -211,12 +212,74 @@ describe("transaction procedures", () => {
       expect(db.createTransactionWithElements).toHaveBeenCalled();
     });
 
+    it("writes new transaction to the selected account when accountId differs from userId", async () => {
+      // User 1 has switched to account 2; create must persist accountId=2
+      // and never silently fall back to userId.
+      vi.mocked(db.getAccountById).mockResolvedValueOnce({
+        id: 2,
+        userId: 1,
+        name: "Swing Account",
+        notes: null,
+        initialBalance: "5000",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const ctx = createAuthContext();
+      const caller = appRouter.createCaller(ctx);
+
+      await caller.transaction.create({
+        accountId: 2,
+        tradingPair: "BTCUSDT",
+        timeFrame: "4H",
+        startTime: Date.now(),
+        direction: "long",
+        tradingLogic: "Switched account regression",
+        marketCycle: "Upward Trend",
+        transactionType: "Trend",
+        selectedElementIds: [],
+      });
+
+      expect(db.getAccountById).toHaveBeenCalledWith(2, 1);
+      expect(db.createTransactionWithElements).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 1,
+          accountId: 2,
+        }),
+        []
+      );
+    });
+
+    it("rejects create when account does not belong to the caller", async () => {
+      vi.mocked(db.getAccountById).mockResolvedValueOnce(undefined);
+
+      const ctx = createAuthContext();
+      const caller = appRouter.createCaller(ctx);
+
+      await expect(
+        caller.transaction.create({
+          accountId: 999,
+          tradingPair: "BTCUSDT",
+          timeFrame: "4H",
+          startTime: Date.now(),
+          direction: "long",
+          tradingLogic: "Should be rejected",
+          marketCycle: "Upward Trend",
+          transactionType: "Trend",
+          selectedElementIds: [],
+        })
+      ).rejects.toThrow(/Account not found/);
+
+      expect(db.createTransactionWithElements).not.toHaveBeenCalled();
+    });
+
     it("rejects create without marketCycle", async () => {
       const ctx = createAuthContext();
       const caller = appRouter.createCaller(ctx);
 
       await expect(
         caller.transaction.create({
+          accountId: 1,
           tradingPair: "BTCUSDT",
           timeFrame: "4H",
           startTime: Date.now(),
@@ -235,6 +298,7 @@ describe("transaction procedures", () => {
 
       await expect(
         caller.transaction.create({
+          accountId: 1,
           tradingPair: "BTCUSDT",
           timeFrame: "4H",
           startTime: Date.now(),
