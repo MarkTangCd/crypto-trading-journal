@@ -82,6 +82,58 @@ describe("SQLite Integration Tests", () => {
     });
   });
 
+  describe("auto-migrates a fresh sqlite file", () => {
+    const tempDbPath = join(tmpDir, "task7-auto-migrate.sqlite");
+
+    beforeAll(() => {
+      if (!existsSync(tmpDir)) {
+        mkdirSync(tmpDir, { recursive: true });
+      }
+
+      if (existsSync(tempDbPath)) {
+        rmSync(tempDbPath);
+      }
+    });
+
+    afterAll(() => {
+      if (existsSync(tempDbPath)) {
+        rmSync(tempDbPath);
+      }
+    });
+
+    it("creates tables and the anonymous user on first access", () => {
+      const script = `
+const { getOrCreateAnonymousUser, closeDb } = await import("./server/db.ts");
+const { DatabaseSync } = await import("node:sqlite");
+
+const user = await getOrCreateAnonymousUser();
+closeDb();
+
+const sqlite = new DatabaseSync(process.env.DATABASE_URL);
+const tables = sqlite.prepare("select name from sqlite_master where type = 'table' order by name").all();
+const accountColumns = sqlite.prepare("PRAGMA table_info(accounts)").all();
+sqlite.close();
+
+if (!user || user.openId !== "anonymous-user") {
+  throw new Error("anonymous-user-not-created");
+}
+
+if (!accountColumns.some(column => column.name === "initialBalance")) {
+  throw new Error("accounts-table-not-migrated");
+}
+
+console.log(JSON.stringify(tables.map(table => table.name)));
+`;
+
+      const result = runNodeEval(script, tempDbPath);
+      const tables = JSON.parse(result.trim()) as string[];
+
+      expect(tables).toContain("accounts");
+      expect(tables).toContain("users");
+      expect(tables).toContain("__drizzle_migrations");
+    });
+  });
+
   describe("opens a sqlite connection with a temp file", () => {
     const tempDbPath = join(
       __dirname,

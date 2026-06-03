@@ -1,8 +1,9 @@
 import { eq, desc, asc, and, inArray, sql } from "drizzle-orm";
 import { drizzle, type SqliteRemoteDatabase } from "drizzle-orm/sqlite-proxy";
+import { migrate } from "drizzle-orm/sqlite-proxy/migrator";
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import {
   InsertUser,
   type User,
@@ -32,6 +33,7 @@ import {
 
 const ZERO_DECIMAL = "0.00";
 const CLOSED_TRADE_STATUSES = ["closed", "reviewed"] as const;
+const MIGRATIONS_FOLDER = resolve(process.cwd(), "drizzle");
 
 function decimalToCents(value: string): number {
   const normalizedValue = normalizeFixedPoint(value);
@@ -96,6 +98,51 @@ function getLastInsertRowId(): number {
   return Number(row.id);
 }
 
+async function ensureDatabaseSchema(db: SqliteRemoteDatabase): Promise<void> {
+  if (!_sqliteDb) {
+    throw new Error("Database not available");
+  }
+
+  const existingTables = _sqliteDb
+    .prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+    )
+    .all() as Array<{ name: string }>;
+
+  if (existingTables.length > 0) {
+    return;
+  }
+
+  await migrate(
+    db,
+    async migrationQueries => {
+      const queries = migrationQueries.filter(query => query.trim().length > 0);
+      if (queries.length === 0) {
+        return;
+      }
+
+      _sqliteDb!.exec("BEGIN");
+      try {
+        for (const query of queries) {
+          _sqliteDb!.exec(query);
+        }
+        _sqliteDb!.exec("COMMIT");
+      } catch (error) {
+        try {
+          _sqliteDb!.exec("ROLLBACK");
+        } catch (rollbackError) {
+          console.error(
+            "[Database] Failed to rollback schema migration:",
+            rollbackError
+          );
+        }
+        throw error;
+      }
+    },
+    { migrationsFolder: MIGRATIONS_FOLDER }
+  );
+}
+
 export async function getDb(): Promise<SqliteRemoteDatabase | null> {
   if (!_db && ENV.databaseUrl) {
     try {
@@ -149,8 +196,12 @@ export async function getDb(): Promise<SqliteRemoteDatabase | null> {
       };
 
       _db = drizzle(proxyCallback);
+      await ensureDatabaseSchema(_db);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
+      if (_sqliteDb) {
+        _sqliteDb.close();
+      }
       _db = null;
       _sqliteDb = null;
     }

@@ -8,6 +8,13 @@
       "when": 1774623935210,
       "tag": "0000_glamorous_christian_walker",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1775872558631,
+      "tag": "0001_burly_star_brand",
+      "breakpoints": true
     }
   ]
 }
