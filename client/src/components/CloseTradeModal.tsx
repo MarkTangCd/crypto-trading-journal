@@ -7,22 +7,38 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { trpc } from "@/lib/trpc";
 import { useAccount } from "@/contexts/AccountContext";
-import { useState, useMemo, useEffect } from "react";
-import { toast } from "sonner";
+import {
+  Field,
+  INPUT_CLASS,
+  SELECT_CLASS,
+  type Tone,
+  fmtDateTime,
+  fmtMoney,
+  toneClass,
+} from "@/lib/ledger";
+import { trpc } from "@/lib/trpc";
+import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
-import { format } from "date-fns";
+import type React from "react";
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+
+type Outcome = "win" | "loss" | "breakeven" | "";
+
+interface FormData {
+  endTime: string;
+  outcome: Outcome;
+  riskRewardRatio: string;
+  returnAmount: string;
+}
+
+const EMPTY_FORM: FormData = {
+  endTime: "",
+  outcome: "",
+  riskRewardRatio: "",
+  returnAmount: "",
+};
 
 interface CloseTradeModalProps {
   open: boolean;
@@ -50,27 +66,22 @@ export function CloseTradeModal({
     { enabled: open && !!accountId }
   );
 
-  const [formData, setFormData] = useState({
-    endTime: "",
-    outcome: "" as "win" | "loss" | "breakeven" | "",
-    riskRewardRatio: "",
-    returnAmount: "",
-  });
+  const [formData, setFormData] = useState<FormData>(EMPTY_FORM);
 
   useEffect(() => {
     if (open) {
       const now = new Date();
       now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-      setFormData(prev => ({
-        ...prev,
+      setFormData({
+        ...EMPTY_FORM,
         endTime: now.toISOString().slice(0, 16),
-      }));
+      });
     }
   }, [open]);
 
   const closeMutation = trpc.transaction.close.useMutation({
     onSuccess: () => {
-      toast.success("Trade closed successfully");
+      toast.success("trade closed");
       utils.transaction.list.invalidate();
       utils.transaction.get.invalidate();
       utils.transaction.getFormDefaults.invalidate();
@@ -79,20 +90,33 @@ export function CloseTradeModal({
       onOpenChange(false);
     },
     onError: error => {
-      toast.error(error.message || "Failed to close trade");
+      toast.error(error.message || "failed to close trade");
     },
   });
 
-  const previewBalance = useMemo(() => {
-    if (!formDefaults?.currentBalance) return "0.00";
-    const current = parseFloat(formDefaults.currentBalance);
-    const ret = parseFloat(formData.returnAmount || "0");
-    return (current + ret).toFixed(2);
-  }, [formDefaults?.currentBalance, formData.returnAmount]);
+  const currentBalanceNum = useMemo(() => {
+    const v = parseFloat(formDefaults?.currentBalance || "0");
+    return Number.isNaN(v) ? 0 : v;
+  }, [formDefaults?.currentBalance]);
+
+  const returnNum = useMemo(() => {
+    const v = parseFloat(formData.returnAmount || "0");
+    return Number.isNaN(v) ? 0 : v;
+  }, [formData.returnAmount]);
+
+  const previewBalance = currentBalanceNum + returnNum;
+  const previewTone: Tone =
+    formData.outcome === "breakeven"
+      ? undefined
+      : returnNum > 0
+        ? "win"
+        : returnNum < 0
+          ? "loss"
+          : undefined;
+  const hasReturn = formData.returnAmount.trim() !== "";
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!trade) return;
 
     if (
@@ -101,14 +125,13 @@ export function CloseTradeModal({
       !formData.riskRewardRatio ||
       !formData.returnAmount
     ) {
-      toast.error("Please fill in all required fields");
+      toast.error("fill in all required fields");
       return;
     }
 
     const endTimestamp = new Date(formData.endTime).getTime();
-
     if (endTimestamp <= trade.startTime) {
-      toast.error("End time must be after start time");
+      toast.error("end time must be after start time");
       return;
     }
 
@@ -121,7 +144,10 @@ export function CloseTradeModal({
     });
   };
 
-  const updateField = (field: string, value: string) => {
+  const updateField = <K extends keyof FormData>(
+    field: K,
+    value: FormData[K]
+  ) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -132,135 +158,136 @@ export function CloseTradeModal({
       <DialogContent className="sm:max-w-[500px]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Close Trade</DialogTitle>
+            <DialogTitle>close trade</DialogTitle>
             <DialogDescription>
-              Record the outcome of your trade for {trade.tradingPair}
+              resolve the open position with outcome, r/r, and final pnl.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-4 py-4">
-            <div className="rounded-lg bg-muted/50 p-3 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold">{trade.tradingPair}</span>
-                <Badge
-                  variant="outline"
-                  className={
-                    trade.direction === "long"
-                      ? "direction-long border-current"
-                      : "direction-short border-current"
-                  }
-                >
-                  {trade.direction.toUpperCase()}
-                </Badge>
-                <Badge variant="secondary">{trade.timeFrame}</Badge>
+          <div className="space-y-8 pt-2">
+            {/* Trade context */}
+            <div className="border-y border-border py-3">
+              <div className="flex items-baseline gap-2 flex-wrap text-sm">
+                <span className="font-medium text-foreground">
+                  {trade.tradingPair}
+                </span>
+                <span className="text-muted-foreground">·</span>
+                <span>{trade.direction}</span>
+                <span className="text-muted-foreground">·</span>
+                <span>{trade.timeFrame}</span>
               </div>
-              <div className="text-sm text-muted-foreground">
-                Started: {format(new Date(trade.startTime), "MMM d, HH:mm")}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="endTime">End Time *</Label>
-              <Input
-                id="endTime"
-                type="datetime-local"
-                value={formData.endTime}
-                onChange={e => updateField("endTime", e.target.value)}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="outcome">Outcome *</Label>
-                <Select
-                  value={formData.outcome}
-                  onValueChange={v => updateField("outcome", v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select outcome" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="win">
-                      <span className="status-win font-medium">Win</span>
-                    </SelectItem>
-                    <SelectItem value="loss">
-                      <span className="status-loss font-medium">Loss</span>
-                    </SelectItem>
-                    <SelectItem value="breakeven">
-                      <span className="status-breakeven font-medium">
-                        Break Even
-                      </span>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="riskRewardRatio">Risk-Reward Ratio *</Label>
-                <Input
-                  id="riskRewardRatio"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="e.g., 2.5"
-                  value={formData.riskRewardRatio}
-                  onChange={e => updateField("riskRewardRatio", e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="returnAmount">Return Amount *</Label>
-              <Input
-                id="returnAmount"
-                type="number"
-                step="0.01"
-                placeholder="e.g., -50 or 100"
-                value={formData.returnAmount}
-                onChange={e => updateField("returnAmount", e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Negative for loss, positive for profit
+              <p className="text-label mt-1">
+                opened {fmtDateTime(trade.startTime)}
               </p>
             </div>
 
-            <div className="rounded-lg border p-3 space-y-2 mt-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Current Balance</span>
-                <span>${formDefaults?.currentBalance || "0.00"}</span>
+            {/* Form */}
+            <div className="space-y-6">
+              <Field label="end time" htmlFor="endTime">
+                <input
+                  id="endTime"
+                  type="datetime-local"
+                  value={formData.endTime}
+                  onChange={e => updateField("endTime", e.target.value)}
+                  className={INPUT_CLASS}
+                />
+              </Field>
+
+              <div className="grid grid-cols-2 gap-x-6 gap-y-6">
+                <Field label="outcome" htmlFor="outcome">
+                  <select
+                    id="outcome"
+                    value={formData.outcome}
+                    onChange={e =>
+                      updateField("outcome", e.target.value as Outcome)
+                    }
+                    className={SELECT_CLASS}
+                  >
+                    <option value="">—</option>
+                    <option value="win">win</option>
+                    <option value="loss">loss</option>
+                    <option value="breakeven">breakeven</option>
+                  </select>
+                </Field>
+                <Field label="r/r ratio" htmlFor="riskRewardRatio">
+                  <input
+                    id="riskRewardRatio"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="2.5"
+                    value={formData.riskRewardRatio}
+                    onChange={e =>
+                      updateField("riskRewardRatio", e.target.value)
+                    }
+                    className={INPUT_CLASS}
+                  />
+                </Field>
               </div>
-              <div className="flex justify-between text-sm font-medium">
-                <span>New Balance</span>
-                <span
-                  className={
-                    parseFloat(formData.returnAmount || "0") >= 0
-                      ? "status-win"
-                      : "status-loss"
-                  }
-                >
-                  ${previewBalance}
-                </span>
-              </div>
+
+              <Field label="return amount" htmlFor="returnAmount">
+                <input
+                  id="returnAmount"
+                  type="number"
+                  step="0.01"
+                  placeholder="-50 or 100"
+                  value={formData.returnAmount}
+                  onChange={e => updateField("returnAmount", e.target.value)}
+                  className={INPUT_CLASS}
+                />
+                <p className="text-label">
+                  negative for loss · positive for profit
+                </p>
+              </Field>
             </div>
+
+            {/* Hero: new balance preview */}
+            <section
+              className="border-t border-border pt-5"
+              aria-labelledby="preview-label"
+            >
+              <p id="preview-label" className="text-label">
+                new balance
+              </p>
+              <p
+                className={cn(
+                  "mt-2 text-4xl font-medium leading-none tabular-nums",
+                  hasReturn && toneClass(previewTone)
+                )}
+              >
+                ${fmtMoney(previewBalance)}
+              </p>
+              <p className="text-label mt-3">
+                from ${fmtMoney(currentBalanceNum)}
+                {hasReturn && (
+                  <>
+                    <span className="mx-2" aria-hidden="true">
+                      ·
+                    </span>
+                    <span className={toneClass(previewTone)}>
+                      {returnNum >= 0 ? "+" : "-"}$
+                      {fmtMoney(Math.abs(returnNum))}
+                    </span>
+                  </>
+                )}
+              </p>
+            </section>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="pt-6">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={closeMutation.isPending}
             >
-              Cancel
+              cancel
             </Button>
             <Button type="submit" disabled={closeMutation.isPending}>
               {closeMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Closing...
-                </>
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                "Close Trade"
+                "close trade"
               )}
             </Button>
           </DialogFooter>

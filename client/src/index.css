@@ -1,14 +1,14 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: var(--radius);
+  --radius-md: var(--radius);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-xl: var(--radius);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -41,87 +41,116 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --font-sans:
+    "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-mono:
+    "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 :root {
-  /* Scandinavian Minimalist Theme */
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --chart-1: oklch(0.75 0.08 250);
-  --chart-2: oklch(0.78 0.1 350);
-  --chart-3: oklch(0.65 0.12 160);
-  --chart-4: oklch(0.7 0.1 60);
-  --chart-5: oklch(0.6 0.15 300);
-  --radius: 0.5rem;
-  --background: oklch(0.975 0.005 250);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(0.995 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(0.995 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --secondary: oklch(0.94 0.01 250);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.94 0.01 250);
-  --muted-foreground: oklch(0.45 0.01 250);
-  --accent: oklch(0.88 0.06 250);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.55 0.2 25);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.88 0.01 250);
-  --input: oklch(0.88 0.01 250);
-  --ring: oklch(0.205 0 0);
-  --sidebar: oklch(0.995 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-accent: oklch(0.94 0.01 250);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.88 0.01 250);
-  --sidebar-ring: oklch(0.205 0 0);
+  /* The Bench Notebook palette. Source of truth: DESIGN.md. */
 
-  /* Custom trading colors */
-  --color-win: oklch(0.72 0.15 145);
-  --color-loss: oklch(0.65 0.2 25);
-  --color-breakeven: oklch(0.7 0.12 60);
-  --color-long: oklch(0.72 0.15 145);
-  --color-short: oklch(0.65 0.2 25);
-  --color-pastel-blue: oklch(0.85 0.08 250);
-  --color-pastel-pink: oklch(0.88 0.08 350);
+  /* Paper-and-Ink. There is no third neutral; hierarchy comes from weight and scale. */
+  --paper: oklch(0.985 0 0);
+  --ink: oklch(0.18 0 0);
+  --mist: oklch(0.92 0 0);
+
+  /* Signal hues. Only for trade-outcome semantics (One-Signal Rule). */
+  --win: oklch(0.5 0.13 150);
+  --loss: oklch(0.48 0.18 25);
+
+  /* Edges, not corners (anti Apple HIG / Material safety). */
+  --radius: 0;
+
+  /* shadcn semantic bridge */
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--paper);
+  --card-foreground: var(--ink);
+  --popover: var(--paper);
+  --popover-foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: var(--paper);
+  --secondary: oklch(0.96 0 0);
+  --secondary-foreground: var(--ink);
+  --muted: oklch(0.96 0 0);
+  --muted-foreground: oklch(0.42 0 0);
+  --accent: var(--mist);
+  --accent-foreground: var(--ink);
+  --destructive: var(--loss);
+  --destructive-foreground: var(--paper);
+  --border: var(--mist);
+  --input: var(--mist);
+  --ring: var(--ink);
+
+  /* Charts: ink ramp for neutral series, signal hues only for outcome series. */
+  --chart-1: var(--ink);
+  --chart-2: oklch(0.55 0 0);
+  --chart-3: oklch(0.72 0 0);
+  --chart-4: var(--win);
+  --chart-5: var(--loss);
+
+  /* Sidebar shares the page surface (no panel chrome). */
+  --sidebar: var(--paper);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--ink);
+  --sidebar-primary-foreground: var(--paper);
+  --sidebar-accent: var(--mist);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--mist);
+  --sidebar-ring: var(--ink);
+
+  /* Trade semantics bridge for the .status-* / .direction-* utilities. */
+  --color-win: var(--win);
+  --color-loss: var(--loss);
+  --color-breakeven: var(--ink); /* Breakeven Is Ink Rule */
+  --color-long: var(--win);
+  --color-short: var(--loss);
 }
 
 .dark {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-500);
-  --sidebar-primary-foreground: var(--color-blue-50);
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.85 0.005 65);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.85 0.005 65);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.85 0.005 65);
-  --secondary: oklch(0.24 0.006 286.033);
-  --secondary-foreground: oklch(0.7 0.005 65);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground: oklch(0.92 0.005 65);
-  --destructive: oklch(0.704 0.191 22.216);
+  /* Minimal ink-on-paper inversion. Dark mode is not yet committed in DESIGN.md;
+     this is a placeholder until the next visual pass. */
+  --background: oklch(0.18 0 0);
+  --foreground: oklch(0.92 0 0);
+  --card: oklch(0.18 0 0);
+  --card-foreground: oklch(0.92 0 0);
+  --popover: oklch(0.18 0 0);
+  --popover-foreground: oklch(0.92 0 0);
+  --primary: oklch(0.92 0 0);
+  --primary-foreground: oklch(0.18 0 0);
+  --secondary: oklch(0.24 0 0);
+  --secondary-foreground: oklch(0.92 0 0);
+  --muted: oklch(0.24 0 0);
+  --muted-foreground: oklch(0.68 0 0);
+  --accent: oklch(0.3 0 0);
+  --accent-foreground: oklch(0.92 0 0);
+  --destructive: oklch(0.62 0.18 25);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.488 0.243 264.376);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.85 0.005 65);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.488 0.243 264.376);
+  --border: oklch(0.3 0 0);
+  --input: oklch(0.3 0 0);
+  --ring: oklch(0.92 0 0);
+
+  --chart-1: oklch(0.92 0 0);
+  --chart-2: oklch(0.72 0 0);
+  --chart-3: oklch(0.55 0 0);
+  --chart-4: oklch(0.65 0.13 150);
+  --chart-5: oklch(0.62 0.18 25);
+
+  --sidebar: oklch(0.18 0 0);
+  --sidebar-foreground: oklch(0.92 0 0);
+  --sidebar-primary: oklch(0.92 0 0);
+  --sidebar-primary-foreground: oklch(0.18 0 0);
+  --sidebar-accent: oklch(0.3 0 0);
+  --sidebar-accent-foreground: oklch(0.92 0 0);
+  --sidebar-border: oklch(0.3 0 0);
+  --sidebar-ring: oklch(0.92 0 0);
+
+  --color-win: oklch(0.65 0.13 150);
+  --color-loss: oklch(0.62 0.18 25);
+  --color-breakeven: oklch(0.92 0 0);
+  --color-long: oklch(0.65 0.13 150);
+  --color-short: oklch(0.62 0.18 25);
 }
 
 @layer base {
@@ -129,10 +158,12 @@
     @apply border-border outline-ring/50;
   }
   html {
-    font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+    font-family:
+      "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
   body {
     @apply bg-background text-foreground antialiased;
+    font-variant-numeric: tabular-nums lining-nums;
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
@@ -151,21 +182,15 @@
   /**
    * Custom container utility that centers content and adds responsive padding.
    *
-   * This overrides Tailwind's default container behavior to:
-   * - Auto-center content (mx-auto)
-   * - Add responsive horizontal padding
-   * - Set max-width for large screens
-   *
    * Usage: <div className="container">...</div>
-   *
    * For custom widths, use max-w-* utilities directly:
-   * <div className="max-w-6xl mx-auto px-4">...</div>
+   *   <div className="max-w-6xl mx-auto px-4">...</div>
    */
   .container {
     width: 100%;
     margin-left: auto;
     margin-right: auto;
-    padding-left: 1rem; /* 16px - mobile padding */
+    padding-left: 1rem;
     padding-right: 1rem;
   }
 
@@ -176,35 +201,68 @@
 
   @media (min-width: 640px) {
     .container {
-      padding-left: 1.5rem; /* 24px - tablet padding */
+      padding-left: 1.5rem;
       padding-right: 1.5rem;
     }
   }
 
   @media (min-width: 1024px) {
     .container {
-      padding-left: 2rem; /* 32px - desktop padding */
+      padding-left: 2rem;
       padding-right: 2rem;
-      max-width: 1280px; /* Standard content width */
+      max-width: 1280px;
     }
   }
 }
 
 @layer utilities {
-  /* Typography utilities for Scandinavian style */
-  .text-title {
-    @apply text-4xl font-bold tracking-tight text-foreground;
+  /* Bench Notebook typography ramp.
+     One face (IBM Plex Mono); hierarchy via weight + scale. */
+
+  /* Hero numeral. One per screen (balance, win rate, R/R, position size). */
+  .text-display {
+    font-size: clamp(3rem, 8vw, 5.5rem);
+    line-height: 1;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums lining-nums;
   }
 
-  .text-subtitle {
-    @apply text-sm font-light tracking-wide text-muted-foreground;
+  /* Legacy hierarchy utilities, retuned to the Bench Notebook system.
+     Consumed by Dashboard / Settings / Transactions / NewTransaction page headers. */
+  .text-title {
+    font-size: 2rem;
+    line-height: 1.1;
+    font-weight: 500;
+    color: var(--foreground);
   }
 
   .text-heading {
-    @apply text-2xl font-semibold tracking-tight text-foreground;
+    font-size: 1.5rem;
+    line-height: 1.2;
+    font-weight: 500;
+    color: var(--foreground);
   }
 
-  /* Trading status colors */
+  .text-subtitle {
+    font-size: 0.875rem;
+    line-height: 1.5;
+    font-weight: 400;
+    color: var(--muted-foreground);
+  }
+
+  /* Instrument-marker label. Lowercase, tracked.
+     Use for field labels, axis ticks, table headers — not for sentences. */
+  .text-label {
+    font-size: 0.75rem;
+    line-height: 1.4;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    text-transform: lowercase;
+    color: var(--muted-foreground);
+  }
+
+  /* Trade-outcome colors. The only two signal hues in the system. */
   .status-win {
     color: var(--color-win);
   }

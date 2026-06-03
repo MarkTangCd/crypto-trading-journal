@@ -1,36 +1,3 @@
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { trpc } from "@/lib/trpc";
-import { useAccount } from "@/contexts/AccountContext";
-import { useState } from "react";
-import { useLocation } from "wouter";
-import { format } from "date-fns";
-import {
-  ArrowUpDown,
-  Plus,
-  Eye,
-  Trash2,
-  Loader2,
-  ExternalLink,
-  Gauge,
-} from "lucide-react";
-import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,19 +8,29 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
 import { CloseTradeModal } from "@/components/CloseTradeModal";
-import { getConfidenceBgColor, getConfidenceColor } from "@/lib/confidence";
+import { useAccount } from "@/contexts/AccountContext";
+import {
+  SELECT_CLASS,
+  type Tone,
+  fmtDateTime,
+  fmtMoney,
+  toneClass,
+} from "@/lib/ledger";
+import { trpc } from "@/lib/trpc";
+import { cn } from "@/lib/utils";
 import {
   MARKET_CYCLES,
   TRANSACTION_TYPES,
   type MarketCycle,
   type TransactionType,
 } from "@shared/const";
+import { Loader2 } from "lucide-react";
+import type React from "react";
+import { useState } from "react";
+import { toast } from "sonner";
+import { Link } from "wouter";
 
 type SortBy = "createdAt" | "startTime" | "endTime" | "returnAmount";
 type SortOrder = "asc" | "desc";
@@ -61,26 +38,72 @@ type Outcome = "win" | "loss" | "breakeven" | undefined;
 type Direction = "long" | "short" | undefined;
 type Status = "open" | "closed" | "reviewed" | undefined;
 
-function getStatusBadgeClass(status: string): string {
-  switch (status) {
-    case "open":
-      return "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800";
-    case "closed":
-      return "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800";
-    case "reviewed":
-      return "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800";
-    default:
-      return "bg-secondary text-secondary-foreground";
-  }
+const FILTER_SELECT_CLASS = cn(SELECT_CLASS, "min-w-[8rem]");
+
+function FilterField({
+  label,
+  value,
+  onChange,
+  children,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-label">{label}</span>
+      <select
+        className={FILTER_SELECT_CLASS}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+      >
+        {children}
+      </select>
+    </label>
+  );
+}
+
+function SortHeader({
+  active,
+  order,
+  onClick,
+  align,
+  children,
+}: {
+  active: boolean;
+  order: SortOrder;
+  onClick: () => void;
+  align: "left" | "right";
+  children: React.ReactNode;
+}) {
+  const indicator = active ? (order === "desc" ? "↓" : "↑") : "";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "text-label hover:text-foreground transition-colors inline-flex items-baseline gap-1",
+        align === "right" && "ml-auto"
+      )}
+    >
+      <span>{children}</span>
+      {indicator && (
+        <span aria-hidden="true" className="text-foreground">
+          {indicator}
+        </span>
+      )}
+    </button>
+  );
 }
 
 export default function Transactions() {
-  const [, setLocation] = useLocation();
   const utils = trpc.useUtils();
   const { selectedAccount } = useAccount();
   const accountId = selectedAccount?.id;
 
-  const [sortBy, setSortBy] = useState<SortBy>("createdAt");
+  const [sortBy, setSortBy] = useState<SortBy>("startTime");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [outcomeFilter, setOutcomeFilter] = useState<Outcome>(undefined);
   const [directionFilter, setDirectionFilter] = useState<Direction>(undefined);
@@ -123,14 +146,14 @@ export default function Transactions() {
 
   const deleteMutation = trpc.transaction.delete.useMutation({
     onSuccess: () => {
-      toast.success("Transaction deleted");
+      toast.success("trade deleted");
       utils.transaction.list.invalidate();
       utils.transaction.getFormDefaults.invalidate();
       utils.stats.get.invalidate();
       setDeleteId(null);
     },
     onError: error => {
-      toast.error(error.message || "Failed to delete transaction");
+      toast.error(error.message || "failed to delete trade");
     },
   });
 
@@ -152,415 +175,379 @@ export default function Transactions() {
     setPairFilter("");
   };
 
-  const hasFilters =
+  const hasFilters = Boolean(
     outcomeFilter ||
-    directionFilter ||
-    statusFilter ||
-    marketCycleFilter ||
-    transactionTypeFilter ||
-    pairFilter;
+      directionFilter ||
+      statusFilter ||
+      marketCycleFilter ||
+      transactionTypeFilter ||
+      pairFilter
+  );
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-heading">Transactions</h1>
-          <p className="text-subtitle mt-1">
-            View and manage your trading history
-          </p>
-        </div>
-        <Button onClick={() => setLocation("/transactions/new")}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Transaction
+    <div className="space-y-10">
+      <h1 className="sr-only">Transactions</h1>
+
+      <header className="flex items-baseline justify-between gap-4 flex-wrap">
+        <p className="text-title">transactions</p>
+        <Button variant="outline" asChild>
+          <Link href="/transactions/new">new trade</Link>
         </Button>
-      </div>
+      </header>
 
-      {/* Filters */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base font-medium">Filters</CardTitle>
-            {hasFilters && (
-              <Button variant="ghost" size="sm" onClick={clearFilters}>
-                Clear all
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
-            <div className="space-y-2">
-              <label className="text-sm text-muted-foreground">Status</label>
-              <Select
-                value={statusFilter || "all"}
-                onValueChange={v =>
-                  setStatusFilter(v === "all" ? undefined : (v as Status))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All statuses" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All statuses</SelectItem>
-                  <SelectItem value="open">Open</SelectItem>
-                  <SelectItem value="closed">Closed</SelectItem>
-                  <SelectItem value="reviewed">Reviewed</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm text-muted-foreground">
-                Market Cycle
-              </label>
-              <Select
-                value={marketCycleFilter || "all"}
-                onValueChange={v =>
-                  setMarketCycleFilter(
-                    v === "all" ? undefined : (v as MarketCycle)
-                  )
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All market cycles" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All market cycles</SelectItem>
-                  {MARKET_CYCLES.map(cycle => (
-                    <SelectItem key={cycle} value={cycle}>
-                      {cycle}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm text-muted-foreground">
-                Transaction Type
-              </label>
-              <Select
-                value={transactionTypeFilter || "all"}
-                onValueChange={v =>
-                  setTransactionTypeFilter(
-                    v === "all" ? undefined : (v as TransactionType)
-                  )
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All types" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All types</SelectItem>
-                  {TRANSACTION_TYPES.map(type => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm text-muted-foreground">Outcome</label>
-              <Select
-                value={outcomeFilter || "all"}
-                onValueChange={v =>
-                  setOutcomeFilter(v === "all" ? undefined : (v as Outcome))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All outcomes" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All outcomes</SelectItem>
-                  <SelectItem value="win">Win</SelectItem>
-                  <SelectItem value="loss">Loss</SelectItem>
-                  <SelectItem value="breakeven">Break Even</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm text-muted-foreground">Direction</label>
-              <Select
-                value={directionFilter || "all"}
-                onValueChange={v =>
-                  setDirectionFilter(v === "all" ? undefined : (v as Direction))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All directions" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All directions</SelectItem>
-                  <SelectItem value="long">Long</SelectItem>
-                  <SelectItem value="short">Short</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm text-muted-foreground">
-                Trading Pair
-              </label>
-              <Select
-                value={pairFilter || "all"}
-                onValueChange={v => setPairFilter(v === "all" ? "" : v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All pairs" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All pairs</SelectItem>
-                  {tradingPairs?.map(pair => (
-                    <SelectItem key={pair} value={pair}>
-                      {pair}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Transactions Table */}
-      <Card>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : transactions && transactions.length > 0 ? (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Pair</TableHead>
-                    <TableHead>Direction</TableHead>
-                    <TableHead>
-                      <button
-                        className="flex items-center gap-1 hover:text-foreground"
-                        onClick={() => toggleSort("startTime")}
-                      >
-                        Start Time
-                        <ArrowUpDown className="h-3 w-3" />
-                      </button>
-                    </TableHead>
-                    <TableHead>Time Frame</TableHead>
-                    <TableHead>Cycle</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Outcome</TableHead>
-                    <TableHead>
-                      <Tooltip>
-                        <TooltipTrigger className="flex items-center gap-1">
-                          <Gauge className="h-3 w-3" />
-                          Conf.
-                        </TooltipTrigger>
-                        <TooltipContent>Confidence Level</TooltipContent>
-                      </Tooltip>
-                    </TableHead>
-                    <TableHead>R:R</TableHead>
-                    <TableHead>
-                      <button
-                        className="flex items-center gap-1 hover:text-foreground"
-                        onClick={() => toggleSort("returnAmount")}
-                      >
-                        Return
-                        <ArrowUpDown className="h-3 w-3" />
-                      </button>
-                    </TableHead>
-                    <TableHead>Balance</TableHead>
-                    <TableHead>Streak</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {transactions.map(tx => (
-                    <TableRow key={tx.id}>
-                      <TableCell className="font-medium">
-                        {tx.tradingPair}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={
-                            tx.direction === "long"
-                              ? "direction-long border-current"
-                              : "direction-short border-current"
-                          }
-                        >
-                          {tx.direction.toUpperCase()}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {format(new Date(tx.startTime), "MMM d, yyyy HH:mm")}
-                      </TableCell>
-                      <TableCell>{tx.timeFrame}</TableCell>
-                      <TableCell>{tx.marketCycle || "—"}</TableCell>
-                      <TableCell>{tx.transactionType || "—"}</TableCell>
-                      <TableCell>
-                        {tx.outcome ? (
-                          <Badge
-                            variant="outline"
-                            className={
-                              tx.outcome === "win"
-                                ? "status-win border-current"
-                                : tx.outcome === "loss"
-                                  ? "status-loss border-current"
-                                  : "status-breakeven border-current"
-                            }
-                          >
-                            {tx.outcome === "breakeven"
-                              ? "BE"
-                              : tx.outcome.toUpperCase()}
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">
-                            —
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {tx.confidenceLevel !== null ? (
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <span
-                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${getConfidenceBgColor(tx.confidenceLevel)} ${getConfidenceColor(tx.confidenceLevel)}`}
-                              >
-                                {tx.confidenceLevel}/5
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              Confidence Score: {tx.confidenceLevel}/5
-                            </TooltipContent>
-                          </Tooltip>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">
-                            —
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>{tx.riskRewardRatio ?? "—"}</TableCell>
-                      <TableCell>
-                        {tx.returnAmount ? (
-                          <span
-                            className={
-                              parseFloat(tx.returnAmount) >= 0
-                                ? "status-win font-medium"
-                                : "status-loss font-medium"
-                            }
-                          >
-                            {parseFloat(tx.returnAmount) >= 0 ? "+" : ""}
-                            {tx.returnAmount}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">
-                            —
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {tx.accountBalance ? `$${tx.accountBalance}` : "—"}
-                      </TableCell>
-                      <TableCell>
-                        {tx.consecutiveLosses && tx.consecutiveLosses > 0 ? (
-                          <span className="status-loss">
-                            {tx.consecutiveLosses}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">
-                            {tx.consecutiveLosses ?? "—"}
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={getStatusBadgeClass(tx.status)}
-                        >
-                          {tx.status.toUpperCase()}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {tx.status === "open" && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 mr-2"
-                              onClick={() => setCloseTrade(tx)}
-                            >
-                              Close Trade
-                            </Button>
-                          )}
-                          {tx.tvUrl && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => window.open(tx.tvUrl!, "_blank")}
-                            >
-                              <ExternalLink className="h-4 w-4" />
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() =>
-                              setLocation(`/transactions/${tx.id}`)
-                            }
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() => setDeleteId(tx.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="rounded-full bg-muted p-4 mb-4">
-                <Plus className="h-8 w-8 text-muted-foreground" />
-              </div>
-              <h3 className="text-lg font-semibold">No transactions yet</h3>
-              <p className="text-sm text-muted-foreground mt-1 mb-4">
-                Start by recording your first trade
-              </p>
-              <Button onClick={() => setLocation("/transactions/new")}>
-                <Plus className="mr-2 h-4 w-4" />
-                New Transaction
-              </Button>
-            </div>
+      <section aria-label="filters" className="border-b border-border pb-5">
+        <div className="flex flex-wrap items-end gap-x-6 gap-y-4">
+          <FilterField
+            label="outcome"
+            value={outcomeFilter ?? "all"}
+            onChange={v =>
+              setOutcomeFilter(v === "all" ? undefined : (v as Outcome))
+            }
+          >
+            <option value="all">all</option>
+            <option value="win">win</option>
+            <option value="loss">loss</option>
+            <option value="breakeven">breakeven</option>
+          </FilterField>
+          <FilterField
+            label="direction"
+            value={directionFilter ?? "all"}
+            onChange={v =>
+              setDirectionFilter(v === "all" ? undefined : (v as Direction))
+            }
+          >
+            <option value="all">all</option>
+            <option value="long">long</option>
+            <option value="short">short</option>
+          </FilterField>
+          <FilterField
+            label="status"
+            value={statusFilter ?? "all"}
+            onChange={v =>
+              setStatusFilter(v === "all" ? undefined : (v as Status))
+            }
+          >
+            <option value="all">all</option>
+            <option value="open">open</option>
+            <option value="closed">closed</option>
+            <option value="reviewed">reviewed</option>
+          </FilterField>
+          <FilterField
+            label="pair"
+            value={pairFilter || "all"}
+            onChange={v => setPairFilter(v === "all" ? "" : v)}
+          >
+            <option value="all">all</option>
+            {tradingPairs?.map(p => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </FilterField>
+          <FilterField
+            label="cycle"
+            value={marketCycleFilter ?? "all"}
+            onChange={v =>
+              setMarketCycleFilter(
+                v === "all" ? undefined : (v as MarketCycle)
+              )
+            }
+          >
+            <option value="all">all</option>
+            {MARKET_CYCLES.map(c => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </FilterField>
+          <FilterField
+            label="type"
+            value={transactionTypeFilter ?? "all"}
+            onChange={v =>
+              setTransactionTypeFilter(
+                v === "all" ? undefined : (v as TransactionType)
+              )
+            }
+          >
+            <option value="all">all</option>
+            {TRANSACTION_TYPES.map(t => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </FilterField>
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="text-label hover:text-foreground transition-colors ml-auto self-end pb-1.5"
+            >
+              clear filters →
+            </button>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
-      {/* Delete Confirmation Dialog */}
+      {isLoading ? (
+        <div className="flex items-center justify-center min-h-[200px]">
+          <Loader2
+            className="h-6 w-6 animate-spin text-foreground"
+            aria-label="loading"
+          />
+        </div>
+      ) : transactions && transactions.length > 0 ? (
+        <section aria-label="trades" className="overflow-x-auto">
+          <table className="w-full text-sm tabular-nums">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="py-3 pr-4 text-left">
+                  <SortHeader
+                    active={sortBy === "startTime"}
+                    order={sortOrder}
+                    onClick={() => toggleSort("startTime")}
+                    align="left"
+                  >
+                    date
+                  </SortHeader>
+                </th>
+                <th className="py-3 px-4 text-left text-label font-normal">
+                  pair
+                </th>
+                <th className="py-3 px-4 text-left text-label font-normal">
+                  side
+                </th>
+                <th className="py-3 px-4 text-left text-label font-normal">
+                  outcome
+                </th>
+                <th className="py-3 px-4 text-right text-label font-normal">
+                  conf
+                </th>
+                <th className="py-3 px-4 text-right text-label font-normal">
+                  r/r
+                </th>
+                <th className="py-3 px-4 text-right">
+                  <SortHeader
+                    active={sortBy === "returnAmount"}
+                    order={sortOrder}
+                    onClick={() => toggleSort("returnAmount")}
+                    align="right"
+                  >
+                    return
+                  </SortHeader>
+                </th>
+                <th className="py-3 px-4 text-right text-label font-normal">
+                  balance
+                </th>
+                <th
+                  className="py-3 pl-4 text-right text-label font-normal"
+                  aria-label="actions"
+                />
+              </tr>
+            </thead>
+            <tbody>
+              {transactions.map(tx => {
+                const outcomeTone: Tone =
+                  tx.outcome === "win"
+                    ? "win"
+                    : tx.outcome === "loss"
+                      ? "loss"
+                      : undefined;
+                const returnNum =
+                  tx.returnAmount !== null
+                    ? parseFloat(tx.returnAmount)
+                    : null;
+                const returnTone: Tone =
+                  returnNum === null
+                    ? undefined
+                    : returnNum > 0
+                      ? "win"
+                      : returnNum < 0
+                        ? "loss"
+                        : undefined;
+                const balanceNum =
+                  tx.accountBalance !== null
+                    ? parseFloat(tx.accountBalance)
+                    : null;
+                const meta = [
+                  tx.timeFrame,
+                  tx.marketCycle,
+                  tx.transactionType,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+                  .toLowerCase();
+                const statusMark =
+                  tx.status === "open"
+                    ? "[open]"
+                    : tx.status === "reviewed"
+                      ? "[reviewed]"
+                      : null;
+                return (
+                  <tr
+                    key={tx.id}
+                    className="border-b border-border last:border-b-0 align-top"
+                  >
+                    <td className="py-4 pr-4 whitespace-nowrap text-muted-foreground">
+                      {fmtDateTime(tx.startTime)}
+                    </td>
+                    <td className="py-4 px-4 min-w-[10rem]">
+                      <div className="flex items-baseline gap-2 flex-wrap">
+                        <span className="font-medium text-foreground">
+                          {tx.tradingPair}
+                        </span>
+                        {statusMark && (
+                          <span className="text-label">{statusMark}</span>
+                        )}
+                      </div>
+                      {meta && (
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {meta}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-4 px-4">{tx.direction}</td>
+                    <td className={cn("py-4 px-4", toneClass(outcomeTone))}>
+                      {tx.outcome ? (
+                        tx.outcome === "breakeven" ? (
+                          "be"
+                        ) : (
+                          tx.outcome
+                        )
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                      {tx.outcome === "loss" &&
+                        tx.consecutiveLosses != null &&
+                        tx.consecutiveLosses > 3 && (
+                          <div className="mt-1 text-xs status-loss">
+                            {tx.consecutiveLosses} in a row
+                          </div>
+                        )}
+                    </td>
+                    <td className="py-4 px-4 text-right">
+                      {tx.confidenceLevel !== null ? (
+                        `${tx.confidenceLevel}/5`
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="py-4 px-4 text-right">
+                      {tx.riskRewardRatio ?? (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td
+                      className={cn(
+                        "py-4 px-4 text-right font-medium whitespace-nowrap",
+                        toneClass(returnTone)
+                      )}
+                    >
+                      {returnNum !== null ? (
+                        <>
+                          {returnNum >= 0 ? "+" : "-"}$
+                          {fmtMoney(Math.abs(returnNum))}
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground font-normal">
+                          —
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-4 px-4 text-right whitespace-nowrap">
+                      {balanceNum !== null ? (
+                        `$${fmtMoney(balanceNum)}`
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="py-4 pl-4 text-right whitespace-nowrap text-sm">
+                      <div className="inline-flex items-center gap-3">
+                        {tx.status === "open" && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setCloseTrade({
+                                id: tx.id,
+                                tradingPair: tx.tradingPair,
+                                direction: tx.direction,
+                                timeFrame: tx.timeFrame,
+                                startTime: tx.startTime,
+                              })
+                            }
+                            className="hover:text-foreground transition-colors"
+                          >
+                            close →
+                          </button>
+                        )}
+                        {tx.tvUrl && (
+                          <a
+                            href={tx.tvUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-muted-foreground hover:text-foreground transition-colors"
+                            aria-label="open in tradingview"
+                          >
+                            tv ↗
+                          </a>
+                        )}
+                        <Link
+                          href={`/transactions/${tx.id}`}
+                          className="hover:text-foreground transition-colors"
+                        >
+                          view →
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteId(tx.id)}
+                          className="text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          del
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </section>
+      ) : hasFilters ? (
+        <section className="border-t border-border pt-10 max-w-md">
+          <p>no trades match these filters.</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            adjust or clear the filter set.
+          </p>
+          <Button variant="outline" className="mt-5" onClick={clearFilters}>
+            clear filters
+          </Button>
+        </section>
+      ) : (
+        <section className="border-t border-border pt-16 text-center">
+          <p>no trades recorded.</p>
+          <p className="text-sm text-muted-foreground mt-2">
+            log a trade to start the journal.
+          </p>
+          <Button variant="outline" className="mt-6" asChild>
+            <Link href="/transactions/new">log a trade</Link>
+          </Button>
+        </section>
+      )}
+
       <AlertDialog
         open={deleteId !== null}
         onOpenChange={() => setDeleteId(null)}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Transaction</AlertDialogTitle>
+            <AlertDialogTitle>delete trade?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this transaction? This action
-              cannot be undone.
+              this removes the trade and its tagged elements. it can&apos;t be
+              undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() =>
                 deleteId && deleteMutation.mutate({ id: deleteId })
               }
@@ -568,7 +555,7 @@ export default function Transactions() {
               {deleteMutation.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                "Delete"
+                "delete"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

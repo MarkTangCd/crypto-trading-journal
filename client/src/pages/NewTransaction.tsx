@@ -1,41 +1,45 @@
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { getConfidenceColor, getConfidenceLabel } from "@/lib/confidence";
-import { trpc } from "@/lib/trpc";
-import { useAccount } from "@/contexts/AccountContext";
-import { useState, useMemo } from "react";
-import { useLocation } from "wouter";
-import { toast } from "sonner";
-import {
-  Loader2,
-  Layers,
-  AlertCircle,
-  Gauge,
-  Tag,
-  BarChart3,
-} from "lucide-react";
 import CandlestickChart from "@/components/CandlestickChart";
+import { useAccount } from "@/contexts/AccountContext";
+import { getConfidenceLabel } from "@/lib/confidence";
+import {
+  Field,
+  INPUT_CLASS,
+  SELECT_CLASS,
+  SectionHeader,
+  TEXTAREA_CLASS,
+  fmtMoney,
+} from "@/lib/ledger";
 import { MOCK_CANDLE_DATA } from "@/lib/mockCandleData";
+import { trpc } from "@/lib/trpc";
+import { cn } from "@/lib/utils";
+import {
+  MARKET_CYCLES,
+  TRANSACTION_TYPES,
+  type MarketCycle,
+  type TransactionType,
+} from "@shared/const";
+import { Loader2 } from "lucide-react";
+import type React from "react";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
+import { Link, useLocation } from "wouter";
 
 const TIME_FRAMES = ["1m", "5m", "15m", "30m", "1H", "4H", "1D", "1W", "1M"];
+
+type Direction = "long" | "short" | "";
+
+interface FormData {
+  tradingPair: string;
+  timeFrame: string;
+  startTime: string;
+  direction: Direction;
+  tradingLogic: string;
+  marketCycle: MarketCycle | "";
+  transactionType: TransactionType | "";
+  tvUrl: string;
+}
 
 export default function NewTransaction() {
   const [, setLocation] = useLocation();
@@ -51,7 +55,7 @@ export default function NewTransaction() {
 
   const createMutation = trpc.transaction.create.useMutation({
     onSuccess: () => {
-      toast.success("Transaction recorded successfully");
+      toast.success("trade recorded");
       utils.transaction.list.invalidate();
       utils.transaction.getFormDefaults.invalidate();
       utils.stats.get.invalidate();
@@ -59,58 +63,49 @@ export default function NewTransaction() {
       setLocation("/transactions");
     },
     onError: error => {
-      toast.error(error.message || "Failed to create transaction");
+      toast.error(error.message || "failed to record trade");
     },
   });
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     tradingPair: "",
     timeFrame: "",
     startTime: "",
-    direction: "" as "long" | "short" | "",
+    direction: "",
     tradingLogic: "",
-    marketCycle: "" as
-      | "Trading Range"
-      | "Upward Tight Channel"
-      | "Downward Tight Channel"
-      | "Upward Channel"
-      | "Downward Channel"
-      | "Upward Trend"
-      | "Downward Trend"
-      | "",
-    transactionType: "" as "Trend" | "Reversal" | "",
+    marketCycle: "",
+    transactionType: "",
     tvUrl: "",
   });
 
   const [selectedElementIds, setSelectedElementIds] = useState<number[]>([]);
 
-  // Calculate confidence level from selected elements
+  const activeSystemElements = useMemo(
+    () => formDefaults?.activeSystem?.elements || [],
+    [formDefaults?.activeSystem?.elements]
+  );
+
   const calculatedConfidence = useMemo(() => {
-    if (
-      !formDefaults?.activeSystem?.elements ||
-      selectedElementIds.length === 0
-    ) {
+    if (activeSystemElements.length === 0 || selectedElementIds.length === 0) {
       return null;
     }
-    const selectedElements = formDefaults.activeSystem.elements.filter(
-      (el: { id: number; confidenceLevel: number }) =>
-        selectedElementIds.includes(el.id)
+    const picked = activeSystemElements.filter(
+      (el: { id: number }) => selectedElementIds.includes(el.id)
     );
-    if (selectedElements.length === 0) return null;
-
-    const totalConfidence = selectedElements.reduce(
+    if (picked.length === 0) return null;
+    const total = picked.reduce(
       (sum: number, el: { confidenceLevel: number }) =>
         sum + el.confidenceLevel,
       0
     );
-    return parseFloat((totalConfidence / selectedElements.length).toFixed(1));
-  }, [formDefaults?.activeSystem?.elements, selectedElementIds]);
+    return parseFloat((total / picked.length).toFixed(1));
+  }, [activeSystemElements, selectedElementIds]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!accountId) {
-      toast.error("Please select an account before recording a trade");
+      toast.error("select an account first");
       return;
     }
 
@@ -123,7 +118,7 @@ export default function NewTransaction() {
       !formData.marketCycle ||
       !formData.transactionType
     ) {
-      toast.error("Please fill in all required fields");
+      toast.error("fill in all required fields");
       return;
     }
 
@@ -138,14 +133,17 @@ export default function NewTransaction() {
       startTime: startTimestamp,
       direction: formData.direction as "long" | "short",
       tradingLogic: formData.tradingLogic,
-      marketCycle: formData.marketCycle,
-      transactionType: formData.transactionType,
+      marketCycle: formData.marketCycle as MarketCycle,
+      transactionType: formData.transactionType as TransactionType,
       tvUrl: formData.tvUrl || undefined,
       selectedElementIds,
     });
   };
 
-  const updateField = (field: string, value: string) => {
+  const updateField = <K extends keyof FormData>(
+    field: K,
+    value: FormData[K]
+  ) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -160,433 +158,317 @@ export default function NewTransaction() {
   if (loadingDefaults) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <Loader2
+          className="h-6 w-6 animate-spin text-foreground"
+          aria-label="loading"
+        />
       </div>
     );
   }
 
-  const activeSystemElements = formDefaults?.activeSystem?.elements || [];
+  const activeSystem = formDefaults?.activeSystem;
+  const currentBalance = formDefaults?.currentBalance || "0";
+  const streak = formDefaults?.consecutiveLosses ?? 0;
+  const confidenceLabel =
+    calculatedConfidence !== null
+      ? getConfidenceLabel(calculatedConfidence).toLowerCase()
+      : null;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-heading">Open Trade</h1>
-        <p className="text-subtitle mt-1">
-          Log a new trading record with all relevant details
-        </p>
+    <div className="space-y-12 max-w-3xl">
+      <h1 className="sr-only">new trade</h1>
+
+      <Link
+        href="/transactions"
+        className="text-label hover:text-foreground transition-colors inline-block"
+      >
+        ← transactions
+      </Link>
+
+      {/* Header */}
+      <header className="space-y-2">
+        <p className="text-title">open trade</p>
+        <p className="text-label">log a new entry to the journal</p>
+      </header>
+
+      {/* Account meta strip: system · balance · streak */}
+      <div className="border-y border-border py-4 grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-3">
+        <div className="flex items-baseline justify-between gap-2 sm:block">
+          <p className="text-label">system</p>
+          <p className="sm:mt-1.5 flex items-baseline gap-2 flex-wrap">
+            {activeSystem ? (
+              <>
+                <span className="font-medium text-foreground">
+                  {activeSystem.name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setLocation("/trading-systems")}
+                  className="text-label hover:text-foreground transition-colors"
+                >
+                  change →
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="text-muted-foreground">none</span>
+                <button
+                  type="button"
+                  onClick={() => setLocation("/trading-systems")}
+                  className="text-label hover:text-foreground transition-colors"
+                >
+                  select →
+                </button>
+              </>
+            )}
+          </p>
+        </div>
+        <div className="flex items-baseline justify-between gap-2 sm:block">
+          <p className="text-label">current balance</p>
+          <p className="sm:mt-1.5 tabular-nums">${fmtMoney(currentBalance)}</p>
+        </div>
+        <div className="flex items-baseline justify-between gap-2 sm:block">
+          <p className="text-label">losing streak</p>
+          <p
+            className={cn(
+              "sm:mt-1.5 tabular-nums",
+              streak > 3 && "status-loss"
+            )}
+          >
+            {streak}
+          </p>
+        </div>
       </div>
 
-      <form onSubmit={handleSubmit}>
-        <div className="grid gap-6 lg:grid-cols-3">
-          {/* Left column - Main form */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Active Trading System Banner */}
-            {formDefaults?.activeSystem ? (
-              <Card className="border-green-200 bg-green-50/50">
-                <CardContent className="py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="rounded-lg bg-green-100 p-2">
-                      <Layers className="h-5 w-5 text-green-600" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm text-muted-foreground">
-                        This trade will be linked to
-                      </p>
-                      <p className="font-semibold">
-                        {formDefaults.activeSystem.name}
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setLocation("/trading-systems")}
-                    >
-                      Change
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : (
-              <Card className="border-amber-200 bg-amber-50/50">
-                <CardContent className="py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="rounded-lg bg-amber-100 p-2">
-                      <AlertCircle className="h-5 w-5 text-amber-600" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium">No active trading system</p>
-                      <p className="text-sm text-muted-foreground">
-                        This trade won't be linked to any system
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setLocation("/trading-systems")}
-                    >
-                      Select System
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+      {/* Hero: calculated confidence (live) */}
+      <section aria-labelledby="conf-label">
+        <p id="conf-label" className="text-label">
+          confidence
+        </p>
+        <p
+          className={cn(
+            "text-display mt-2 tabular-nums",
+            calculatedConfidence === null && "text-muted-foreground"
+          )}
+        >
+          {calculatedConfidence !== null
+            ? `${calculatedConfidence}/5`
+            : "—/5"}
+        </p>
+        <p className="text-label mt-3">
+          {calculatedConfidence !== null
+            ? `${selectedElementIds.length} of ${activeSystemElements.length} elements · ${confidenceLabel}`
+            : activeSystemElements.length > 0
+              ? "select trading elements below"
+              : "no active system — confidence won't be computed"}
+        </p>
+      </section>
 
-            {/* Trading Elements Selection */}
-            {activeSystemElements.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                    <Tag className="h-5 w-5" />
-                    Trading Elements Used
-                  </CardTitle>
-                  <CardDescription className="text-subtitle">
-                    Select the elements from your trading system that were
-                    present in this trade
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {activeSystemElements.map(
-                      (element: {
-                        id: number;
-                        name: string;
-                        confidenceLevel: number;
-                        description?: string | null;
-                      }) => (
-                        <div
-                          key={element.id}
-                          className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
-                            selectedElementIds.includes(element.id)
-                              ? "border-primary bg-primary/5"
-                              : "hover:border-muted-foreground/30"
-                          }`}
-                          onClick={() => toggleElement(element.id)}
+      <form onSubmit={handleSubmit} className="space-y-12">
+        {/* Instrument */}
+        <section className="space-y-6">
+          <SectionHeader>instrument</SectionHeader>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-6">
+            <Field label="trading pair" htmlFor="tradingPair">
+              <input
+                id="tradingPair"
+                type="text"
+                placeholder="btcusdt"
+                value={formData.tradingPair}
+                onChange={e =>
+                  updateField("tradingPair", e.target.value.toUpperCase())
+                }
+                className={cn(INPUT_CLASS, "uppercase")}
+              />
+            </Field>
+            <Field label="timeframe" htmlFor="timeFrame">
+              <select
+                id="timeFrame"
+                value={formData.timeFrame}
+                onChange={e => updateField("timeFrame", e.target.value)}
+                className={SELECT_CLASS}
+              >
+                <option value="">—</option>
+                {TIME_FRAMES.map(tf => (
+                  <option key={tf} value={tf}>
+                    {tf}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="direction" htmlFor="direction">
+              <select
+                id="direction"
+                value={formData.direction}
+                onChange={e =>
+                  updateField("direction", e.target.value as Direction)
+                }
+                className={SELECT_CLASS}
+              >
+                <option value="">—</option>
+                <option value="long">long</option>
+                <option value="short">short</option>
+              </select>
+            </Field>
+          </div>
+        </section>
+
+        {/* Chart */}
+        <section className="space-y-4">
+          <SectionHeader>chart</SectionHeader>
+          <CandlestickChart data={MOCK_CANDLE_DATA} />
+          <p className="text-label">click a candle to mark the entry point.</p>
+        </section>
+
+        {/* Entry time */}
+        <section className="space-y-6">
+          <SectionHeader>entry time</SectionHeader>
+          <Field label="started" htmlFor="startTime">
+            <input
+              id="startTime"
+              type="datetime-local"
+              value={formData.startTime}
+              onChange={e => updateField("startTime", e.target.value)}
+              className={INPUT_CLASS}
+            />
+          </Field>
+        </section>
+
+        {/* Context */}
+        <section className="space-y-6">
+          <SectionHeader>context</SectionHeader>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+            <Field label="market cycle" htmlFor="marketCycle">
+              <select
+                id="marketCycle"
+                value={formData.marketCycle}
+                onChange={e =>
+                  updateField(
+                    "marketCycle",
+                    e.target.value as MarketCycle | ""
+                  )
+                }
+                className={SELECT_CLASS}
+              >
+                <option value="">—</option>
+                {MARKET_CYCLES.map(c => (
+                  <option key={c} value={c}>
+                    {c.toLowerCase()}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="type" htmlFor="transactionType">
+              <select
+                id="transactionType"
+                value={formData.transactionType}
+                onChange={e =>
+                  updateField(
+                    "transactionType",
+                    e.target.value as TransactionType | ""
+                  )
+                }
+                className={SELECT_CLASS}
+              >
+                <option value="">—</option>
+                {TRANSACTION_TYPES.map(t => (
+                  <option key={t} value={t}>
+                    {t.toLowerCase()}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        </section>
+
+        {/* Elements */}
+        {activeSystemElements.length > 0 && (
+          <section className="space-y-6">
+            <SectionHeader>elements</SectionHeader>
+            <ul className="divide-y divide-border border-b border-border">
+              {activeSystemElements.map(
+                (element: {
+                  id: number;
+                  name: string;
+                  confidenceLevel: number;
+                  description?: string | null;
+                }) => {
+                  const checked = selectedElementIds.includes(element.id);
+                  return (
+                    <li key={element.id}>
+                      <label className="flex items-baseline gap-3 py-3 cursor-pointer group">
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={() => toggleElement(element.id)}
+                          className="rounded-none translate-y-0.5"
+                        />
+                        <span
+                          className={cn(
+                            "flex-1 font-medium transition-colors",
+                            !checked &&
+                              "text-muted-foreground group-hover:text-foreground"
+                          )}
                         >
-                          <Checkbox
-                            checked={selectedElementIds.includes(element.id)}
-                            onCheckedChange={() => toggleElement(element.id)}
-                            className="mt-0.5"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">
-                                {element.name}
-                              </span>
-                              <span
-                                className={`text-xs ${getConfidenceColor(element.confidenceLevel)}`}
-                              >
-                                {element.confidenceLevel}/5
-                              </span>
-                            </div>
-                            {element.description && (
-                              <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
-                                {element.description}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    )}
-                  </div>
-
-                  {selectedElementIds.length > 0 &&
-                    calculatedConfidence !== null && (
-                      <div className="mt-4 p-3 rounded-lg bg-muted/50 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Gauge className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm text-muted-foreground">
-                            Overall Confidence Score
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`text-lg font-bold ${getConfidenceColor(calculatedConfidence)}`}
-                          >
-                            {calculatedConfidence}/5
-                          </span>
-                          <span
-                            className={`text-sm ${getConfidenceColor(calculatedConfidence)}`}
-                          >
-                            ({getConfidenceLabel(calculatedConfidence)})
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                </CardContent>
-              </Card>
-            )}
-
-            <Card data-testid="candlestick-chart-card">
-              <CardHeader>
-                <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5" />
-                  Price Chart
-                </CardTitle>
-                <CardDescription className="text-subtitle">
-                  Click a candle to mark the entry point
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <CandlestickChart data={MOCK_CANDLE_DATA} />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg font-semibold">
-                  Trade Details
-                </CardTitle>
-                <CardDescription className="text-subtitle">
-                  Enter the basic information about your trade
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="tradingPair">Trading Pair *</Label>
-                    <Input
-                      id="tradingPair"
-                      placeholder="e.g., BTCUSDT"
-                      value={formData.tradingPair}
-                      onChange={e =>
-                        updateField("tradingPair", e.target.value.toUpperCase())
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="timeFrame">Time Frame *</Label>
-                    <Select
-                      value={formData.timeFrame}
-                      onValueChange={v => updateField("timeFrame", v)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select time frame" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {TIME_FRAMES.map(tf => (
-                          <SelectItem key={tf} value={tf}>
-                            {tf}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="startTime">Start Time *</Label>
-                  <Input
-                    id="startTime"
-                    type="datetime-local"
-                    value={formData.startTime}
-                    onChange={e => updateField("startTime", e.target.value)}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="direction">Direction *</Label>
-                  <Select
-                    value={formData.direction}
-                    onValueChange={v => updateField("direction", v)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select direction" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="long">
-                        <span className="direction-long font-medium">Long</span>
-                      </SelectItem>
-                      <SelectItem value="short">
-                        <span className="direction-short font-medium">
-                          Short
+                          {element.name}
+                          {element.description && (
+                            <span className="text-muted-foreground font-normal ml-2 text-xs">
+                              · {element.description}
+                            </span>
+                          )}
                         </span>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                        <span className="text-label tabular-nums">
+                          {element.confidenceLevel}/5
+                        </span>
+                      </label>
+                    </li>
+                  );
+                }
+              )}
+            </ul>
+          </section>
+        )}
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="marketCycle">Market Cycle *</Label>
-                    <Select
-                      value={formData.marketCycle}
-                      onValueChange={v => updateField("marketCycle", v)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select market cycle" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Trading Range">
-                          Trading Range
-                        </SelectItem>
-                        <SelectItem value="Upward Tight Channel">
-                          Upward Tight Channel
-                        </SelectItem>
-                        <SelectItem value="Downward Tight Channel">
-                          Downward Tight Channel
-                        </SelectItem>
-                        <SelectItem value="Upward Channel">
-                          Upward Channel
-                        </SelectItem>
-                        <SelectItem value="Downward Channel">
-                          Downward Channel
-                        </SelectItem>
-                        <SelectItem value="Upward Trend">
-                          Upward Trend
-                        </SelectItem>
-                        <SelectItem value="Downward Trend">
-                          Downward Trend
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="transactionType">Transaction Type *</Label>
-                    <Select
-                      value={formData.transactionType}
-                      onValueChange={v => updateField("transactionType", v)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Trend">Trend</SelectItem>
-                        <SelectItem value="Reversal">Reversal</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+        {/* Thesis */}
+        <section className="space-y-6">
+          <SectionHeader>thesis</SectionHeader>
+          <Field label="why this trade?" htmlFor="tradingLogic">
+            <textarea
+              id="tradingLogic"
+              rows={5}
+              placeholder="state the setup, the trigger, the invalidation."
+              value={formData.tradingLogic}
+              onChange={e => updateField("tradingLogic", e.target.value)}
+              className={cn(TEXTAREA_CLASS, "min-h-[7rem]")}
+            />
+          </Field>
+          <Field label="tradingview url (optional)" htmlFor="tvUrl">
+            <input
+              id="tvUrl"
+              type="url"
+              placeholder="https://www.tradingview.com/chart/..."
+              value={formData.tvUrl}
+              onChange={e => updateField("tvUrl", e.target.value)}
+              className={INPUT_CLASS}
+            />
+          </Field>
+        </section>
 
-                <div className="space-y-2">
-                  <Label htmlFor="tradingLogic">Trading Logic *</Label>
-                  <Textarea
-                    id="tradingLogic"
-                    placeholder="Describe your rationale for initiating this trade..."
-                    rows={4}
-                    value={formData.tradingLogic}
-                    onChange={e => updateField("tradingLogic", e.target.value)}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="tvUrl">TradingView URL (Optional)</Label>
-                  <Input
-                    id="tvUrl"
-                    type="url"
-                    placeholder="https://www.tradingview.com/chart/..."
-                    value={formData.tvUrl}
-                    onChange={e => updateField("tvUrl", e.target.value)}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Right column - Summary */}
-          <div className="space-y-6">
-            <Card className="sticky top-4">
-              <CardHeader>
-                <CardTitle className="text-lg font-semibold">
-                  Account Summary
-                </CardTitle>
-                <CardDescription className="text-subtitle">
-                  Auto-calculated values
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-3">
-                  {formDefaults?.activeSystem && (
-                    <div className="flex justify-between items-center py-2 border-b">
-                      <span className="text-sm text-muted-foreground">
-                        Trading System
-                      </span>
-                      <Badge variant="secondary">
-                        {formDefaults.activeSystem.name}
-                      </Badge>
-                    </div>
-                  )}
-                  {calculatedConfidence !== null && (
-                    <div className="flex justify-between items-center py-2 border-b">
-                      <span className="text-sm text-muted-foreground">
-                        Confidence Score
-                      </span>
-                      <span
-                        className={`font-semibold ${getConfidenceColor(calculatedConfidence)}`}
-                      >
-                        {calculatedConfidence}/5
-                      </span>
-                    </div>
-                  )}
-                  <div className="flex justify-between items-center py-2 border-b">
-                    <span className="text-sm text-muted-foreground">
-                      Current Balance
-                    </span>
-                    <span className="font-semibold">
-                      ${formDefaults?.currentBalance || "0.00"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center py-2">
-                    <span className="text-sm text-muted-foreground">
-                      Current Losing Streak
-                    </span>
-                    <span className="font-semibold">
-                      {formDefaults?.consecutiveLosses || 0}
-                    </span>
-                  </div>
-                </div>
-
-                {selectedElementIds.length > 0 && (
-                  <div className="pt-2 border-t">
-                    <p className="text-sm text-muted-foreground mb-2">
-                      Selected Elements
-                    </p>
-                    <div className="flex flex-wrap gap-1">
-                      {activeSystemElements
-                        .filter((el: { id: number }) =>
-                          selectedElementIds.includes(el.id)
-                        )
-                        .map((el: { id: number; name: string }) => (
-                          <Badge
-                            key={el.id}
-                            variant="outline"
-                            className="text-xs"
-                          >
-                            {el.name}
-                          </Badge>
-                        ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="pt-4 space-y-3">
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    disabled={createMutation.isPending || !accountId}
-                  >
-                    {createMutation.isPending ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Recording...
-                      </>
-                    ) : (
-                      "Record Transaction"
-                    )}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => setLocation("/transactions")}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+        {/* Submit row */}
+        <div className="flex items-center gap-6 pt-6 border-t border-border">
+          <Button type="submit" disabled={createMutation.isPending || !accountId}>
+            {createMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              "record trade"
+            )}
+          </Button>
+          <button
+            type="button"
+            onClick={() => setLocation("/transactions")}
+            className="text-label hover:text-foreground transition-colors"
+          >
+            cancel
+          </button>
         </div>
       </form>
     </div>

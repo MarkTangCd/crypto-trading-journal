@@ -72,3 +72,28 @@ VITE_OAUTH_PORTAL_URL # OAuth portal URL (client-side)
 OWNER_OPEN_ID         # Admin user's open ID
 PORT                  # Server port (default 3000)
 ```
+
+## Design Context
+
+This is a solo-use trading journal. Design is opinionated and product-register; PRODUCT.md and DESIGN.md at the project root are the strategic and visual source of truth — read them before any UI work.
+
+**Brand in one line**: a watchmaker's notebook for one trader — paper-pale, mono-forward, oversized numerals as the design.
+
+**Anti-references (do not produce)**:
+
+- Pastel cool-gray SaaS dashboards — the previous iteration of this same product. `--color-pastel-blue` and `--color-pastel-pink` should be deleted, not migrated.
+- Crypto-project gamification (hype gradients, "Ape in" CTAs, NFT-launch energy).
+- Exchange / TradingView UI grammar (multi-panel layouts, sticky toolbars everywhere).
+- Apple HIG / Material safety (rounded-corner-everything, official-design-language hedge).
+
+**Five operating principles**:
+
+1. **The number is the design.** The primary metric on each screen is the largest element and anchors the layout.
+2. **Discipline over excitement.** Wins and losses are reported in the same typographic register; one signal hue each, nothing else differs.
+3. **Two modes, one tool.** Every page belongs to either "recording" or "reviewing" and makes that clear within the first second.
+4. **Earn every panel.** A panel exists only if it carries decision-relevant information _at this moment_.
+5. **Motion is feedback, not atmosphere.** Animation marks state change, never decorates.
+
+**Visual short-form** (full system in DESIGN.md): IBM Plex Mono is the committed face, loaded from Google Fonts at weights 400 / 500 / 600 (Inter is removed). Paper `oklch(0.985 0 0)` + ink `oklch(0.18 0 0)` + win `oklch(0.5 0.13 150)` + loss `oklch(0.48 0.18 25)`. `--radius: 0`. No cards, no shadows, lowercase labels, `font-variant-numeric: tabular-nums` on every column numeral.
+
+Live mode is pre-configured at `.impeccable/live/config.json`; run `/impeccable live` to iterate visually in the browser.
