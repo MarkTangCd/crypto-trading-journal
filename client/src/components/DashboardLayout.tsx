@@ -18,8 +18,6 @@ import {
   Plus,
   Settings,
   TrendingUp,
-  Tag,
-  Layers,
   Wallet,
 } from "lucide-react";
 import { AccountSwitcher } from "./AccountSwitcher";
@@ -30,8 +28,6 @@ const menuItems = [
   { icon: BarChart3, label: "Dashboard", path: "/" },
   { icon: FileText, label: "Transactions", path: "/transactions" },
   { icon: Plus, label: "New Trade", path: "/transactions/new" },
-  { icon: Layers, label: "Trading Systems", path: "/trading-systems" },
-  { icon: Tag, label: "Elements", path: "/trading-elements" },
   { icon: Wallet, label: "Accounts", path: "/accounts" },
   { icon: Settings, label: "Settings", path: "/settings" },
 ];

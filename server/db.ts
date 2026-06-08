@@ -11,14 +11,6 @@ import {
   transactions,
   InsertTransaction,
   Transaction,
-  tradingElements,
-  InsertTradingElement,
-  TradingElement,
-  tradingSystems,
-  InsertTradingSystem,
-  TradingSystem,
-  tradingSystemElements,
-  transactionElements,
   accounts,
   InsertAccount,
   Account,
@@ -85,17 +77,6 @@ async function runInSqliteTransaction<T>(
     }
     throw error;
   }
-}
-
-function getLastInsertRowId(): number {
-  if (!_sqliteDb) {
-    throw new Error("Database not available");
-  }
-
-  const row = _sqliteDb.prepare("SELECT last_insert_rowid() as id").get() as {
-    id: number | bigint;
-  };
-  return Number(row.id);
 }
 
 async function ensureDatabaseSchema(db: SqliteRemoteDatabase): Promise<void> {
@@ -352,275 +333,6 @@ export async function getUserById(userId: number) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-export async function setActiveTradingSystem(
-  userId: number,
-  systemId: number | null
-) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  await db
-    .update(users)
-    .set({ activeTradingSystemId: systemId, updatedAt: new Date() })
-    .where(eq(users.id, userId));
-}
-
-// ============ Trading Elements ============
-
-export async function createTradingElement(
-  data: InsertTradingElement
-): Promise<TradingElement> {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  const result = await db.insert(tradingElements).values(data).returning();
-
-  return result[0];
-}
-
-export async function getTradingElementById(id: number, userId: number) {
-  const db = await getDb();
-  if (!db) return undefined;
-
-  const result = await db
-    .select()
-    .from(tradingElements)
-    .where(and(eq(tradingElements.id, id), eq(tradingElements.userId, userId)))
-    .limit(1);
-
-  return result.length > 0 ? result[0] : undefined;
-}
-
-export async function getTradingElementsByUserId(userId: number) {
-  const db = await getDb();
-  if (!db) return [];
-
-  return db
-    .select()
-    .from(tradingElements)
-    .where(eq(tradingElements.userId, userId))
-    .orderBy(asc(tradingElements.name));
-}
-
-export async function updateTradingElement(
-  id: number,
-  userId: number,
-  data: Partial<InsertTradingElement>
-) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  await db
-    .update(tradingElements)
-    .set({ ...data, updatedAt: new Date() })
-    .where(and(eq(tradingElements.id, id), eq(tradingElements.userId, userId)));
-
-  return getTradingElementById(id, userId);
-}
-
-export async function deleteTradingElement(id: number, userId: number) {
-  await runInSqliteTransaction(async db => {
-    await db
-      .delete(tradingSystemElements)
-      .where(eq(tradingSystemElements.tradingElementId, id));
-
-    await db
-      .delete(tradingElements)
-      .where(
-        and(eq(tradingElements.id, id), eq(tradingElements.userId, userId))
-      );
-  });
-}
-
-// ============ Trading Systems ============
-
-export async function createTradingSystem(
-  data: InsertTradingSystem,
-  elementIds: number[]
-): Promise<TradingSystem & { elements: TradingElement[] }> {
-  const { systemId } = await runInSqliteTransaction(async db => {
-    await db.insert(tradingSystems).values(data);
-    const newSystemId = getLastInsertRowId();
-
-    if (elementIds.length > 0) {
-      await db.insert(tradingSystemElements).values(
-        elementIds.map(elementId => ({
-          tradingSystemId: newSystemId,
-          tradingElementId: elementId,
-        }))
-      );
-    }
-
-    return { systemId: newSystemId };
-  });
-
-  const createdSystem = await getTradingSystemById(systemId, data.userId);
-  if (!createdSystem) {
-    throw new Error("Failed to load newly created trading system");
-  }
-
-  return createdSystem;
-}
-
-export async function getTradingSystemById(id: number, userId: number) {
-  const db = await getDb();
-  if (!db) return undefined;
-
-  const result = await db
-    .select()
-    .from(tradingSystems)
-    .where(and(eq(tradingSystems.id, id), eq(tradingSystems.userId, userId)))
-    .limit(1);
-
-  if (result.length === 0) return undefined;
-
-  const elements = await getSystemElements(id);
-  return { ...result[0], elements };
-}
-
-export async function getTradingSystemsByUserId(userId: number) {
-  const db = await getDb();
-  if (!db) return [];
-
-  const systems = await db
-    .select()
-    .from(tradingSystems)
-    .where(eq(tradingSystems.userId, userId))
-    .orderBy(desc(tradingSystems.isActive), asc(tradingSystems.name));
-
-  // Get elements for each system
-  const systemsWithElements = await Promise.all(
-    systems.map(async system => {
-      const elements = await getSystemElements(system.id);
-      return { ...system, elements };
-    })
-  );
-
-  return systemsWithElements;
-}
-
-export async function getSystemElements(
-  systemId: number
-): Promise<TradingElement[]> {
-  const db = await getDb();
-  if (!db) return [];
-
-  const junctions = await db
-    .select()
-    .from(tradingSystemElements)
-    .where(eq(tradingSystemElements.tradingSystemId, systemId));
-
-  if (junctions.length === 0) return [];
-
-  const elementIds = junctions.map(j => j.tradingElementId);
-
-  return db
-    .select()
-    .from(tradingElements)
-    .where(inArray(tradingElements.id, elementIds));
-}
-
-export async function updateTradingSystem(
-  id: number,
-  userId: number,
-  data: Partial<InsertTradingSystem>,
-  elementIds?: number[]
-) {
-  await runInSqliteTransaction(async db => {
-    await db
-      .update(tradingSystems)
-      .set({ ...data, updatedAt: new Date() })
-      .where(and(eq(tradingSystems.id, id), eq(tradingSystems.userId, userId)));
-
-    if (elementIds !== undefined) {
-      await db
-        .delete(tradingSystemElements)
-        .where(eq(tradingSystemElements.tradingSystemId, id));
-
-      if (elementIds.length > 0) {
-        await db.insert(tradingSystemElements).values(
-          elementIds.map(elementId => ({
-            tradingSystemId: id,
-            tradingElementId: elementId,
-          }))
-        );
-      }
-    }
-  });
-
-  return getTradingSystemById(id, userId);
-}
-
-export async function deleteTradingSystem(id: number, userId: number) {
-  await runInSqliteTransaction(async db => {
-    await db
-      .delete(tradingSystemElements)
-      .where(eq(tradingSystemElements.tradingSystemId, id));
-
-    await db
-      .update(users)
-      .set({ activeTradingSystemId: null, updatedAt: new Date() })
-      .where(and(eq(users.id, userId), eq(users.activeTradingSystemId, id)));
-
-    await db
-      .delete(tradingSystems)
-      .where(and(eq(tradingSystems.id, id), eq(tradingSystems.userId, userId)));
-  });
-}
-
-export async function activateTradingSystem(id: number, userId: number) {
-  await runInSqliteTransaction(async db => {
-    await db
-      .update(tradingSystems)
-      .set({ isActive: 0, updatedAt: new Date() })
-      .where(eq(tradingSystems.userId, userId));
-
-    await db
-      .update(tradingSystems)
-      .set({ isActive: 1, updatedAt: new Date() })
-      .where(and(eq(tradingSystems.id, id), eq(tradingSystems.userId, userId)));
-
-    await db
-      .update(users)
-      .set({ activeTradingSystemId: id, updatedAt: new Date() })
-      .where(eq(users.id, userId));
-  });
-
-  return getTradingSystemById(id, userId);
-}
-
-export async function deactivateTradingSystem(id: number, userId: number) {
-  await runInSqliteTransaction(async db => {
-    await db
-      .update(tradingSystems)
-      .set({ isActive: 0, updatedAt: new Date() })
-      .where(and(eq(tradingSystems.id, id), eq(tradingSystems.userId, userId)));
-
-    await db
-      .update(users)
-      .set({ activeTradingSystemId: null, updatedAt: new Date() })
-      .where(eq(users.id, userId));
-  });
-}
-
-export async function getActiveTradingSystem(userId: number) {
-  const db = await getDb();
-  if (!db) return undefined;
-
-  const result = await db
-    .select()
-    .from(tradingSystems)
-    .where(
-      and(eq(tradingSystems.userId, userId), eq(tradingSystems.isActive, 1))
-    )
-    .limit(1);
-
-  if (result.length === 0) return undefined;
-
-  const elements = await getSystemElements(result[0].id);
-  return { ...result[0], elements };
-}
-
 // ============ Transaction Queries ============
 
 export async function createTransaction(
@@ -657,7 +369,6 @@ export async function getTransactionsByUserId(
     direction?: "long" | "short";
     tradingPair?: string;
     status?: "open" | "closed" | "reviewed";
-    tradingSystemId?: number;
     marketCycle?: string;
     transactionType?: string;
   }
@@ -681,9 +392,6 @@ export async function getTransactionsByUserId(
   }
   if (options?.status) {
     conditions.push(eq(transactions.status, options.status));
-  }
-  if (options?.tradingSystemId !== undefined) {
-    conditions.push(eq(transactions.tradingSystemId, options.tradingSystemId));
   }
   if (options?.marketCycle) {
     conditions.push(eq(transactions.marketCycle, options.marketCycle));
@@ -959,63 +667,6 @@ export async function getStatistics(accountId: number, initialBalance: string) {
   };
 }
 
-export async function getSystemStatistics(accountId: number, userId: number) {
-  const db = await getDb();
-  if (!db) return [];
-
-  // Get all systems for user
-  const systems = await getTradingSystemsByUserId(userId);
-
-  // Get statistics for each system
-  const systemStats = await Promise.all(
-    systems.map(async system => {
-      const systemTransactions = await db
-        .select()
-        .from(transactions)
-        .where(
-          and(
-            eq(transactions.accountId, accountId),
-            eq(transactions.tradingSystemId, system.id),
-            inArray(transactions.status, CLOSED_TRADE_STATUSES)
-          )
-        );
-
-      const winCount = systemTransactions.filter(
-        t => t.outcome === "win"
-      ).length;
-      const lossCount = systemTransactions.filter(
-        t => t.outcome === "loss"
-      ).length;
-      const breakevenCount = systemTransactions.filter(
-        t => t.outcome === "breakeven"
-      ).length;
-      const totalTrades = systemTransactions.length;
-      const winRate = totalTrades > 0 ? (winCount / totalTrades) * 100 : 0;
-
-      const totalReturn = addDecimalStrings(
-        systemTransactions.map(
-          transaction => transaction.returnAmount ?? ZERO_DECIMAL
-        )
-      );
-
-      return {
-        systemId: system.id,
-        systemName: system.name,
-        isActive: system.isActive === 1,
-        elements: system.elements,
-        winCount,
-        lossCount,
-        breakevenCount,
-        totalTrades,
-        winRate: Number(winRate.toFixed(2)),
-        totalReturn: centsToDecimalNumber(decimalToCents(totalReturn)),
-      };
-    })
-  );
-
-  return systemStats;
-}
-
 export async function getUniqueTradingPairs(
   userId: number,
   accountId?: number
@@ -1036,85 +687,13 @@ export async function getUniqueTradingPairs(
   return result.map(r => r.tradingPair);
 }
 
-// ============ Transaction Elements ============
-
-export async function addElementsToTransaction(
-  transactionId: number,
-  elementIds: number[]
-) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  if (elementIds.length === 0) return;
-
-  await db.insert(transactionElements).values(
-    elementIds.map(elementId => ({
-      transactionId,
-      tradingElementId: elementId,
-    }))
-  );
-}
-
-export async function getTransactionElements(
-  transactionId: number
-): Promise<TradingElement[]> {
-  const db = await getDb();
-  if (!db) return [];
-
-  const junctions = await db
-    .select()
-    .from(transactionElements)
-    .where(eq(transactionElements.transactionId, transactionId));
-
-  if (junctions.length === 0) return [];
-
-  const elementIds = junctions.map(j => j.tradingElementId);
-
-  return db
-    .select()
-    .from(tradingElements)
-    .where(inArray(tradingElements.id, elementIds));
-}
-
-export async function removeElementsFromTransaction(transactionId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  await db
-    .delete(transactionElements)
-    .where(eq(transactionElements.transactionId, transactionId));
-}
-
-export async function replaceTransactionElements(
-  transactionId: number,
-  elementIds: number[]
-) {
-  const uniqueElementIds = Array.from(new Set(elementIds));
-
-  await runInSqliteTransaction(async db => {
-    await db
-      .delete(transactionElements)
-      .where(eq(transactionElements.transactionId, transactionId));
-
-    if (uniqueElementIds.length > 0) {
-      await db.insert(transactionElements).values(
-        uniqueElementIds.map(elementId => ({
-          transactionId,
-          tradingElementId: elementId,
-        }))
-      );
-    }
-  });
-}
-
 export type AccountScopedInsertTransaction = Omit<
   InsertTransaction,
   "accountId"
 > & { accountId: number };
 
 export async function createTransactionWithElements(
-  data: AccountScopedInsertTransaction,
-  elementIds: number[]
+  data: AccountScopedInsertTransaction
 ): Promise<Transaction> {
   // Guard: never silently fall back to userId for accountId. Callers must
   // pass the validated accountId for the trade's owning account.
@@ -1139,82 +718,29 @@ export async function createTransactionWithElements(
     accountBalance: data.accountBalance ?? null,
   };
 
-  const { transactionId } = await runInSqliteTransaction(async db => {
-    await db.insert(transactions).values(insertData);
-    const newTransactionId = getLastInsertRowId();
-
-    if (elementIds.length > 0) {
-      await db.insert(transactionElements).values(
-        elementIds.map(elementId => ({
-          transactionId: newTransactionId,
-          tradingElementId: elementId,
-        }))
-      );
-    }
-
-    return { transactionId: newTransactionId };
+  const result = await runInSqliteTransaction(async db => {
+    return db.insert(transactions).values(insertData).returning();
   });
 
-  const created = await getTransactionById(transactionId, insertData.userId);
-  if (!created) {
+  if (!result[0]) {
     throw new Error("Failed to load newly created transaction");
   }
 
-  return created;
+  return result[0];
 }
 
 export async function deleteTransactionWithElements(
   transactionId: number,
   userId: number
 ): Promise<void> {
-  await runInSqliteTransaction(async db => {
-    await db
-      .delete(transactionElements)
-      .where(eq(transactionElements.transactionId, transactionId));
-
-    await db
-      .delete(transactions)
-      .where(
-        and(eq(transactions.id, transactionId), eq(transactions.userId, userId))
-      );
-  });
-}
-
-export async function calculateConfidenceLevel(
-  elementIds: number[]
-): Promise<number | null> {
-  if (elementIds.length === 0) return null;
-
   const db = await getDb();
-  if (!db) return null;
+  if (!db) throw new Error("Database not available");
 
-  const elements = await db
-    .select()
-    .from(tradingElements)
-    .where(inArray(tradingElements.id, elementIds));
-
-  if (elements.length === 0) return null;
-
-  // Calculate average confidence level from selected elements
-  const totalConfidence = elements.reduce(
-    (sum, el) => sum + (el.confidenceLevel || 3),
-    0
-  );
-  return parseFloat((totalConfidence / elements.length).toFixed(1));
-}
-
-export async function getElementsByIds(
-  elementIds: number[]
-): Promise<TradingElement[]> {
-  if (elementIds.length === 0) return [];
-
-  const db = await getDb();
-  if (!db) return [];
-
-  return db
-    .select()
-    .from(tradingElements)
-    .where(inArray(tradingElements.id, elementIds));
+  await db
+    .delete(transactions)
+    .where(
+      and(eq(transactions.id, transactionId), eq(transactions.userId, userId))
+    );
 }
 
 // ============ Account CRUD ============
@@ -1281,22 +807,6 @@ export async function deleteAccountWithTransactions(
   }
 
   await runInSqliteTransaction(async db => {
-    // Delete transaction_elements for transactions in this account
-    const accountTransactions = await db
-      .select({ id: transactions.id })
-      .from(transactions)
-      .where(
-        and(eq(transactions.accountId, id), eq(transactions.userId, userId))
-      );
-
-    const transactionIds = accountTransactions.map(t => t.id);
-
-    if (transactionIds.length > 0) {
-      await db
-        .delete(transactionElements)
-        .where(inArray(transactionElements.transactionId, transactionIds));
-    }
-
     // Delete all transactions for this account
     await db
       .delete(transactions)

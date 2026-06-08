@@ -69,7 +69,6 @@ describe("Account Router", () => {
       updatedAt: new Date(),
       lastSignedIn: new Date(),
       initialBalance: "10000",
-      activeTradingSystemId: null,
     },
   };
 

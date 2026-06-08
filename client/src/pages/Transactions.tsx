@@ -320,9 +320,6 @@ export default function Transactions() {
                   outcome
                 </th>
                 <th className="py-3 px-4 text-right text-label font-normal">
-                  conf
-                </th>
-                <th className="py-3 px-4 text-right text-label font-normal">
                   r/r
                 </th>
                 <th className="py-3 px-4 text-right">
@@ -423,13 +420,6 @@ export default function Transactions() {
                             {tx.consecutiveLosses} in a row
                           </div>
                         )}
-                    </td>
-                    <td className="py-4 px-4 text-right">
-                      {tx.confidenceLevel !== null ? (
-                        `${tx.confidenceLevel}/5`
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
                     </td>
                     <td className="py-4 px-4 text-right">
                       {tx.riskRewardRatio ?? (

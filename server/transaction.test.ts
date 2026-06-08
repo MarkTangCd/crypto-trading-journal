@@ -78,47 +78,6 @@ vi.mock("./db", () => ({
     latestBalance: 10525,
   }),
   updateUserInitialBalance: vi.fn().mockResolvedValue(undefined),
-  // Trading element functions
-  createTradingElement: vi.fn().mockImplementation(data => ({
-    id: 1,
-    ...data,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  })),
-  getTradingElementsByUserId: vi.fn().mockResolvedValue([]),
-  getTradingElementById: vi
-    .fn()
-    .mockResolvedValue({ id: 1, userId: 1, name: "Gap", description: null }),
-  updateTradingElement: vi
-    .fn()
-    .mockResolvedValue({ id: 1, name: "Gap Updated" }),
-  deleteTradingElement: vi.fn().mockResolvedValue(undefined),
-  // Trading system functions
-  createTradingSystem: vi.fn().mockImplementation(data => ({
-    id: 1,
-    ...data,
-    isActive: 0,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  })),
-  getTradingSystemsByUserId: vi.fn().mockResolvedValue([]),
-  getTradingSystemById: vi.fn().mockResolvedValue({
-    id: 1,
-    userId: 1,
-    name: "Test System",
-    notes: null,
-    isActive: 0,
-  }),
-  updateTradingSystem: vi
-    .fn()
-    .mockResolvedValue({ id: 1, name: "Updated System" }),
-  deleteTradingSystem: vi.fn().mockResolvedValue(undefined),
-  activateTradingSystem: vi.fn().mockResolvedValue(undefined),
-  deactivateTradingSystem: vi.fn().mockResolvedValue(undefined),
-  getActiveTradingSystem: vi.fn().mockResolvedValue(null),
-  addElementsToSystem: vi.fn().mockResolvedValue(undefined),
-  removeElementsFromSystem: vi.fn().mockResolvedValue(undefined),
-  getSystemElements: vi.fn().mockResolvedValue([]),
   // Account functions
   createAccount: vi.fn().mockImplementation(data => ({
     id: 1,
@@ -148,19 +107,6 @@ vi.mock("./db", () => ({
   }),
   deleteAccountWithTransactions: vi.fn().mockResolvedValue(undefined),
   getAccountCount: vi.fn().mockResolvedValue(2),
-  // Transaction element functions
-  addElementsToTransaction: vi.fn().mockResolvedValue(undefined),
-  removeElementsFromTransaction: vi.fn().mockResolvedValue(undefined),
-  getTransactionElements: vi.fn().mockResolvedValue([]),
-  replaceTransactionElements: vi.fn().mockResolvedValue(undefined),
-  calculateConfidenceLevel: vi.fn().mockResolvedValue(4),
-  // Close trade function
-  closeTrade: vi.fn().mockImplementation(async (_txId, _userId, data) => ({
-    id: 1,
-    ...data,
-    status: "closed",
-    updatedAt: new Date(),
-  })),
 }));
 
 function createAuthContext(): TrpcContext {
@@ -178,7 +124,6 @@ function createAuthContext(): TrpcContext {
       updatedAt: new Date(),
       lastSignedIn: new Date(),
       initialBalance: "10000",
-      activeTradingSystemId: null,
     },
   };
 }
@@ -202,8 +147,6 @@ describe("transaction procedures", () => {
         tradingLogic: "Test trade logic",
         marketCycle: "Upward Trend",
         transactionType: "Trend",
-        tradingSystemId: 1,
-        selectedElementIds: [1, 2],
       });
 
       expect(result).toBeDefined();
@@ -237,7 +180,6 @@ describe("transaction procedures", () => {
         tradingLogic: "Switched account regression",
         marketCycle: "Upward Trend",
         transactionType: "Trend",
-        selectedElementIds: [],
       });
 
       expect(db.getAccountById).toHaveBeenCalledWith(2, 1);
@@ -245,8 +187,7 @@ describe("transaction procedures", () => {
         expect.objectContaining({
           userId: 1,
           accountId: 2,
-        }),
-        []
+        })
       );
     });
 
@@ -266,7 +207,6 @@ describe("transaction procedures", () => {
           tradingLogic: "Should be rejected",
           marketCycle: "Upward Trend",
           transactionType: "Trend",
-          selectedElementIds: [],
         })
       ).rejects.toThrow(/Account not found/);
 
@@ -286,8 +226,6 @@ describe("transaction procedures", () => {
           direction: "long",
           tradingLogic: "Test trade logic",
           transactionType: "Trend",
-          tradingSystemId: 1,
-          selectedElementIds: [],
         } as any)
       ).rejects.toThrow();
     });
@@ -305,8 +243,6 @@ describe("transaction procedures", () => {
           direction: "long",
           tradingLogic: "Test trade logic",
           marketCycle: "Upward Trend",
-          tradingSystemId: 1,
-          selectedElementIds: [],
         } as any)
       ).rejects.toThrow();
     });
@@ -376,8 +312,6 @@ describe("transaction procedures", () => {
           tvUrl: null,
           reviewFeedback: null,
           reviewChartUrl: null,
-          tradingSystemId: null,
-          confidenceLevel: null,
           createdAt: new Date(),
           updatedAt: new Date(),
         },
@@ -419,8 +353,6 @@ describe("transaction procedures", () => {
           tvUrl: null,
           reviewFeedback: null,
           reviewChartUrl: null,
-          tradingSystemId: null,
-          confidenceLevel: null,
           createdAt: new Date(),
           updatedAt: new Date(),
         },
@@ -462,8 +394,6 @@ describe("transaction procedures", () => {
           tvUrl: null,
           reviewFeedback: null,
           reviewChartUrl: null,
-          tradingSystemId: null,
-          confidenceLevel: null,
           createdAt: new Date(),
           updatedAt: new Date(),
         },
@@ -488,8 +418,6 @@ describe("transaction procedures", () => {
           tvUrl: null,
           reviewFeedback: null,
           reviewChartUrl: null,
-          tradingSystemId: null,
-          confidenceLevel: null,
           createdAt: new Date(),
           updatedAt: new Date(),
         },
@@ -530,8 +458,6 @@ describe("transaction procedures", () => {
         tvUrl: null,
         reviewFeedback: null,
         reviewChartUrl: null,
-        tradingSystemId: null,
-        confidenceLevel: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       });
@@ -607,18 +533,6 @@ describe("stats procedures", () => {
   });
 });
 
-describe("user procedures", () => {
-  it("gets user settings", async () => {
-    const ctx = createAuthContext();
-    const caller = appRouter.createCaller(ctx);
-
-    const result = await caller.user.getSettings();
-
-    expect(result).toBeDefined();
-    expect(result.activeTradingSystemId).toBeNull();
-  });
-});
-
 describe("account procedures", () => {
   const createAuthContext = (): TrpcContext => ({
     req: {} as TrpcContext["req"],
@@ -634,7 +548,6 @@ describe("account procedures", () => {
       updatedAt: new Date(),
       lastSignedIn: new Date(),
       initialBalance: "10000",
-      activeTradingSystemId: null,
     },
   });
 

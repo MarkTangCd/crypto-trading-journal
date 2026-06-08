@@ -18,7 +18,7 @@ npm run format       # Prettier format all files
 
 # Tests
 npm run test         # Run all tests (vitest)
-npx vitest run server/tradingSystem.test.ts  # Run a single test file
+npx vitest run server/transaction.test.ts  # Run a single test file
 
 # Database
 npm run db:push      # Generate + apply migrations (drizzle-kit generate && drizzle-kit migrate)
@@ -55,9 +55,9 @@ npm run db:push      # Generate + apply migrations (drizzle-kit generate && driz
 
 ## Database Schema
 
-Six tables: `users`, `trading_elements`, `trading_systems`, `trading_system_elements` (junction), `transactions`, `transaction_elements` (junction).
+Three tables: `users`, `accounts`, `transactions`.
 
-Key `transactions` fields: `accountBalance` (balance at time of trade), `direction` (long|short), `outcome` (win|loss|breakeven), `consecutiveLosses`, `riskRewardRatio`, `returnAmount`, `confidenceLevel`, `tvUrl` (TradingView link), `reviewFeedback`, `reviewChartUrl`, `isReviewed`.
+Key `transactions` fields: `accountBalance` (balance at time of trade), `direction` (long|short), `outcome` (win|loss|breakeven), `consecutiveLosses`, `riskRewardRatio`, `returnAmount`, `tvUrl` (TradingView link), `reviewFeedback`, `reviewChartUrl`, `isReviewed`.
 
 Time fields (`startTime`, `endTime`) are stored as milliseconds (bigint).
 

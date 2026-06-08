@@ -86,7 +86,6 @@ export function CloseTradeModal({
       utils.transaction.get.invalidate();
       utils.transaction.getFormDefaults.invalidate();
       utils.stats.get.invalidate();
-      utils.stats.getBySystem.invalidate();
       onOpenChange(false);
     },
     onError: error => {

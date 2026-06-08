@@ -3,7 +3,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { CloseTradeModal } from "@/components/CloseTradeModal";
-import { getConfidenceLabel } from "@/lib/confidence";
 import {
   Field,
   SectionHeader,
@@ -96,7 +95,6 @@ export default function TransactionDetail() {
     );
   }
 
-  const elements = transaction.elements || [];
   const returnNum =
     transaction.returnAmount !== null
       ? parseFloat(transaction.returnAmount)
@@ -282,39 +280,6 @@ export default function TransactionDetail() {
           </a>
         )}
       </section>
-
-      {/* Elements: tagged signals with intrinsic confidence */}
-      {elements.length > 0 && (
-        <section aria-labelledby="elements-label" className="space-y-6">
-          <SectionHeader id="elements-label">elements</SectionHeader>
-          <ul className="divide-y divide-border border-b border-border">
-            {elements.map(element => (
-              <li
-                key={element.id}
-                className="py-3 flex items-baseline justify-between gap-4"
-              >
-                <span className="font-medium text-foreground">
-                  {element.name}
-                </span>
-                <span className="text-label tabular-nums">
-                  {element.confidenceLevel}/5
-                </span>
-              </li>
-            ))}
-          </ul>
-          {transaction.confidenceLevel !== null && (
-            <div className="flex items-baseline justify-between gap-4">
-              <span className="text-label">avg confidence</span>
-              <span className="tabular-nums">
-                {transaction.confidenceLevel.toFixed(1)}/5
-                <span className="text-muted-foreground ml-2 text-sm">
-                  ({getConfidenceLabel(transaction.confidenceLevel).toLowerCase()})
-                </span>
-              </span>
-            </div>
-          )}
-        </section>
-      )}
 
       {/* Resolution: closed-trade numbers */}
       {!isOpen && (

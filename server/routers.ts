@@ -11,28 +11,8 @@ import {
   getConsecutiveLosses,
   getCurrentBalance,
   getStatistics,
-  getSystemStatistics,
   getUniqueTradingPairs,
   getUserById,
-  // Trading Elements
-  createTradingElement,
-  getTradingElementById,
-  getTradingElementsByUserId,
-  updateTradingElement,
-  deleteTradingElement,
-  // Trading Systems
-  createTradingSystem,
-  getTradingSystemById,
-  getTradingSystemsByUserId,
-  updateTradingSystem,
-  deleteTradingSystem,
-  activateTradingSystem,
-  deactivateTradingSystem,
-  getActiveTradingSystem,
-  // Transaction Elements
-  getTransactionElements,
-  calculateConfidenceLevel,
-  replaceTransactionElements,
   // Accounts
   createAccount,
   getAccountById,
@@ -51,137 +31,6 @@ import {
 export const appRouter = router({
   system: systemRouter,
 
-  // User settings
-  user: router({
-    getSettings: publicProcedure.query(async ({ ctx }) => {
-      const user = await getUserById(ctx.user.id);
-      return {
-        activeTradingSystemId: user?.activeTradingSystemId || null,
-      };
-    }),
-  }),
-
-  // Trading Elements (opportunity tags)
-  tradingElement: router({
-    create: publicProcedure
-      .input(
-        z.object({
-          name: z.string().min(1).max(100),
-          description: z.string().optional(),
-          confidenceLevel: z.number().int().min(1).max(5).default(3),
-        })
-      )
-      .mutation(async ({ ctx, input }) => {
-        return createTradingElement({
-          userId: ctx.user.id,
-          name: input.name,
-          description: input.description || null,
-          confidenceLevel: input.confidenceLevel,
-        });
-      }),
-
-    get: publicProcedure
-      .input(z.object({ id: z.number() }))
-      .query(async ({ ctx, input }) => {
-        return getTradingElementById(input.id, ctx.user.id);
-      }),
-
-    list: publicProcedure.query(async ({ ctx }) => {
-      return getTradingElementsByUserId(ctx.user.id);
-    }),
-
-    update: publicProcedure
-      .input(
-        z.object({
-          id: z.number(),
-          name: z.string().min(1).max(100).optional(),
-          description: z.string().optional(),
-          confidenceLevel: z.number().int().min(1).max(5).optional(),
-        })
-      )
-      .mutation(async ({ ctx, input }) => {
-        const { id, ...data } = input;
-        return updateTradingElement(id, ctx.user.id, data);
-      }),
-
-    delete: publicProcedure
-      .input(z.object({ id: z.number() }))
-      .mutation(async ({ ctx, input }) => {
-        await deleteTradingElement(input.id, ctx.user.id);
-        return { success: true };
-      }),
-  }),
-
-  // Trading Systems
-  tradingSystem: router({
-    create: publicProcedure
-      .input(
-        z.object({
-          name: z.string().min(1).max(100),
-          notes: z.string().optional(),
-          elementIds: z.array(z.number()).default([]),
-        })
-      )
-      .mutation(async ({ ctx, input }) => {
-        return createTradingSystem(
-          {
-            userId: ctx.user.id,
-            name: input.name,
-            notes: input.notes || null,
-          },
-          input.elementIds
-        );
-      }),
-
-    get: publicProcedure
-      .input(z.object({ id: z.number() }))
-      .query(async ({ ctx, input }) => {
-        return getTradingSystemById(input.id, ctx.user.id);
-      }),
-
-    list: publicProcedure.query(async ({ ctx }) => {
-      return getTradingSystemsByUserId(ctx.user.id);
-    }),
-
-    getActive: publicProcedure.query(async ({ ctx }) => {
-      return getActiveTradingSystem(ctx.user.id);
-    }),
-
-    update: publicProcedure
-      .input(
-        z.object({
-          id: z.number(),
-          name: z.string().min(1).max(100).optional(),
-          notes: z.string().optional(),
-          elementIds: z.array(z.number()).optional(),
-        })
-      )
-      .mutation(async ({ ctx, input }) => {
-        const { id, elementIds, ...data } = input;
-        return updateTradingSystem(id, ctx.user.id, data, elementIds);
-      }),
-
-    delete: publicProcedure
-      .input(z.object({ id: z.number() }))
-      .mutation(async ({ ctx, input }) => {
-        await deleteTradingSystem(input.id, ctx.user.id);
-        return { success: true };
-      }),
-
-    activate: publicProcedure
-      .input(z.object({ id: z.number() }))
-      .mutation(async ({ ctx, input }) => {
-        return activateTradingSystem(input.id, ctx.user.id);
-      }),
-
-    deactivate: publicProcedure
-      .input(z.object({ id: z.number() }))
-      .mutation(async ({ ctx, input }) => {
-        await deactivateTradingSystem(input.id, ctx.user.id);
-        return { success: true };
-      }),
-  }),
-
   // Transaction operations
   transaction: router({
     // Create a new transaction
@@ -198,8 +47,6 @@ export const appRouter = router({
             marketCycle: z.enum(MARKET_CYCLES),
             transactionType: z.enum(TRANSACTION_TYPES),
             tvUrl: z.string().optional(),
-            tradingSystemId: z.number().optional(),
-            selectedElementIds: z.array(z.number()).default([]),
           })
           .strict()
       )
@@ -213,53 +60,34 @@ export const appRouter = router({
           });
         }
 
-        // Get active trading system if not specified
-        let tradingSystemId: number | undefined = input.tradingSystemId;
-        if (tradingSystemId === undefined) {
-          const activeSystem = await getActiveTradingSystem(ctx.user.id);
-          tradingSystemId = activeSystem?.id ?? undefined;
-        }
-
-        // Calculate confidence level from selected elements
-        const confidenceLevel = await calculateConfidenceLevel(
-          input.selectedElementIds
-        );
-
-        const transaction = await createTransactionWithElements(
-          {
-            userId: ctx.user.id,
-            accountId: account.id,
-            tradingSystemId,
-            status: "open",
-            tradingPair: input.tradingPair.toUpperCase(),
-            timeFrame: input.timeFrame,
-            startTime: input.startTime,
-            endTime: null,
-            direction: input.direction,
-            tradingLogic: input.tradingLogic,
-            marketCycle: input.marketCycle,
-            transactionType: input.transactionType,
-            outcome: null,
-            riskRewardRatio: null,
-            returnAmount: null,
-            confidenceLevel,
-            tvUrl: input.tvUrl || null,
-          },
-          input.selectedElementIds
-        );
+        const transaction = await createTransactionWithElements({
+          userId: ctx.user.id,
+          accountId: account.id,
+          status: "open",
+          tradingPair: input.tradingPair.toUpperCase(),
+          timeFrame: input.timeFrame,
+          startTime: input.startTime,
+          endTime: null,
+          direction: input.direction,
+          tradingLogic: input.tradingLogic,
+          marketCycle: input.marketCycle,
+          transactionType: input.transactionType,
+          outcome: null,
+          riskRewardRatio: null,
+          returnAmount: null,
+          tvUrl: input.tvUrl || null,
+        });
 
         return transaction;
       }),
 
-    // Get a single transaction with elements
+    // Get a single transaction
     get: publicProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ ctx, input }) => {
         const transaction = await getTransactionById(input.id, ctx.user.id);
         if (!transaction) return null;
-
-        const elements = await getTransactionElements(transaction.id);
-        return { ...transaction, elements };
+        return transaction;
       }),
 
     // List transactions with filters
@@ -275,7 +103,6 @@ export const appRouter = router({
           direction: z.enum(["long", "short"]).optional(),
           tradingPair: z.string().optional(),
           status: z.enum(["open", "closed", "reviewed"]).optional(),
-          tradingSystemId: z.number().optional(),
           marketCycle: z.enum(MARKET_CYCLES).optional(),
           transactionType: z.enum(TRANSACTION_TYPES).optional(),
         })
@@ -381,14 +208,12 @@ export const appRouter = router({
           riskRewardRatio: z.string().optional(),
           returnAmount: z.string().optional(),
           tvUrl: z.string().optional(),
-          tradingSystemId: z.number().optional(),
-          selectedElementIds: z.array(z.number()).optional(),
           reviewFeedback: z.string().optional(),
           reviewChartUrl: z.string().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
-        const { id, selectedElementIds, ...data } = input;
+        const { id, ...data } = input;
 
         const existingTransaction = await getTransactionById(id, ctx.user.id);
         if (!existingTransaction) {
@@ -408,9 +233,7 @@ export const appRouter = router({
           data.outcome !== undefined ||
           data.riskRewardRatio !== undefined ||
           data.returnAmount !== undefined ||
-          data.tvUrl !== undefined ||
-          data.tradingSystemId !== undefined ||
-          selectedElementIds !== undefined;
+          data.tvUrl !== undefined;
 
         const hasReviewFieldUpdates =
           data.reviewFeedback !== undefined ||
@@ -436,11 +259,6 @@ export const appRouter = router({
             });
           }
 
-          const confidenceLevel =
-            selectedElementIds !== undefined
-              ? await calculateConfidenceLevel(selectedElementIds)
-              : existingTransaction.confidenceLevel;
-
           const updatedTransaction = await updateTransaction(id, ctx.user.id, {
             tradingPair:
               data.tradingPair !== undefined
@@ -451,13 +269,7 @@ export const appRouter = router({
             direction: data.direction,
             tradingLogic: data.tradingLogic,
             tvUrl: data.tvUrl,
-            tradingSystemId: data.tradingSystemId,
-            confidenceLevel,
           });
-
-          if (selectedElementIds !== undefined) {
-            await replaceTransactionElements(id, selectedElementIds);
-          }
 
           return updatedTransaction;
         }
@@ -510,19 +322,11 @@ export const appRouter = router({
           account.initialBalance
         );
         const consecutiveLosses = await getConsecutiveLosses(account.id);
-        const activeSystem = await getActiveTradingSystem(ctx.user.id);
 
         return {
           currentBalance,
           consecutiveLosses,
           initialBalance: account.initialBalance,
-          activeSystem: activeSystem
-            ? {
-                id: activeSystem.id,
-                name: activeSystem.name,
-                elements: activeSystem.elements || [],
-              }
-            : null,
         };
       }),
 
@@ -539,13 +343,6 @@ export const appRouter = router({
         }
         return getUniqueTradingPairs(ctx.user.id, input.accountId);
       }),
-
-    // Get elements for a transaction
-    getElements: publicProcedure
-      .input(z.object({ transactionId: z.number() }))
-      .query(async ({ input }) => {
-        return getTransactionElements(input.transactionId);
-      }),
   }),
 
   // Statistics
@@ -561,12 +358,6 @@ export const appRouter = router({
           });
         }
         return getStatistics(account.id, account.initialBalance);
-      }),
-
-    getBySystem: publicProcedure
-      .input(z.object({ accountId: z.number() }))
-      .query(async ({ ctx, input }) => {
-        return getSystemStatistics(input.accountId, ctx.user.id);
       }),
   }),
 

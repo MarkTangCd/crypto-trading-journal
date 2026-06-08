@@ -81,7 +81,6 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       utils.account.list.invalidate();
       utils.transaction.list.invalidate();
       utils.stats.get.invalidate();
-      utils.stats.getBySystem.invalidate();
     },
     [utils]
   );

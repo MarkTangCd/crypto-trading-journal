@@ -29,7 +29,7 @@ Treat this file as the main agent guide for repo-specific behavior.
 - `npm run check` — TypeScript typecheck via `tsc --noEmit`
 - `npm run format` — format the repo with Prettier
 - `npm run test` — run all tests with Vitest
-- `npx vitest run server/tradingSystem.test.ts` — run a single test file
+- `npx vitest run server/transaction.test.ts` — run a single test file
 - `npm run db:push` — generate and apply Drizzle migrations
 - There is currently **no lint script** and no ESLint config in this repo
 
@@ -40,7 +40,7 @@ Treat this file as the main agent guide for repo-specific behavior.
 - Test environment: Node
 - Server tests commonly use `appRouter.createCaller(ctx)` to exercise tRPC procedures directly
 - See `server/transaction.test.ts` for the main mocking pattern with `vi.mock`
-- See `server/auth.logout.test.ts` and `server/tradingSystem.test.ts` for context factory patterns
+- See `server/auth.logout.test.ts` for context factory patterns
 - `tsconfig.json` excludes `**/*.test.ts`, so `npm run check` does **not** typecheck tests
 - When you change tested server behavior, run both `npm run check` and `npm run test`
 

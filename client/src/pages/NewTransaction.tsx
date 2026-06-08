@@ -1,8 +1,6 @@
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import CandlestickChart from "@/components/CandlestickChart";
 import { useAccount } from "@/contexts/AccountContext";
-import { getConfidenceLabel } from "@/lib/confidence";
 import {
   Field,
   INPUT_CLASS,
@@ -22,7 +20,7 @@ import {
 } from "@shared/const";
 import { Loader2 } from "lucide-react";
 import type React from "react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
 
@@ -59,7 +57,6 @@ export default function NewTransaction() {
       utils.transaction.list.invalidate();
       utils.transaction.getFormDefaults.invalidate();
       utils.stats.get.invalidate();
-      utils.stats.getBySystem.invalidate();
       setLocation("/transactions");
     },
     onError: error => {
@@ -77,29 +74,6 @@ export default function NewTransaction() {
     transactionType: "",
     tvUrl: "",
   });
-
-  const [selectedElementIds, setSelectedElementIds] = useState<number[]>([]);
-
-  const activeSystemElements = useMemo(
-    () => formDefaults?.activeSystem?.elements || [],
-    [formDefaults?.activeSystem?.elements]
-  );
-
-  const calculatedConfidence = useMemo(() => {
-    if (activeSystemElements.length === 0 || selectedElementIds.length === 0) {
-      return null;
-    }
-    const picked = activeSystemElements.filter(
-      (el: { id: number }) => selectedElementIds.includes(el.id)
-    );
-    if (picked.length === 0) return null;
-    const total = picked.reduce(
-      (sum: number, el: { confidenceLevel: number }) =>
-        sum + el.confidenceLevel,
-      0
-    );
-    return parseFloat((total / picked.length).toFixed(1));
-  }, [activeSystemElements, selectedElementIds]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -136,7 +110,6 @@ export default function NewTransaction() {
       marketCycle: formData.marketCycle as MarketCycle,
       transactionType: formData.transactionType as TransactionType,
       tvUrl: formData.tvUrl || undefined,
-      selectedElementIds,
     });
   };
 
@@ -145,14 +118,6 @@ export default function NewTransaction() {
     value: FormData[K]
   ) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const toggleElement = (elementId: number) => {
-    setSelectedElementIds(prev =>
-      prev.includes(elementId)
-        ? prev.filter(id => id !== elementId)
-        : [...prev, elementId]
-    );
   };
 
   if (loadingDefaults) {
@@ -166,13 +131,8 @@ export default function NewTransaction() {
     );
   }
 
-  const activeSystem = formDefaults?.activeSystem;
   const currentBalance = formDefaults?.currentBalance || "0";
   const streak = formDefaults?.consecutiveLosses ?? 0;
-  const confidenceLabel =
-    calculatedConfidence !== null
-      ? getConfidenceLabel(calculatedConfidence).toLowerCase()
-      : null;
 
   return (
     <div className="space-y-12 max-w-3xl">
@@ -191,38 +151,8 @@ export default function NewTransaction() {
         <p className="text-label">log a new entry to the journal</p>
       </header>
 
-      {/* Account meta strip: system · balance · streak */}
-      <div className="border-y border-border py-4 grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-3">
-        <div className="flex items-baseline justify-between gap-2 sm:block">
-          <p className="text-label">system</p>
-          <p className="sm:mt-1.5 flex items-baseline gap-2 flex-wrap">
-            {activeSystem ? (
-              <>
-                <span className="font-medium text-foreground">
-                  {activeSystem.name}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setLocation("/trading-systems")}
-                  className="text-label hover:text-foreground transition-colors"
-                >
-                  change →
-                </button>
-              </>
-            ) : (
-              <>
-                <span className="text-muted-foreground">none</span>
-                <button
-                  type="button"
-                  onClick={() => setLocation("/trading-systems")}
-                  className="text-label hover:text-foreground transition-colors"
-                >
-                  select →
-                </button>
-              </>
-            )}
-          </p>
-        </div>
+      {/* Account meta strip: balance · streak */}
+      <div className="border-y border-border py-4 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
         <div className="flex items-baseline justify-between gap-2 sm:block">
           <p className="text-label">current balance</p>
           <p className="sm:mt-1.5 tabular-nums">${fmtMoney(currentBalance)}</p>
@@ -239,30 +169,6 @@ export default function NewTransaction() {
           </p>
         </div>
       </div>
-
-      {/* Hero: calculated confidence (live) */}
-      <section aria-labelledby="conf-label">
-        <p id="conf-label" className="text-label">
-          confidence
-        </p>
-        <p
-          className={cn(
-            "text-display mt-2 tabular-nums",
-            calculatedConfidence === null && "text-muted-foreground"
-          )}
-        >
-          {calculatedConfidence !== null
-            ? `${calculatedConfidence}/5`
-            : "—/5"}
-        </p>
-        <p className="text-label mt-3">
-          {calculatedConfidence !== null
-            ? `${selectedElementIds.length} of ${activeSystemElements.length} elements · ${confidenceLabel}`
-            : activeSystemElements.length > 0
-              ? "select trading elements below"
-              : "no active system — confidence won't be computed"}
-        </p>
-      </section>
 
       <form onSubmit={handleSubmit} className="space-y-12">
         {/* Instrument */}
@@ -380,53 +286,6 @@ export default function NewTransaction() {
             </Field>
           </div>
         </section>
-
-        {/* Elements */}
-        {activeSystemElements.length > 0 && (
-          <section className="space-y-6">
-            <SectionHeader>elements</SectionHeader>
-            <ul className="divide-y divide-border border-b border-border">
-              {activeSystemElements.map(
-                (element: {
-                  id: number;
-                  name: string;
-                  confidenceLevel: number;
-                  description?: string | null;
-                }) => {
-                  const checked = selectedElementIds.includes(element.id);
-                  return (
-                    <li key={element.id}>
-                      <label className="flex items-baseline gap-3 py-3 cursor-pointer group">
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={() => toggleElement(element.id)}
-                          className="rounded-none translate-y-0.5"
-                        />
-                        <span
-                          className={cn(
-                            "flex-1 font-medium transition-colors",
-                            !checked &&
-                              "text-muted-foreground group-hover:text-foreground"
-                          )}
-                        >
-                          {element.name}
-                          {element.description && (
-                            <span className="text-muted-foreground font-normal ml-2 text-xs">
-                              · {element.description}
-                            </span>
-                          )}
-                        </span>
-                        <span className="text-label tabular-nums">
-                          {element.confidenceLevel}/5
-                        </span>
-                      </label>
-                    </li>
-                  );
-                }
-              )}
-            </ul>
-          </section>
-        )}
 
         {/* Thesis */}
         <section className="space-y-6">

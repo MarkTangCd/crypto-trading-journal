@@ -11,6 +11,7 @@ import { useAccount } from "@/contexts/AccountContext";
 import { Loader2 } from "lucide-react";
 import { useLocation } from "wouter";
 
+
 function Stat({
   label,
   value,
@@ -43,17 +44,10 @@ export default function Dashboard() {
   const { selectedAccount } = useAccount();
   const accountId = selectedAccount?.id;
 
-  const { data: stats, isLoading: statsLoading } = trpc.stats.get.useQuery(
+  const { data: stats, isLoading } = trpc.stats.get.useQuery(
     { accountId: accountId! },
     { enabled: !!accountId }
   );
-  const { data: systemStats, isLoading: systemStatsLoading } =
-    trpc.stats.getBySystem.useQuery(
-      { accountId: accountId! },
-      { enabled: !!accountId }
-    );
-
-  const isLoading = statsLoading || systemStatsLoading;
 
   if (isLoading) {
     return (
@@ -82,10 +76,6 @@ export default function Dashboard() {
 
   const balanceTone: Tone =
     balanceChange > 0 ? "win" : balanceChange < 0 ? "loss" : undefined;
-
-  const sortedSystemStats = systemStats
-    ? [...systemStats].sort((a, b) => b.winRate - a.winRate)
-    : [];
 
   const profitFactor =
     stats.avgLoss > 0 ? stats.avgProfit / stats.avgLoss : null;
@@ -159,132 +149,6 @@ export default function Dashboard() {
               note="max consecutive"
             />
           </div>
-        </section>
-      )}
-
-      {/* By-system ledger: a real data table, instrument-grade alignment. */}
-      {sortedSystemStats.length > 0 && (
-        <section aria-labelledby="sys-label">
-          <SectionHeader
-            id="sys-label"
-            action={{
-              label: "manage systems",
-              onClick: () => setLocation("/trading-systems"),
-            }}
-          >
-            by system
-          </SectionHeader>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm tabular-nums">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="py-3 pr-4 text-label font-normal text-left">
-                    system
-                  </th>
-                  <th className="py-3 px-4 text-label font-normal text-right">
-                    win rate
-                  </th>
-                  <th className="py-3 px-4 text-label font-normal text-right">
-                    trades
-                  </th>
-                  <th className="py-3 px-4 text-label font-normal text-right whitespace-nowrap">
-                    w / l / be
-                  </th>
-                  <th className="py-3 pl-4 text-label font-normal text-right">
-                    net
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedSystemStats.map(sys => {
-                  const sysTone: Tone = sys.winRate >= 50 ? "win" : "loss";
-                  const netTone: Tone =
-                    sys.totalReturn > 0
-                      ? "win"
-                      : sys.totalReturn < 0
-                        ? "loss"
-                        : undefined;
-                  return (
-                    <tr
-                      key={sys.systemId}
-                      className="border-b border-border last:border-b-0 align-top"
-                    >
-                      <td className="py-4 pr-4">
-                        <div className="flex items-baseline gap-2 flex-wrap">
-                          <span className="font-medium text-foreground">
-                            {sys.systemName}
-                          </span>
-                          {sys.isActive && (
-                            <span className="text-label">[active]</span>
-                          )}
-                        </div>
-                        {sys.elements.length > 0 && (
-                          <div className="mt-1.5 text-xs text-muted-foreground">
-                            {sys.elements.map(e => e.name).join(" · ")}
-                          </div>
-                        )}
-                      </td>
-                      <td
-                        className={cn(
-                          "py-4 px-4 text-right font-medium",
-                          toneClass(sysTone)
-                        )}
-                      >
-                        {sys.winRate.toFixed(1)}%
-                      </td>
-                      <td className="py-4 px-4 text-right">
-                        {sys.totalTrades}
-                      </td>
-                      <td className="py-4 px-4 text-right whitespace-nowrap">
-                        <span className="status-win">{sys.winCount}</span>
-                        <span
-                          className="text-muted-foreground mx-1"
-                          aria-hidden="true"
-                        >
-                          /
-                        </span>
-                        <span className="status-loss">{sys.lossCount}</span>
-                        <span
-                          className="text-muted-foreground mx-1"
-                          aria-hidden="true"
-                        >
-                          /
-                        </span>
-                        <span>{sys.breakevenCount}</span>
-                      </td>
-                      <td
-                        className={cn(
-                          "py-4 pl-4 text-right font-medium whitespace-nowrap",
-                          toneClass(netTone)
-                        )}
-                      >
-                        {sys.totalReturn >= 0 ? "+" : "-"}$
-                        {fmtMoney(Math.abs(sys.totalReturn))}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
-
-      {/* Empty: trades logged but no systems defined. */}
-      {sortedSystemStats.length === 0 && stats.totalTrades > 0 && (
-        <section className="border-t border-border pt-10 max-w-md">
-          <p className="text-label">by system</p>
-          <p className="mt-3">no trading systems yet.</p>
-          <p className="text-sm text-muted-foreground mt-1">
-            categorize trades by system to see which rule sets are working.
-          </p>
-          <Button
-            variant="outline"
-            className="mt-5"
-            onClick={() => setLocation("/trading-systems")}
-          >
-            create trading system
-          </Button>
         </section>
       )}
 

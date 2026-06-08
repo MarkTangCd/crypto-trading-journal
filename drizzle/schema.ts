@@ -1,11 +1,5 @@
 import { sql } from "drizzle-orm";
-import {
-  check,
-  integer,
-  real,
-  sqliteTable,
-  text,
-} from "drizzle-orm/sqlite-core";
+import { check, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 /**
  * Core user table backing auth flow.
@@ -30,81 +24,12 @@ export const users = sqliteTable(
       .notNull(),
     /** Initial account balance set by user */
     initialBalance: text("initialBalance").default("0"),
-    /** Currently active trading system ID */
-    activeTradingSystemId: integer("activeTradingSystemId"),
   },
   table => [check("users_role_check", sql`${table.role} in ('user', 'admin')`)]
 );
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
-
-/**
- * Trading elements (opportunity tags) - e.g., Gap, Double Top/Bottom, CVD divergence
- */
-export const tradingElements = sqliteTable("trading_elements", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  /** Foreign key to users table */
-  userId: integer("userId").notNull(),
-  /** Element name e.g., "Gap", "Double Top/Bottom" */
-  name: text("name").notNull(),
-  /** Optional description/notes */
-  description: text("description"),
-  /** Confidence score for this element (1-5) */
-  confidenceLevel: integer("confidenceLevel").notNull().default(3),
-  /** Record creation timestamp */
-  createdAt: integer("createdAt", { mode: "timestamp_ms" })
-    .default(sql`(unixepoch() * 1000)`)
-    .notNull(),
-  /** Record update timestamp */
-  updatedAt: integer("updatedAt", { mode: "timestamp_ms" })
-    .default(sql`(unixepoch() * 1000)`)
-    .notNull(),
-});
-
-export type TradingElement = typeof tradingElements.$inferSelect;
-export type InsertTradingElement = typeof tradingElements.$inferInsert;
-
-/**
- * Trading systems - named strategies with associated elements
- */
-export const tradingSystems = sqliteTable("trading_systems", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  /** Foreign key to users table */
-  userId: integer("userId").notNull(),
-  /** System name */
-  name: text("name").notNull(),
-  /** Notes/description about the system */
-  notes: text("notes"),
-  /** Whether this system is active (only one can be active per user) */
-  isActive: integer("isActive").notNull().default(0),
-  /** Record creation timestamp */
-  createdAt: integer("createdAt", { mode: "timestamp_ms" })
-    .default(sql`(unixepoch() * 1000)`)
-    .notNull(),
-  /** Record update timestamp */
-  updatedAt: integer("updatedAt", { mode: "timestamp_ms" })
-    .default(sql`(unixepoch() * 1000)`)
-    .notNull(),
-});
-
-export type TradingSystem = typeof tradingSystems.$inferSelect;
-export type InsertTradingSystem = typeof tradingSystems.$inferInsert;
-
-/**
- * Junction table for trading systems and elements (many-to-many)
- */
-export const tradingSystemElements = sqliteTable("trading_system_elements", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  /** Foreign key to trading systems */
-  tradingSystemId: integer("tradingSystemId").notNull(),
-  /** Foreign key to trading elements */
-  tradingElementId: integer("tradingElementId").notNull(),
-});
-
-export type TradingSystemElement = typeof tradingSystemElements.$inferSelect;
-export type InsertTradingSystemElement =
-  typeof tradingSystemElements.$inferInsert;
 
 /**
  * Trading transactions table - stores all trade records
@@ -115,8 +40,6 @@ export const transactions = sqliteTable(
     id: integer("id").primaryKey({ autoIncrement: true }),
     /** Foreign key to users table */
     userId: integer("userId").notNull(),
-    /** Foreign key to trading systems (optional, for binding trades to systems) */
-    tradingSystemId: integer("tradingSystemId"),
     /** Foreign key to accounts (nullable initially for migration) */
     accountId: integer("accountId"),
     status: text("status").notNull().default("open"),
@@ -142,8 +65,6 @@ export const transactions = sqliteTable(
     riskRewardRatio: text("riskRewardRatio"),
     /** Return amount - negative for loss, positive for profit */
     returnAmount: text("returnAmount"),
-    /** Overall confidence score calculated from selected elements (1.0-5.0) */
-    confidenceLevel: real("confidenceLevel"),
     /** Optional TradingView URL */
     tvUrl: text("tvUrl"),
     marketCycle: text("marketCycle"),
@@ -187,21 +108,6 @@ export const transactions = sqliteTable(
 
 export type Transaction = typeof transactions.$inferSelect;
 export type InsertTransaction = typeof transactions.$inferInsert;
-
-/**
- * Junction table for transactions and elements (many-to-many)
- * Stores which trading elements were used in each transaction
- */
-export const transactionElements = sqliteTable("transaction_elements", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  /** Foreign key to transactions */
-  transactionId: integer("transactionId").notNull(),
-  /** Foreign key to trading elements */
-  tradingElementId: integer("tradingElementId").notNull(),
-});
-
-export type TransactionElement = typeof transactionElements.$inferSelect;
-export type InsertTransactionElement = typeof transactionElements.$inferInsert;
 
 /**
  * Trading accounts - users can have multiple accounts with separate balances and transactions

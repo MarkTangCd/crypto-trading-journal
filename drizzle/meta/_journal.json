@@ -15,6 +15,13 @@
       "when": 1775872558631,
       "tag": "0001_burly_star_brand",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1780924811259,
+      "tag": "0002_warm_gargoyle",
+      "breakpoints": true
     }
   ]
 }

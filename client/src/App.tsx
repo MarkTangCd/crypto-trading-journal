@@ -10,8 +10,6 @@ import Dashboard from "./pages/Dashboard";
 import Transactions from "./pages/Transactions";
 import NewTransaction from "./pages/NewTransaction";
 import TransactionDetail from "./pages/TransactionDetail";
-import TradingElements from "./pages/TradingElements";
-import TradingSystems from "./pages/TradingSystems";
 import Accounts from "./pages/Accounts";
 import Settings from "./pages/Settings";
 
@@ -23,8 +21,6 @@ function Router() {
         <Route path="/transactions" component={Transactions} />
         <Route path="/transactions/new" component={NewTransaction} />
         <Route path="/transactions/:id" component={TransactionDetail} />
-        <Route path="/trading-elements" component={TradingElements} />
-        <Route path="/trading-systems" component={TradingSystems} />
         <Route path="/accounts" component={Accounts} />
         <Route path="/settings" component={Settings} />
         <Route path="/404" component={NotFound} />
