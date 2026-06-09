@@ -6,8 +6,14 @@ import * as db from "./db";
 // Mock the database functions
 vi.mock("./db", () => ({
   getUserById: vi.fn().mockResolvedValue({ id: 1, initialBalance: "10000" }),
-  getCurrentBalance: vi.fn().mockResolvedValue("10000"),
-  getConsecutiveLosses: vi.fn().mockResolvedValue(0),
+  getAccountSnapshot: vi
+    .fn()
+    .mockResolvedValue({ currentBalance: "10000", consecutiveLosses: 0 }),
+  runInSqliteTransaction: vi
+    .fn()
+    .mockImplementation(async (op: (db: unknown) => Promise<unknown>) =>
+      op(undefined)
+    ),
   getAccountById: vi.fn().mockResolvedValue({
     id: 1,
     userId: 1,
@@ -72,6 +78,7 @@ vi.mock("./db", () => ({
     avgProfit: 150,
     avgLoss: 75,
     totalProfit: 750,
+    totalLoss: 225,
     totalReward: 525,
     losingStreak: 2,
     originalBalance: 10000,
@@ -253,7 +260,7 @@ describe("transaction procedures", () => {
       const ctx = createAuthContext();
       const caller = appRouter.createCaller(ctx);
 
-      const result = await caller.transaction.get({ id: 1 });
+      const result = await caller.transaction.get({ id: 1, accountId: 1 });
 
       expect(result).toBeDefined();
       expect(result?.id).toBe(1);

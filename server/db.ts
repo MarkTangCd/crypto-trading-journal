@@ -53,30 +53,57 @@ let _db: SqliteRemoteDatabase | null = null;
 let _sqliteDb: DatabaseSync | null = null;
 let _anonymousUserPromise: Promise<User> | null = null;
 
-async function runInSqliteTransaction<T>(
+// Process-wide promise chain that serialises every transaction. The shared
+// `_sqliteDb` connection only supports a single in-flight `BEGIN` at a time,
+// so concurrent tRPC requests that both need a transaction must queue here
+// instead of racing each other (which would surface as
+// "cannot start transaction within a transaction").
+let _transactionChain: Promise<unknown> = Promise.resolve();
+
+/**
+ * Run `operation` inside a serialised SQLite transaction.
+ *
+ * IMPORTANT: This helper is NOT reentrant. Callers must never invoke it
+ * recursively (directly or indirectly via another db helper that also calls
+ * it) — there is only one shared connection, so a nested call would deadlock
+ * waiting on the outer transaction's promise chain.
+ *
+ * Uses `BEGIN IMMEDIATE` so the write lock is acquired up-front; this matches
+ * what every callsite needs and prevents upgrade-from-read deadlocks.
+ */
+export async function runInSqliteTransaction<T>(
   operation: (db: SqliteRemoteDatabase) => Promise<T>
 ): Promise<T> {
-  const db = await getDb();
-  if (!db || !_sqliteDb) {
-    throw new Error("Database not available");
-  }
-
-  _sqliteDb.exec("BEGIN");
-  try {
-    const result = await operation(db);
-    _sqliteDb.exec("COMMIT");
-    return result;
-  } catch (error) {
-    try {
-      _sqliteDb.exec("ROLLBACK");
-    } catch (rollbackError) {
-      console.error(
-        "[Database] Failed to rollback transaction:",
-        rollbackError
-      );
+  const run = async (): Promise<T> => {
+    const db = await getDb();
+    if (!db || !_sqliteDb) {
+      throw new Error("Database not available");
     }
-    throw error;
-  }
+
+    _sqliteDb.exec("BEGIN IMMEDIATE");
+    try {
+      const result = await operation(db);
+      _sqliteDb.exec("COMMIT");
+      return result;
+    } catch (error) {
+      try {
+        _sqliteDb.exec("ROLLBACK");
+      } catch (rollbackError) {
+        console.error(
+          "[Database] Failed to rollback transaction:",
+          rollbackError
+        );
+      }
+      throw error;
+    }
+  };
+
+  // Tail-chain on the previous transaction. Swallow chain rejections so that
+  // one failed transaction doesn't poison every subsequent caller; the
+  // failing call still receives its own rejection via the returned promise.
+  const next = _transactionChain.then(run, run);
+  _transactionChain = next.catch(() => undefined);
+  return next;
 }
 
 async function ensureDatabaseSchema(db: SqliteRemoteDatabase): Promise<void> {
@@ -97,12 +124,17 @@ async function ensureDatabaseSchema(db: SqliteRemoteDatabase): Promise<void> {
   await migrate(
     db,
     async migrationQueries => {
-      const queries = migrationQueries.filter(query => query.trim().length > 0);
+      // Strip standalone BEGIN/COMMIT/ROLLBACK from individual migration files —
+      // we own the outer transaction here, and nested BEGIN would fail in SQLite.
+      const transactionKeywords = /^(BEGIN|COMMIT|ROLLBACK|END)\b/i;
+      const queries = migrationQueries
+        .map(query => query.trim())
+        .filter(query => query.length > 0 && !transactionKeywords.test(query));
       if (queries.length === 0) {
         return;
       }
 
-      _sqliteDb!.exec("BEGIN");
+      _sqliteDb!.exec("BEGIN IMMEDIATE");
       try {
         for (const query of queries) {
           _sqliteDb!.exec(query);
@@ -346,14 +378,26 @@ export async function createTransaction(
   return result[0];
 }
 
-export async function getTransactionById(id: number, userId: number) {
+export async function getTransactionById(
+  id: number,
+  userId: number,
+  accountId?: number
+) {
   const db = await getDb();
   if (!db) return undefined;
+
+  const conditions = [
+    eq(transactions.id, id),
+    eq(transactions.userId, userId),
+  ];
+  if (accountId !== undefined) {
+    conditions.push(eq(transactions.accountId, accountId));
+  }
 
   const result = await db
     .select()
     .from(transactions)
-    .where(and(eq(transactions.id, id), eq(transactions.userId, userId)))
+    .where(and(...conditions))
     .limit(1);
 
   return result.length > 0 ? result[0] : undefined;
@@ -457,6 +501,55 @@ export async function updateTransaction(
   return getTransactionById(id, userId);
 }
 
+/**
+ * Conditional close — atomically transitions an `open` trade to `closed`.
+ * Returns the affected row count so the caller can detect a lost race
+ * (e.g., a concurrent close attempt). Must be invoked from within
+ * `runInSqliteTransaction`.
+ */
+export async function closeOpenTransaction(
+  id: number,
+  userId: number,
+  data: {
+    endTime: number;
+    outcome: "win" | "loss" | "breakeven";
+    riskRewardRatio: string;
+    returnAmount: string;
+    accountBalance: string;
+    consecutiveLosses: number;
+  }
+): Promise<{ transaction: Transaction | undefined; affected: number }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const updated = await db
+    .update(transactions)
+    .set({
+      status: "closed",
+      endTime: data.endTime,
+      outcome: data.outcome,
+      riskRewardRatio: data.riskRewardRatio,
+      returnAmount: data.returnAmount,
+      accountBalance: data.accountBalance,
+      consecutiveLosses: data.consecutiveLosses,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(transactions.id, id),
+        eq(transactions.userId, userId),
+        eq(transactions.status, "open")
+      )
+    )
+    .returning({ id: transactions.id });
+
+  const affected = updated.length;
+  const transaction =
+    affected > 0 ? await getTransactionById(id, userId) : undefined;
+
+  return { transaction, affected };
+}
+
 export async function migrateTransactionStatus(): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -499,57 +592,78 @@ export async function getLastTransaction(userId: number) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-export async function getConsecutiveLosses(accountId: number): Promise<number> {
-  const db = await getDb();
-  if (!db) return 0;
+export interface AccountSnapshot {
+  currentBalance: string;
+  consecutiveLosses: number;
+}
 
-  // Get recent transactions ordered by creation time (newest first)
-  const recentTransactions = await db
-    .select()
+/**
+ * Single-query account snapshot — combines balance roll-up and consecutive
+ * loss streak so callers (close / getFormDefaults) don't issue two scans.
+ *
+ * Ordering for the streak: rows are walked newest-first by `endTime` with
+ * `id` as a tiebreaker (rapid closes can share a millisecond). Open trades
+ * have no endTime and are excluded by both the status filter and the
+ * explicit `endTime IS NOT NULL` guard.
+ */
+export async function getAccountSnapshot(
+  accountId: number,
+  initialBalance: string
+): Promise<AccountSnapshot> {
+  const db = await getDb();
+  if (!db) {
+    return {
+      currentBalance: initialBalance,
+      consecutiveLosses: 0,
+    };
+  }
+
+  const rows = await db
+    .select({
+      returnAmount: transactions.returnAmount,
+      outcome: transactions.outcome,
+    })
     .from(transactions)
     .where(
       and(
         eq(transactions.accountId, accountId),
-        inArray(transactions.status, CLOSED_TRADE_STATUSES)
+        inArray(transactions.status, CLOSED_TRADE_STATUSES),
+        sql`${transactions.endTime} IS NOT NULL`
       )
     )
-    .orderBy(desc(transactions.createdAt))
-    .limit(100);
+    .orderBy(desc(transactions.endTime), desc(transactions.id));
+
+  const totalReturn = addDecimalStrings(
+    rows.map(row => row.returnAmount ?? ZERO_DECIMAL)
+  );
+  const currentBalance = addDecimalStrings([
+    initialBalance || ZERO_DECIMAL,
+    totalReturn,
+  ]);
 
   let consecutiveLosses = 0;
-  for (const tx of recentTransactions) {
-    if (tx.outcome === "loss") {
-      consecutiveLosses++;
+  for (const row of rows) {
+    if (row.outcome === "loss") {
+      consecutiveLosses += 1;
     } else {
-      break; // Stop counting when we hit a non-loss
+      break;
     }
   }
 
-  return consecutiveLosses;
+  return { currentBalance, consecutiveLosses };
+}
+
+export async function getConsecutiveLosses(accountId: number): Promise<number> {
+  const snapshot = await getAccountSnapshot(accountId, ZERO_DECIMAL);
+  return snapshot.consecutiveLosses;
 }
 
 export async function getCurrentBalance(
   accountId: number,
   initialBalance: string
 ): Promise<string> {
-  const db = await getDb();
-  if (!db) return initialBalance;
-
-  const returnRows = await db
-    .select({ returnAmount: transactions.returnAmount })
-    .from(transactions)
-    .where(
-      and(
-        eq(transactions.accountId, accountId),
-        inArray(transactions.status, CLOSED_TRADE_STATUSES)
-      )
-    );
-
-  const totalReturn = addDecimalStrings(
-    returnRows.map(row => row.returnAmount ?? ZERO_DECIMAL)
-  );
-
-  return addDecimalStrings([initialBalance || ZERO_DECIMAL, totalReturn]);
+  const snapshot = await getAccountSnapshot(accountId, initialBalance);
+  return snapshot.currentBalance;
 }
 
 export async function getStatistics(accountId: number, initialBalance: string) {
@@ -571,6 +685,7 @@ export async function getStatistics(accountId: number, initialBalance: string) {
       avgProfit: 0,
       avgLoss: 0,
       totalProfit: 0,
+      totalLoss: 0,
       totalReward: 0,
       losingStreak: 0,
       originalBalance,
@@ -584,7 +699,11 @@ export async function getStatistics(accountId: number, initialBalance: string) {
     .where(
       and(
         eq(transactions.accountId, accountId),
-        inArray(transactions.status, CLOSED_TRADE_STATUSES)
+        inArray(transactions.status, CLOSED_TRADE_STATUSES),
+        // Invariant: closed/reviewed rows must have endTime. Guard matches
+        // getAccountSnapshot so both code paths see the same set of trades
+        // even if a stray row slipped through (defensive).
+        sql`${transactions.endTime} IS NOT NULL`
       )
     )
     .orderBy(asc(transactions.createdAt));
@@ -660,11 +779,42 @@ export async function getStatistics(accountId: number, initialBalance: string) {
     avgProfit,
     avgLoss,
     totalProfit: centsToDecimalNumber(totalProfitCents),
+    totalLoss: centsToDecimalNumber(totalLossCents),
     totalReward: centsToDecimalNumber(totalRewardCents),
     losingStreak: maxLosingStreak,
     originalBalance,
     latestBalance,
   };
+}
+
+/**
+ * One-shot invariant check at startup: closed/reviewed trades must have an
+ * endTime. A non-zero count signals stale data (older rows or a bug); we
+ * log a warning instead of throwing so the server still boots — fix the
+ * data, then restart.
+ */
+export async function assertClosedTradesHaveEndTime(): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const result = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(transactions)
+    .where(
+      and(
+        inArray(transactions.status, CLOSED_TRADE_STATUSES),
+        sql`${transactions.endTime} IS NULL`
+      )
+    );
+
+  const offending = result[0]?.count ?? 0;
+  if (offending > 0) {
+    console.warn(
+      `[Database] Invariant violation: ${offending} closed/reviewed transactions have endTime IS NULL. ` +
+        `Statistics and balance roll-ups will exclude them. Please backfill endTime.`
+    );
+  }
+  return offending;
 }
 
 export async function getUniqueTradingPairs(

@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { CloseTradeModal } from "@/components/CloseTradeModal";
+import { useAccount } from "@/contexts/AccountContext";
 import {
   Field,
   SectionHeader,
@@ -24,16 +25,19 @@ export default function TransactionDetail() {
   const params = useParams<{ id: string }>();
   const transactionId = parseInt(params.id || "0");
   const utils = trpc.useUtils();
+  const { selectedAccount } = useAccount();
+  const accountId = selectedAccount?.id;
 
   const { data: transaction, isLoading } = trpc.transaction.get.useQuery(
-    { id: transactionId },
-    { enabled: transactionId > 0 }
+    { id: transactionId, accountId: accountId! },
+    { enabled: transactionId > 0 && !!accountId }
   );
 
   const [reviewFeedback, setReviewFeedback] = useState("");
   const [reviewChartUrl, setReviewChartUrl] = useState("");
   const [closeTrade, setCloseTrade] = useState<{
     id: number;
+    accountId: number;
     tradingPair: string;
     direction: string;
     timeFrame: string;
@@ -50,7 +54,9 @@ export default function TransactionDetail() {
   const updateMutation = trpc.transaction.update.useMutation({
     onSuccess: () => {
       toast.success("reflection saved");
-      utils.transaction.get.invalidate({ id: transactionId });
+      if (accountId) {
+        utils.transaction.get.invalidate({ id: transactionId, accountId });
+      }
       utils.transaction.list.invalidate();
     },
     onError: error => {
@@ -165,6 +171,7 @@ export default function TransactionDetail() {
               onClick={() =>
                 setCloseTrade({
                   id: transaction.id,
+                  accountId: transaction.accountId,
                   tradingPair: transaction.tradingPair,
                   direction: transaction.direction,
                   timeFrame: transaction.timeFrame,

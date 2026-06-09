@@ -5,6 +5,7 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
+import { assertClosedTradesHaveEndTime } from "../db";
 import { serveStatic, setupVite } from "./vite";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -53,6 +54,12 @@ async function startServer() {
   if (port !== preferredPort) {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
+
+  // Best-effort invariant check — logs a warning if any closed/reviewed
+  // trade is missing endTime; never blocks startup.
+  assertClosedTradesHaveEndTime().catch(err => {
+    console.warn("[Database] invariant check failed:", err);
+  });
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);

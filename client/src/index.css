@@ -74,7 +74,11 @@
   --secondary: oklch(0.96 0 0);
   --secondary-foreground: var(--ink);
   --muted: oklch(0.96 0 0);
-  --muted-foreground: oklch(0.42 0 0);
+  /* No third neutral (DESIGN.md §2). Secondary text is the same ink as primary;
+     hierarchy is built from weight (400 vs 500) and scale, not a gray ramp.
+     Placeholders and disabled state should reach for `opacity-*` if they need
+     to recede — never re-introduce a mid-gray token here. */
+  --muted-foreground: var(--ink);
   --accent: var(--mist);
   --accent-foreground: var(--ink);
   --destructive: var(--loss);
@@ -122,7 +126,8 @@
   --secondary: oklch(0.24 0 0);
   --secondary-foreground: oklch(0.92 0 0);
   --muted: oklch(0.24 0 0);
-  --muted-foreground: oklch(0.68 0 0);
+  /* Mirror of the light-mode rule: secondary ink == primary ink. */
+  --muted-foreground: var(--foreground);
   --accent: oklch(0.3 0 0);
   --accent-foreground: oklch(0.92 0 0);
   --destructive: oklch(0.62 0.18 25);

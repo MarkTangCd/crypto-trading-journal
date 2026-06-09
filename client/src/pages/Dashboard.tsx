@@ -77,8 +77,9 @@ export default function Dashboard() {
   const balanceTone: Tone =
     balanceChange > 0 ? "win" : balanceChange < 0 ? "loss" : undefined;
 
+  // Profit factor uses absolute totals to avoid the asymmetry of avg-based ratios.
   const profitFactor =
-    stats.avgLoss > 0 ? stats.avgProfit / stats.avgLoss : null;
+    stats.totalLoss > 0 ? stats.totalProfit / stats.totalLoss : null;
 
   const expectancy =
     stats.totalTrades > 0 ? stats.totalReward / stats.totalTrades : 0;
@@ -134,7 +135,7 @@ export default function Dashboard() {
             <Stat
               label="profit factor"
               value={profitFactor !== null ? profitFactor.toFixed(2) : "n/a"}
-              note="avg profit ÷ avg loss"
+              note="gross profit ÷ gross loss"
             />
             <Stat
               label="expectancy"

@@ -86,6 +86,10 @@ function DashboardLayoutContent({
   });
   const isMobile = useIsMobile();
 
+  // Live width tracked during drag without triggering React re-renders.
+  // Committed to state (and persisted) only on mouseup.
+  const liveWidthRef = useRef<number | null>(null);
+
   useEffect(() => {
     if (isCollapsed) {
       setIsResizing(false);
@@ -93,26 +97,36 @@ function DashboardLayoutContent({
   }, [isCollapsed]);
 
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing) return;
+    if (!isResizing) return;
 
+    // Locate the SidebarProvider wrapper element that owns --sidebar-width.
+    const wrapperEl = sidebarRef.current?.closest(
+      '[data-slot="sidebar-wrapper"]'
+    ) as HTMLElement | null;
+
+    const handleMouseMove = (e: MouseEvent) => {
       const sidebarLeft = sidebarRef.current?.getBoundingClientRect().left ?? 0;
       const newWidth = e.clientX - sidebarLeft;
-      if (newWidth >= MIN_WIDTH && newWidth <= MAX_WIDTH) {
-        setSidebarWidth(newWidth);
-      }
+      if (newWidth < MIN_WIDTH || newWidth > MAX_WIDTH) return;
+
+      liveWidthRef.current = newWidth;
+      // Mutate the CSS variable directly — bypasses React re-render during drag.
+      wrapperEl?.style.setProperty("--sidebar-width", `${newWidth}px`);
     };
 
     const handleMouseUp = () => {
+      // Commit the final width once: triggers state update + localStorage persist.
+      if (liveWidthRef.current !== null) {
+        setSidebarWidth(liveWidthRef.current);
+        liveWidthRef.current = null;
+      }
       setIsResizing(false);
     };
 
-    if (isResizing) {
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
-    }
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
 
     return () => {
       document.removeEventListener("mousemove", handleMouseMove);

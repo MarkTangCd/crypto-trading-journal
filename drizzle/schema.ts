@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { check, index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 /**
  * Core user table backing auth flow.
@@ -40,8 +40,8 @@ export const transactions = sqliteTable(
     id: integer("id").primaryKey({ autoIncrement: true }),
     /** Foreign key to users table */
     userId: integer("userId").notNull(),
-    /** Foreign key to accounts (nullable initially for migration) */
-    accountId: integer("accountId"),
+    /** Foreign key to accounts */
+    accountId: integer("accountId").notNull(),
     status: text("status").notNull().default("open"),
     /** Account balance at time of trade */
     accountBalance: text("accountBalance"),
@@ -102,6 +102,24 @@ export const transactions = sqliteTable(
     check(
       "transactions_transaction_type_check",
       sql`${table.transactionType} is null or ${table.transactionType} in ('Trend', 'Reversal')`
+    ),
+    // Hot path: list/stats are scoped by account + status.
+    index("transactions_account_status_idx").on(
+      table.accountId,
+      table.status
+    ),
+    // List view orders by startTime — SQLite can scan ASC indexes in reverse
+    // to satisfy ORDER BY DESC.
+    index("transactions_account_start_idx").on(
+      table.accountId,
+      table.startTime
+    ),
+    // Account snapshot walks closed trades newest-first by endTime,
+    // breaking ties on id. A composite ASC index satisfies the reverse scan.
+    index("transactions_account_end_id_idx").on(
+      table.accountId,
+      table.endTime,
+      table.id
     ),
   ]
 );

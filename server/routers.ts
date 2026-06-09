@@ -7,12 +7,12 @@ import {
   getTransactionById,
   getTransactionsByUserId,
   updateTransaction,
+  closeOpenTransaction,
   deleteTransactionWithElements,
-  getConsecutiveLosses,
-  getCurrentBalance,
+  getAccountSnapshot,
   getStatistics,
   getUniqueTradingPairs,
-  getUserById,
+  runInSqliteTransaction,
   // Accounts
   createAccount,
   getAccountById,
@@ -21,12 +21,45 @@ import {
   deleteAccountWithTransactions,
   getAccountCount,
 } from "./db";
+import type { TrpcContext } from "./_core/context";
+import type { Account, Transaction } from "../drizzle/schema";
 import { add as addFixedPoint } from "./_core/fixedPoint";
 import {
   ALLOWED_TRANSITIONS,
   MARKET_CYCLES,
   TRANSACTION_TYPES,
 } from "@shared/const";
+
+// Ownership guards. Both throw FORBIDDEN when the row is missing or owned by
+// another user so that the procedure never silently leaks foreign data.
+async function requireOwnedAccount(
+  ctx: TrpcContext,
+  accountId: number
+): Promise<Account> {
+  const account = await getAccountById(accountId, ctx.user.id);
+  if (!account) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Account not found or not owned by user",
+    });
+  }
+  return account;
+}
+
+async function requireOwnedTransaction(
+  ctx: TrpcContext,
+  id: number,
+  accountId?: number
+): Promise<Transaction> {
+  const transaction = await getTransactionById(id, ctx.user.id, accountId);
+  if (!transaction) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Transaction not found or not owned by user",
+    });
+  }
+  return transaction;
+}
 
 export const appRouter = router({
   system: systemRouter,
@@ -52,13 +85,7 @@ export const appRouter = router({
       )
       .mutation(async ({ ctx, input }) => {
         // Validate account ownership before doing any other work
-        const account = await getAccountById(input.accountId, ctx.user.id);
-        if (!account) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Account not found",
-          });
-        }
+        const account = await requireOwnedAccount(ctx, input.accountId);
 
         const transaction = await createTransactionWithElements({
           userId: ctx.user.id,
@@ -81,11 +108,15 @@ export const appRouter = router({
         return transaction;
       }),
 
-    // Get a single transaction
+    // Get a single transaction (scoped to its owning account)
     get: publicProcedure
-      .input(z.object({ id: z.number() }))
+      .input(z.object({ id: z.number(), accountId: z.number() }))
       .query(async ({ ctx, input }) => {
-        const transaction = await getTransactionById(input.id, ctx.user.id);
+        const transaction = await getTransactionById(
+          input.id,
+          ctx.user.id,
+          input.accountId
+        );
         if (!transaction) return null;
         return transaction;
       }),
@@ -109,14 +140,7 @@ export const appRouter = router({
       )
       .query(async ({ ctx, input }) => {
         const { accountId, ...options } = input;
-        // Verify account ownership
-        const account = await getAccountById(accountId, ctx.user.id);
-        if (!account) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Account not found",
-          });
-        }
+        await requireOwnedAccount(ctx, accountId);
         return getTransactionsByUserId(ctx.user.id, { ...options, accountId });
       }),
 
@@ -131,65 +155,98 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
-        const transaction = await getTransactionById(input.id, ctx.user.id);
-        if (!transaction) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Transaction not found",
-          });
-        }
+        // Pre-flight ownership + endTime check (cheap reads outside the
+        // serialised transaction). Status/transition checks are re-done
+        // inside the transaction so two concurrent close requests can't
+        // both pass the gate and double-count returnAmount.
+        const preview = await requireOwnedTransaction(ctx, input.id);
 
-        if (!(transaction.status in ALLOWED_TRANSITIONS)) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: `Invalid transaction status: ${transaction.status}`,
-          });
-        }
-
-        const currentStatus =
-          transaction.status as keyof typeof ALLOWED_TRANSITIONS;
-        const allowedTransition = ALLOWED_TRANSITIONS[currentStatus];
-        if (allowedTransition !== "closed") {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: `Cannot transition transaction from ${currentStatus} to closed`,
-          });
-        }
-
-        if (input.endTime <= transaction.startTime) {
+        if (input.endTime <= preview.startTime) {
           throw new TRPCError({
             code: "BAD_REQUEST",
             message: "endTime must be greater than startTime",
           });
         }
 
-        const user = await getUserById(ctx.user.id);
-        const initialBalance = user?.initialBalance || "0";
-        const currentBalance = await getCurrentBalance(
-          ctx.user.id,
-          initialBalance
-        );
-
-        let consecutiveLosses = await getConsecutiveLosses(ctx.user.id);
-        if (input.outcome === "loss") {
-          consecutiveLosses += 1;
-        } else if (input.outcome === "win") {
-          consecutiveLosses = 0;
+        if (preview.accountId === null) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Transaction is not associated with an account",
+          });
         }
 
-        const accountBalance = addFixedPoint([
-          currentBalance,
-          input.returnAmount,
-        ]);
+        const account = await requireOwnedAccount(ctx, preview.accountId);
 
-        return updateTransaction(input.id, ctx.user.id, {
-          status: "closed",
-          endTime: input.endTime,
-          outcome: input.outcome,
-          riskRewardRatio: input.riskRewardRatio,
-          returnAmount: input.returnAmount,
-          accountBalance,
-          consecutiveLosses,
+        return runInSqliteTransaction(async () => {
+          // Re-read inside the transaction so status check uses the
+          // committed view, not the pre-flight one.
+          const transaction = await getTransactionById(
+            input.id,
+            ctx.user.id,
+            account.id
+          );
+          if (!transaction) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: "Transaction not found or not owned by user",
+            });
+          }
+
+          if (!(transaction.status in ALLOWED_TRANSITIONS)) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `Invalid transaction status: ${transaction.status}`,
+            });
+          }
+
+          const currentStatus =
+            transaction.status as keyof typeof ALLOWED_TRANSITIONS;
+          const allowedTransition = ALLOWED_TRANSITIONS[currentStatus];
+          if (allowedTransition !== "closed") {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `Cannot transition transaction from ${currentStatus} to closed`,
+            });
+          }
+
+          const snapshot = await getAccountSnapshot(
+            account.id,
+            account.initialBalance
+          );
+          const currentBalance = snapshot.currentBalance;
+
+          let consecutiveLosses = snapshot.consecutiveLosses;
+          if (input.outcome === "loss") {
+            consecutiveLosses += 1;
+          } else if (input.outcome === "win") {
+            consecutiveLosses = 0;
+          }
+
+          const accountBalance = addFixedPoint([
+            currentBalance,
+            input.returnAmount,
+          ]);
+
+          // Conditional UPDATE — `WHERE status = 'open'` is the actual
+          // race guard. If another tx already flipped status, affected=0
+          // and we surface CONFLICT instead of silently double-counting.
+          const result = await closeOpenTransaction(input.id, ctx.user.id, {
+            endTime: input.endTime,
+            outcome: input.outcome,
+            riskRewardRatio: input.riskRewardRatio,
+            returnAmount: input.returnAmount,
+            accountBalance,
+            consecutiveLosses,
+          });
+
+          if (result.affected === 0) {
+            throw new TRPCError({
+              code: "CONFLICT",
+              message: "Transaction already closed",
+            });
+          }
+
+          return result.transaction;
         });
       }),
 
@@ -215,13 +272,7 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         const { id, ...data } = input;
 
-        const existingTransaction = await getTransactionById(id, ctx.user.id);
-        if (!existingTransaction) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Transaction not found",
-          });
-        }
+        const existingTransaction = await requireOwnedTransaction(ctx, id);
 
         const hasEntryFieldUpdates =
           data.tradingPair !== undefined ||
@@ -302,6 +353,7 @@ export const appRouter = router({
     delete: publicProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
+        await requireOwnedTransaction(ctx, input.id);
         await deleteTransactionWithElements(input.id, ctx.user.id);
         return { success: true };
       }),
@@ -310,22 +362,17 @@ export const appRouter = router({
     getFormDefaults: publicProcedure
       .input(z.object({ accountId: z.number() }))
       .query(async ({ ctx, input }) => {
-        const account = await getAccountById(input.accountId, ctx.user.id);
-        if (!account) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Account not found",
-          });
-        }
-        const currentBalance = await getCurrentBalance(
-          account.id,
-          account.initialBalance
+        const account = await requireOwnedAccount(ctx, input.accountId);
+
+        // Snapshot read is wrapped so balance + streak are computed from a
+        // consistent point-in-time view, matching transaction.close.
+        const snapshot = await runInSqliteTransaction(async () =>
+          getAccountSnapshot(account.id, account.initialBalance)
         );
-        const consecutiveLosses = await getConsecutiveLosses(account.id);
 
         return {
-          currentBalance,
-          consecutiveLosses,
+          currentBalance: snapshot.currentBalance,
+          consecutiveLosses: snapshot.consecutiveLosses,
           initialBalance: account.initialBalance,
         };
       }),
@@ -334,13 +381,7 @@ export const appRouter = router({
     getTradingPairs: publicProcedure
       .input(z.object({ accountId: z.number() }))
       .query(async ({ ctx, input }) => {
-        const account = await getAccountById(input.accountId, ctx.user.id);
-        if (!account) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Account not found",
-          });
-        }
+        await requireOwnedAccount(ctx, input.accountId);
         return getUniqueTradingPairs(ctx.user.id, input.accountId);
       }),
   }),
@@ -350,13 +391,7 @@ export const appRouter = router({
     get: publicProcedure
       .input(z.object({ accountId: z.number() }))
       .query(async ({ ctx, input }) => {
-        const account = await getAccountById(input.accountId, ctx.user.id);
-        if (!account) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Account not found",
-          });
-        }
+        const account = await requireOwnedAccount(ctx, input.accountId);
         return getStatistics(account.id, account.initialBalance);
       }),
   }),
@@ -410,6 +445,8 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         const { id, ...data } = input;
 
+        await requireOwnedAccount(ctx, id);
+
         if (data.name !== undefined) {
           const trimmedName = data.name.trim();
           if (trimmedName.length === 0) {
@@ -430,6 +467,8 @@ export const appRouter = router({
     delete: publicProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
+        await requireOwnedAccount(ctx, input.id);
+
         const accountCount = await getAccountCount(ctx.user.id);
         if (accountCount < 2) {
           throw new TRPCError({

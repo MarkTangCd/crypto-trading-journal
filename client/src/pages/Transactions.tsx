@@ -118,6 +118,7 @@ export default function Transactions() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [closeTrade, setCloseTrade] = useState<{
     id: number;
+    accountId: number;
     tradingPair: string;
     direction: string;
     timeFrame: string;
@@ -148,6 +149,7 @@ export default function Transactions() {
     onSuccess: () => {
       toast.success("trade deleted");
       utils.transaction.list.invalidate();
+      utils.transaction.get.invalidate();
       utils.transaction.getFormDefaults.invalidate();
       utils.stats.get.invalidate();
       setDeleteId(null);
@@ -458,6 +460,7 @@ export default function Transactions() {
                             onClick={() =>
                               setCloseTrade({
                                 id: tx.id,
+                                accountId: tx.accountId,
                                 tradingPair: tx.tradingPair,
                                 direction: tx.direction,
                                 timeFrame: tx.timeFrame,

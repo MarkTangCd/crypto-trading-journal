@@ -26,7 +26,7 @@ npm run db:push      # Generate + apply migrations (drizzle-kit generate && driz
 
 ## Architecture
 
-**Stack**: React 19 + Vite (client), Express + tRPC (server), MySQL + Drizzle ORM (database), TypeScript throughout.
+**Stack**: React 19 + Vite (client), Express + tRPC (server), SQLite (via Node's built-in `node:sqlite`) + Drizzle ORM (database), TypeScript throughout.
 
 **Monorepo layout** (single `package.json`):
 
@@ -35,17 +35,19 @@ npm run db:push      # Generate + apply migrations (drizzle-kit generate && driz
 - `shared/` — Types and constants shared between client and server; `@shared/*` alias
 - `drizzle/schema.ts` — Database schema (source of truth for all tables)
 
-**Request flow**: Browser → Express → tRPC router (`server/routers.ts`) → DB functions (`server/db.ts`) → MySQL
+**Request flow**: Browser → Express → tRPC router (`server/routers.ts`) → DB functions (`server/db.ts`) → SQLite
 
 **tRPC end-to-end types**: The client (`client/src/lib/trpc.ts`) imports the router type from the server, giving full type safety across the stack. All API calls go through `trpc.<procedure>` — there are no REST endpoints.
 
-**Authentication**: External OAuth server. Sessions stored in a cookie (`app_session_id`, JWT). The tRPC context (`server/_core/context.ts`) extracts the user from the cookie on every request. Protected procedures call `requireUser()`.
+**Authentication**: **Single-tenant, anonymous, local-use only.** The tRPC context (`server/_core/context.ts`) always returns the same anonymous user from `getOrCreateAnonymousUser()` — there is currently no cookie parsing, no JWT verification, and no `protectedProcedure`/`requireUser`. All procedures use `publicProcedure`. This is deliberate for a solo-use journal running on `localhost`; do **not** expose the port to a network without first adding real auth. If/when auth is reintroduced, prefer `protectedProcedure` + a cookie session over OAuth indirection.
 
-**Database layer** (`server/db.ts`): All queries are plain functions (not a class/repository). All are filtered by `userId` — users only see their own data. Key auto-calculations happen here:
+**Database layer** (`server/db.ts`): All queries are plain functions (not a class/repository). All are filtered by `userId` — even with a single anonymous user today, this invariant must be preserved for any future return of multi-user auth. Key auto-calculations happen here:
 
-- `getCurrentBalance()` — initialBalance + sum of all `returnAmount`s
-- `getConsecutiveLosses()` — count of consecutive losses from most recent trades
+- `getCurrentBalance(accountId, initialBalance)` — initialBalance + sum of all `returnAmount`s for the given account
+- `getConsecutiveLosses(accountId)` — count of consecutive losses from most recent trades on the given account
 - `calculateConfidenceLevel()` — average confidence of selected trading elements
+
+**Transactions**: SQLite transactions go through `runInSqliteTransaction(fn)`, which wraps the shared `_sqliteDb` with raw `BEGIN` / `COMMIT` / `ROLLBACK` (`_sqliteDb.exec('BEGIN')`). It is not reentrant — never nest calls. Use SQLite-compatible SQL only; do not introduce MySQL-only syntax.
 
 **Frontend routing**: Uses `wouter` (not React Router). Routes are defined in `client/src/App.tsx`.
 
@@ -64,14 +66,11 @@ Time fields (`startTime`, `endTime`) are stored as milliseconds (bigint).
 ## Environment Variables
 
 ```
-DATABASE_URL          # MySQL connection string
-JWT_SECRET            # Cookie signing secret
-VITE_APP_ID           # OAuth app ID
-OAUTH_SERVER_URL      # OAuth server URL (server-side)
-VITE_OAUTH_PORTAL_URL # OAuth portal URL (client-side)
-OWNER_OPEN_ID         # Admin user's open ID
+DATABASE_URL          # SQLite file path (resolved in server/_core/databasePath.ts)
 PORT                  # Server port (default 3000)
 ```
+
+Legacy `JWT_SECRET`, `VITE_APP_ID`, `OAUTH_SERVER_URL`, `VITE_OAUTH_PORTAL_URL`, `OWNER_OPEN_ID` are no longer wired — see the Authentication note above. If they remain in any `.env`, they're inert.
 
 ## Design Context
 

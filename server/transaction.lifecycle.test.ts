@@ -46,9 +46,16 @@ function buildDbMock(overrides: Record<string, unknown> = {}) {
     getTransactionById: vi.fn().mockResolvedValue(null),
     getTransactionsByUserId: vi.fn().mockResolvedValue([]),
     updateTransaction: vi.fn().mockResolvedValue(null),
+    closeOpenTransaction: vi
+      .fn()
+      .mockResolvedValue({ transaction: null, affected: 0 }),
     deleteTransactionWithElements: vi.fn().mockResolvedValue(undefined),
     getConsecutiveLosses: vi.fn().mockResolvedValue(0),
     getCurrentBalance: vi.fn().mockResolvedValue("1000.00"),
+    getAccountSnapshot: vi.fn().mockResolvedValue({
+      currentBalance: "1000.00",
+      consecutiveLosses: 0,
+    }),
     getStatistics: vi.fn().mockResolvedValue({}),
     getUniqueTradingPairs: vi.fn().mockResolvedValue([]),
     updateUserInitialBalance: vi.fn().mockResolvedValue(undefined),
@@ -62,6 +69,11 @@ function buildDbMock(overrides: Record<string, unknown> = {}) {
       createdAt: new Date(),
       updatedAt: new Date(),
     }),
+    runInSqliteTransaction: vi
+      .fn()
+      .mockImplementation(async (op: (db: unknown) => Promise<unknown>) =>
+        op(undefined)
+      ),
     ...overrides,
   };
 }
@@ -115,9 +127,14 @@ async function setupCloseCaller(options?: {
 }) {
   vi.resetModules();
 
+  // Use an accountId distinct from id/userId so tests can detect
+  // regressions that pass the wrong identifier to getAccountById.
+  const TRANSACTION_ACCOUNT_ID = 7;
+
   const getTransactionById = vi.fn().mockResolvedValue({
     id: 42,
     userId: 1,
+    accountId: TRANSACTION_ACCOUNT_ID,
     status: options?.status ?? "open",
     accountBalance: null,
     tradingPair: "BTCUSDT",
@@ -145,6 +162,23 @@ async function setupCloseCaller(options?: {
       ...data,
     }));
 
+  const closeOpenTransaction = vi
+    .fn()
+    .mockImplementation(async (id: number, userId: number, data: object) => ({
+      transaction: { id, userId, status: "closed", ...data },
+      affected: 1,
+    }));
+
+  const getAccountById = vi.fn().mockResolvedValue({
+    id: TRANSACTION_ACCOUNT_ID,
+    userId: 1,
+    name: "Test Account",
+    notes: null,
+    initialBalance: "1000",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
   vi.doMock("./db", () =>
     buildDbMock({
       getUserById: vi.fn().mockResolvedValue({ id: 1, initialBalance: "1000" }),
@@ -154,8 +188,14 @@ async function setupCloseCaller(options?: {
       getConsecutiveLosses: vi
         .fn()
         .mockResolvedValue(options?.consecutiveLosses ?? 0),
+      getAccountSnapshot: vi.fn().mockResolvedValue({
+        currentBalance: options?.currentBalance ?? "1000.00",
+        consecutiveLosses: options?.consecutiveLosses ?? 0,
+      }),
+      getAccountById,
       getTransactionById,
       updateTransaction,
+      closeOpenTransaction,
       createTransactionWithElements: vi
         .fn()
         .mockImplementation(async data => ({
@@ -187,7 +227,10 @@ async function setupCloseCaller(options?: {
   return {
     caller: mockedRouter.createCaller(createAuthContext()) as any,
     getTransactionById,
+    getAccountById,
     updateTransaction,
+    closeOpenTransaction,
+    transactionAccountId: TRANSACTION_ACCOUNT_ID,
   };
 }
 
@@ -199,6 +242,9 @@ async function setupGetFormDefaultsCaller() {
       getUserById: vi.fn().mockResolvedValue({ id: 1, initialBalance: "1000" }),
       getCurrentBalance: vi.fn().mockResolvedValue("1050"),
       getConsecutiveLosses: vi.fn().mockResolvedValue(2),
+      getAccountSnapshot: vi
+        .fn()
+        .mockResolvedValue({ currentBalance: "1050", consecutiveLosses: 2 }),
     })
   );
 
@@ -705,7 +751,12 @@ describe("transaction.update lifecycle rules", () => {
 
 describe("transaction.close", () => {
   it("closes an open trade when required fields are provided", async () => {
-    const { caller, updateTransaction } = await setupCloseCaller();
+    const {
+      caller,
+      closeOpenTransaction,
+      getAccountById,
+      transactionAccountId,
+    } = await setupCloseCaller();
 
     const result = await caller.transaction.close({
       id: 42,
@@ -715,7 +766,10 @@ describe("transaction.close", () => {
       returnAmount: "150.00",
     });
 
-    expect(updateTransaction).toHaveBeenCalledOnce();
+    expect(closeOpenTransaction).toHaveBeenCalledOnce();
+    // Regression guard: balance lookup must use the transaction's own
+    // accountId, not the user id or any ambient account context.
+    expect(getAccountById).toHaveBeenCalledWith(transactionAccountId, 1);
     expect(result).toMatchObject({
       id: 42,
       status: "closed",
@@ -729,7 +783,7 @@ describe("transaction.close", () => {
   });
 
   it("calculates accountBalance and consecutiveLosses when closing", async () => {
-    const { caller, updateTransaction } = await setupCloseCaller({
+    const { caller, closeOpenTransaction } = await setupCloseCaller({
       currentBalance: "900.00",
       consecutiveLosses: 1,
     });
@@ -742,11 +796,10 @@ describe("transaction.close", () => {
       returnAmount: "-50.00",
     });
 
-    expect(updateTransaction).toHaveBeenCalledWith(
+    expect(closeOpenTransaction).toHaveBeenCalledWith(
       42,
       1,
       expect.objectContaining({
-        status: "closed",
         accountBalance: "850.00",
         consecutiveLosses: 2,
       })
@@ -754,7 +807,7 @@ describe("transaction.close", () => {
   });
 
   it("fails with TRPCError when trade is already closed", async () => {
-    const { caller, updateTransaction } = await setupCloseCaller({
+    const { caller, closeOpenTransaction } = await setupCloseCaller({
       status: "closed",
     });
 
@@ -768,11 +821,11 @@ describe("transaction.close", () => {
       })
     ).rejects.toBeInstanceOf(TRPCError);
 
-    expect(updateTransaction).not.toHaveBeenCalled();
+    expect(closeOpenTransaction).not.toHaveBeenCalled();
   });
 
   it("validates that endTime is greater than startTime", async () => {
-    const { caller, updateTransaction } = await setupCloseCaller({
+    const { caller, closeOpenTransaction } = await setupCloseCaller({
       startTime: 3000,
     });
 
@@ -786,7 +839,7 @@ describe("transaction.close", () => {
       })
     ).rejects.toBeInstanceOf(TRPCError);
 
-    expect(updateTransaction).not.toHaveBeenCalled();
+    expect(closeOpenTransaction).not.toHaveBeenCalled();
   });
 });
 
@@ -872,6 +925,259 @@ function runListScenario(
 
   return result;
 }
+
+function runCloseLifecycleScenario(fileName: string) {
+  if (!existsSync(tmpDir)) {
+    mkdirSync(tmpDir, { recursive: true });
+  }
+
+  const databasePath = join(tmpDir, fileName);
+  if (existsSync(databasePath)) {
+    rmSync(databasePath);
+  }
+
+  // Use a userId distinct from accountId so the test detects the regression
+  // where ctx.user.id was passed where accountId was expected.
+  const USER_ID = 7;
+  const ACCOUNT_ID = 42;
+  const INITIAL_BALANCE = "1000.00";
+
+  const script = `
+    const { DatabaseSync } = await import("node:sqlite");
+    const db = new DatabaseSync(process.env.DATABASE_URL);
+    db.exec(\`
+      CREATE TABLE users (id INTEGER PRIMARY KEY, openId TEXT, name TEXT, email TEXT, loginMethod TEXT, role TEXT, initialBalance TEXT, activeTradingSystemId INTEGER, createdAt INTEGER, updatedAt INTEGER, lastSignedIn INTEGER);
+      CREATE TABLE accounts (id INTEGER PRIMARY KEY, userId INTEGER NOT NULL, name TEXT NOT NULL, notes TEXT, initialBalance TEXT NOT NULL, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));
+      CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, tvUrl TEXT, marketCycle TEXT, transactionType TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));
+    \`);
+    db.prepare("INSERT INTO users (id, openId, name, email, loginMethod, role, initialBalance, createdAt, updatedAt, lastSignedIn) VALUES (?, 'u', 'u', 'u@e', 'anonymous', 'user', ?, 0, 0, 0)").run(${USER_ID}, ${JSON.stringify(INITIAL_BALANCE)});
+    db.prepare("INSERT INTO accounts (id, userId, name, initialBalance, createdAt, updatedAt) VALUES (?, ?, 'Main', ?, 0, 0)").run(${ACCOUNT_ID}, ${USER_ID}, ${JSON.stringify(INITIAL_BALANCE)});
+    db.prepare("INSERT INTO transactions (id, userId, accountId, status, tradingPair, timeFrame, startTime, direction, tradingLogic, createdAt, updatedAt) VALUES (?, ?, ?, 'open', 'BTCUSDT', '1H', 1000, 'long', 'first', 1000, 1000)").run(101, ${USER_ID}, ${ACCOUNT_ID});
+    db.prepare("INSERT INTO transactions (id, userId, accountId, status, tradingPair, timeFrame, startTime, direction, tradingLogic, createdAt, updatedAt) VALUES (?, ?, ?, 'open', 'BTCUSDT', '1H', 1000, 'long', 'second', 2000, 2000)").run(102, ${USER_ID}, ${ACCOUNT_ID});
+
+    const { appRouter } = await import(${JSON.stringify(pathToFileURL(join(repoRoot, "server", "routers.ts")).href)});
+    const ctx = {
+      req: {},
+      res: {},
+      user: {
+        id: ${USER_ID},
+        openId: 'test-open-id',
+        name: 'Test User',
+        email: 'test@example.com',
+        loginMethod: 'anonymous',
+        role: 'user',
+        initialBalance: ${JSON.stringify(INITIAL_BALANCE)},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        lastSignedIn: new Date(),
+      },
+    };
+    const caller = appRouter.createCaller(ctx);
+
+    // First trade closes as a win for +100
+    const first = await caller.transaction.close({
+      id: 101,
+      endTime: 2000,
+      outcome: 'win',
+      riskRewardRatio: '2.0',
+      returnAmount: '100.00',
+    });
+
+    // Second trade closes as a loss for -50
+    const second = await caller.transaction.close({
+      id: 102,
+      endTime: 3000,
+      outcome: 'loss',
+      riskRewardRatio: '1.0',
+      returnAmount: '-50.00',
+    });
+
+    db.close();
+    console.log(JSON.stringify({ first, second }));
+  `;
+
+  const output = execFileSync(
+    "node",
+    [
+      "--experimental-sqlite",
+      "--input-type=module",
+      "--import",
+      "tsx",
+      "--eval",
+      script,
+    ],
+    {
+      cwd: repoRoot,
+      env: { ...process.env, DATABASE_URL: databasePath },
+      encoding: "utf-8",
+    }
+  );
+
+  const result = JSON.parse(output.trim()) as {
+    first: {
+      accountBalance: string;
+      consecutiveLosses: number;
+    };
+    second: {
+      accountBalance: string;
+      consecutiveLosses: number;
+    };
+  };
+
+  rmSync(databasePath);
+
+  return result;
+}
+
+function runConcurrentCloseScenario(fileName: string) {
+  if (!existsSync(tmpDir)) {
+    mkdirSync(tmpDir, { recursive: true });
+  }
+
+  const databasePath = join(tmpDir, fileName);
+  if (existsSync(databasePath)) {
+    rmSync(databasePath);
+  }
+
+  const USER_ID = 9;
+  const ACCOUNT_ID = 77;
+  const INITIAL_BALANCE = "1000.00";
+
+  const script = `
+    const { DatabaseSync } = await import("node:sqlite");
+    const db = new DatabaseSync(process.env.DATABASE_URL);
+    db.exec(\`
+      CREATE TABLE users (id INTEGER PRIMARY KEY, openId TEXT, name TEXT, email TEXT, loginMethod TEXT, role TEXT, initialBalance TEXT, activeTradingSystemId INTEGER, createdAt INTEGER, updatedAt INTEGER, lastSignedIn INTEGER);
+      CREATE TABLE accounts (id INTEGER PRIMARY KEY, userId INTEGER NOT NULL, name TEXT NOT NULL, notes TEXT, initialBalance TEXT NOT NULL, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));
+      CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, tvUrl TEXT, marketCycle TEXT, transactionType TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));
+    \`);
+    db.prepare("INSERT INTO users (id, openId, name, email, loginMethod, role, initialBalance, createdAt, updatedAt, lastSignedIn) VALUES (?, 'u', 'u', 'u@e', 'anonymous', 'user', ?, 0, 0, 0)").run(${USER_ID}, ${JSON.stringify(INITIAL_BALANCE)});
+    db.prepare("INSERT INTO accounts (id, userId, name, initialBalance, createdAt, updatedAt) VALUES (?, ?, 'Main', ?, 0, 0)").run(${ACCOUNT_ID}, ${USER_ID}, ${JSON.stringify(INITIAL_BALANCE)});
+    db.prepare("INSERT INTO transactions (id, userId, accountId, status, tradingPair, timeFrame, startTime, direction, tradingLogic, createdAt, updatedAt) VALUES (?, ?, ?, 'open', 'BTCUSDT', '1H', 1000, 'long', 'race', 1000, 1000)").run(500, ${USER_ID}, ${ACCOUNT_ID});
+
+    const { appRouter } = await import(${JSON.stringify(pathToFileURL(join(repoRoot, "server", "routers.ts")).href)});
+    const ctx = {
+      req: {},
+      res: {},
+      user: {
+        id: ${USER_ID},
+        openId: 'test-open-id',
+        name: 'Test User',
+        email: 'test@example.com',
+        loginMethod: 'anonymous',
+        role: 'user',
+        initialBalance: ${JSON.stringify(INITIAL_BALANCE)},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        lastSignedIn: new Date(),
+      },
+    };
+    const caller = appRouter.createCaller(ctx);
+
+    // Fire two close requests concurrently against the same open trade.
+    const closePayload = {
+      id: 500,
+      endTime: 2000,
+      outcome: 'win',
+      riskRewardRatio: '2.0',
+      returnAmount: '100.00',
+    };
+
+    const settlements = await Promise.allSettled([
+      caller.transaction.close(closePayload),
+      caller.transaction.close(closePayload),
+    ]);
+
+    const summary = settlements.map(s => {
+      if (s.status === 'fulfilled') {
+        return { status: 'fulfilled', accountBalance: s.value && s.value.accountBalance };
+      }
+      const err = s.reason;
+      return {
+        status: 'rejected',
+        code: err && err.code ? err.code : null,
+        message: err && err.message ? err.message : String(err),
+      };
+    });
+
+    const finalRow = db.prepare("SELECT status, accountBalance, returnAmount FROM transactions WHERE id = 500").get();
+    db.close();
+    console.log(JSON.stringify({ summary, finalRow }));
+  `;
+
+  const output = execFileSync(
+    "node",
+    [
+      "--experimental-sqlite",
+      "--input-type=module",
+      "--import",
+      "tsx",
+      "--eval",
+      script,
+    ],
+    {
+      cwd: repoRoot,
+      env: { ...process.env, DATABASE_URL: databasePath },
+      encoding: "utf-8",
+    }
+  );
+
+  const result = JSON.parse(output.trim()) as {
+    summary: Array<{
+      status: "fulfilled" | "rejected";
+      accountBalance?: string | null;
+      code?: string | null;
+      message?: string;
+    }>;
+    finalRow: {
+      status: string;
+      accountBalance: string;
+      returnAmount: string;
+    };
+  };
+
+  rmSync(databasePath);
+
+  return result;
+}
+
+describe("transaction.close concurrency", () => {
+  it("two concurrent close requests result in exactly one success", () => {
+    const result = runConcurrentCloseScenario("close-concurrent.sqlite");
+
+    const fulfilled = result.summary.filter(s => s.status === "fulfilled");
+    const rejected = result.summary.filter(s => s.status === "rejected");
+
+    // Exactly one wins; the other is rejected with CONFLICT or BAD_REQUEST.
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect(["CONFLICT", "BAD_REQUEST"]).toContain(rejected[0].code);
+
+    // Returned balance includes one +100, never two.
+    expect(fulfilled[0].accountBalance).toBe("1100.00");
+
+    // Persisted row reflects a single close — balance = 1000 + 100.
+    expect(result.finalRow.status).toBe("closed");
+    expect(result.finalRow.accountBalance).toBe("1100.00");
+    expect(result.finalRow.returnAmount).toBe("100.00");
+  });
+});
+
+describe("transaction.close cumulative balance regression", () => {
+  it("computes balance and consecutiveLosses from the account, not the user", () => {
+    const result = runCloseLifecycleScenario("close-cumulative.sqlite");
+
+    // After first close (win, +100): balance = 1000 + 100 = 1100, streak reset to 0
+    expect(result.first.accountBalance).toBe("1100.00");
+    expect(result.first.consecutiveLosses).toBe(0);
+
+    // After second close (loss, -50): balance = 1100 + (-50) = 1050
+    // (proves cumulative — the bug would have produced 1000 + (-50) = 950)
+    expect(result.second.accountBalance).toBe("1050.00");
+    // streak is 1 (one loss after the prior win), proving real history is consulted
+    expect(result.second.consecutiveLosses).toBe(1);
+  });
+});
 
 describe("transaction.list status-aware filtering", () => {
   it("filters transactions by status correctly", () => {

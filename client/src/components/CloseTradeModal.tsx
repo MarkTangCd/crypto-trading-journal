@@ -7,7 +7,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useAccount } from "@/contexts/AccountContext";
 import {
   Field,
   INPUT_CLASS,
@@ -45,6 +44,7 @@ interface CloseTradeModalProps {
   onOpenChange: (open: boolean) => void;
   trade: {
     id: number;
+    accountId: number;
     tradingPair: string;
     direction: string;
     timeFrame: string;
@@ -58,12 +58,13 @@ export function CloseTradeModal({
   trade,
 }: CloseTradeModalProps) {
   const utils = trpc.useUtils();
-  const { selectedAccount } = useAccount();
-  const accountId = selectedAccount?.id;
+  // Use the trade's own accountId so the balance preview stays accurate
+  // even if the user switches the active account while the modal is open.
+  const tradeAccountId = trade?.accountId;
 
   const { data: formDefaults } = trpc.transaction.getFormDefaults.useQuery(
-    { accountId: accountId! },
-    { enabled: open && !!accountId }
+    { accountId: tradeAccountId! },
+    { enabled: open && !!tradeAccountId }
   );
 
   const [formData, setFormData] = useState<FormData>(EMPTY_FORM);

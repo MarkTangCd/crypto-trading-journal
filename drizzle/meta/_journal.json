@@ -22,6 +22,20 @@
       "when": 1780924811259,
       "tag": "0002_warm_gargoyle",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1780928485923,
+      "tag": "0003_acoustic_harpoon",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1780930000000,
+      "tag": "0004_index_tune",
+      "breakpoints": true
     }
   ]
 }
