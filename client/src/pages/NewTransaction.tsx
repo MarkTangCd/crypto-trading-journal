@@ -35,7 +35,7 @@ interface FormData {
   startTime: string;
   direction: Direction;
   context: string;
-  tradeItemsText: string;
+  tradeItems: string[];
   marketCycle: MarketCycle | "";
   transactionType: TransactionType | "";
   tvUrl: string;
@@ -128,7 +128,7 @@ export default function NewTransaction() {
     startTime: "",
     direction: "",
     context: "",
-    tradeItemsText: "",
+    tradeItems: [],
     marketCycle: "",
     transactionType: "",
     tvUrl: "",
@@ -185,10 +185,6 @@ export default function NewTransaction() {
     }
 
     const startTimestamp = new Date(formData.startTime).getTime();
-    const tradeItems = formData.tradeItemsText
-      .split(/\r?\n/)
-      .map(item => item.trim())
-      .filter(Boolean);
 
     // Snapshot the selected accountId at submit time so a later account
     // switch cannot misroute this in-flight create request.
@@ -199,7 +195,7 @@ export default function NewTransaction() {
       startTime: startTimestamp,
       direction: formData.direction as "long" | "short",
       context: formData.context,
-      tradeItems,
+      tradeItems: formData.tradeItems,
       marketCycle: formData.marketCycle as MarketCycle,
       transactionType: formData.transactionType as TransactionType,
       tvUrl: formData.tvUrl || undefined,
@@ -215,6 +211,27 @@ export default function NewTransaction() {
     value: FormData[K]
   ) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const [tradeItemInput, setTradeItemInput] = useState("");
+
+  const addTradeItem = () => {
+    const tradeItem = tradeItemInput.trim();
+    if (!tradeItem) {
+      setTradeItemInput("");
+      return;
+    }
+    setFormData(prev => ({
+      ...prev,
+      tradeItems: [...prev.tradeItems, tradeItem],
+    }));
+    setTradeItemInput("");
+  };
+
+  const handleTradeItemKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+    e.preventDefault();
+    addTradeItem();
   };
 
   if (loadingDefaults) {
@@ -467,15 +484,33 @@ export default function NewTransaction() {
               className={cn(TEXTAREA_CLASS, "min-h-[7rem]")}
             />
           </Field>
-          <Field label="trade items" htmlFor="tradeItemsText">
-            <textarea
-              id="tradeItemsText"
-              rows={4}
-              placeholder="one item per line"
-              value={formData.tradeItemsText}
-              onChange={e => updateField("tradeItemsText", e.target.value)}
-              className={cn(TEXTAREA_CLASS, "min-h-[6rem]")}
-            />
+          <Field label="trade items" htmlFor="tradeItemInput">
+            <div className="space-y-3">
+              {formData.tradeItems.length > 0 && (
+                <div
+                  className="flex flex-wrap gap-2"
+                  aria-label="trade item tags"
+                >
+                  {formData.tradeItems.map((item, index) => (
+                    <span
+                      key={`${item}-${index}`}
+                      className="border border-border px-2 py-1 text-xs font-mono text-foreground"
+                    >
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <input
+                id="tradeItemInput"
+                type="text"
+                placeholder="press enter to add"
+                value={tradeItemInput}
+                onChange={e => setTradeItemInput(e.target.value)}
+                onKeyDown={handleTradeItemKeyDown}
+                className={INPUT_CLASS}
+              />
+            </div>
           </Field>
           <Field label="tradingview url (optional)" htmlFor="tvUrl">
             <input
