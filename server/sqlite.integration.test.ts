@@ -26,7 +26,7 @@ function bootstrapSqlite(databaseUrl: string): void {
   const schemaSql =
     "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, openId TEXT NOT NULL UNIQUE, name TEXT, email TEXT, loginMethod TEXT, role TEXT NOT NULL DEFAULT 'user', createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), lastSignedIn INTEGER NOT NULL DEFAULT (unixepoch() * 1000), initialBalance TEXT DEFAULT '0'); " +
     "CREATE TABLE IF NOT EXISTS accounts (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, notes TEXT, initialBalance TEXT NOT NULL DEFAULT '0', createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000)); " +
-    "CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, entryPrice TEXT, positionSizeUsdt TEXT, plannedStopLossPrice TEXT, plannedTakeProfitPrice TEXT, plannedRiskRewardRatio TEXT, exitPrice TEXT, tvUrl TEXT, marketCycle TEXT, transactionType TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));";
+    "CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, context TEXT NOT NULL DEFAULT '', tradeItems TEXT NOT NULL DEFAULT '[]', outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, entryPrice TEXT, positionSizeUsdt TEXT, plannedStopLossPrice TEXT, plannedTakeProfitPrice TEXT, plannedRiskRewardRatio TEXT, exitPrice TEXT, tvUrl TEXT, marketCycle TEXT, transactionType TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));";
 
   runNodeEval(
     `const { DatabaseSync } = await import('node:sqlite'); const db = new DatabaseSync(process.env.DATABASE_URL); db.exec(${JSON.stringify(schemaSql)}); db.close(); console.log('bootstrapped');`,
@@ -119,6 +119,49 @@ console.log(JSON.stringify(tables.map(table => table.name)));
       expect(tables).toContain("accounts");
       expect(tables).toContain("users");
       expect(tables).toContain("__drizzle_migrations");
+    });
+
+    it("runs pending migrations when an existing sqlite file is behind", () => {
+      const tempDbPath = join(tmpDir, "task7-existing-migrate.sqlite");
+      if (existsSync(tempDbPath)) {
+        rmSync(tempDbPath);
+      }
+
+      const legacySchemaSql =
+        "CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, openId TEXT NOT NULL UNIQUE, name TEXT, email TEXT, loginMethod TEXT, role TEXT NOT NULL DEFAULT 'user', createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), lastSignedIn INTEGER NOT NULL DEFAULT (unixepoch() * 1000), initialBalance TEXT DEFAULT '0'); " +
+        "CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, entryPrice TEXT, positionSizeUsdt TEXT, plannedStopLossPrice TEXT, plannedTakeProfitPrice TEXT, plannedRiskRewardRatio TEXT, exitPrice TEXT, tvUrl TEXT, marketCycle TEXT, transactionType TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000)); " +
+        "CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, hash TEXT NOT NULL, created_at NUMERIC);";
+
+      const script = `
+const { DatabaseSync } = await import("node:sqlite");
+const sqlite = new DatabaseSync(process.env.DATABASE_URL);
+sqlite.exec(${JSON.stringify(legacySchemaSql)});
+sqlite.prepare("INSERT INTO users (id, openId, name, loginMethod, role) VALUES (1, 'legacy-user', 'Legacy User', 'anonymous', 'user')").run();
+sqlite.prepare("INSERT INTO transactions (id, userId, accountId, status, tradingPair, timeFrame, startTime, direction, tradingLogic, createdAt, updatedAt) VALUES (1, 1, 1, 'open', 'BTCUSDT', '1H', 1000, 'long', 'legacy thesis', 1000, 1000)").run();
+sqlite.prepare("INSERT INTO __drizzle_migrations (hash, created_at) VALUES ('0005', 1781009465740)").run();
+sqlite.close();
+
+const { getOrCreateAnonymousUser, closeDb } = await import("./server/db.ts");
+await getOrCreateAnonymousUser();
+closeDb();
+
+const verified = new DatabaseSync(process.env.DATABASE_URL);
+const columns = verified.prepare("PRAGMA table_info(transactions)").all();
+const row = verified.prepare("SELECT context, tradeItems FROM transactions WHERE id = 1").get();
+verified.close();
+
+if (!columns.some(column => column.name === "context")) throw new Error("missing-context-column");
+if (!columns.some(column => column.name === "tradeItems")) throw new Error("missing-tradeItems-column");
+if (!row || row.context !== "legacy thesis" || row.tradeItems !== "[]") {
+  throw new Error("legacy-row-not-backfilled:" + JSON.stringify(row));
+}
+
+console.log("ok");
+`;
+
+      const result = runNodeEval(script, tempDbPath);
+
+      expect(result).toContain("ok");
     });
   });
 
@@ -243,6 +286,7 @@ console.log("ok");`;
 const {
   upsertUser,
   createTransactionWithElements,
+  getTransactionById,
   deleteTransactionWithElements,
   closeDb,
 } = await import("./server/db.ts");
@@ -272,6 +316,8 @@ await createTransactionWithElements({
   endTime: 1700003600000,
   direction: "long",
   tradingLogic: "test logic",
+  context: "macro compression near range high",
+  tradeItems: ["range high", "failed breakdown", "strong close"],
   marketCycle: "Trading Range",
   transactionType: "Trend",
   outcome: "win",
@@ -317,6 +363,14 @@ if (!Number.isFinite(txOneId) || !Number.isFinite(txTwoId)) {
   throw new Error("invalid-transaction-ids");
 }
 sqlite.close();
+
+const reloaded = await getTransactionById(txOneId, userRow.id, accountId);
+if (!reloaded || reloaded.context !== "macro compression near range high") {
+  throw new Error("context-not-persisted");
+}
+if (JSON.stringify(reloaded.tradeItems) !== JSON.stringify(["range high", "failed breakdown", "strong close"])) {
+  throw new Error("trade-items-not-ordered:" + JSON.stringify(reloaded?.tradeItems));
+}
 
 await deleteTransactionWithElements(txOneId, userRow.id);
 await deleteTransactionWithElements(txTwoId, userRow.id);

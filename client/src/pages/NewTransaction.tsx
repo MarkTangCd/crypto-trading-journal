@@ -34,7 +34,8 @@ interface FormData {
   timeFrame: string;
   startTime: string;
   direction: Direction;
-  tradingLogic: string;
+  context: string;
+  tradeItemsText: string;
   marketCycle: MarketCycle | "";
   transactionType: TransactionType | "";
   tvUrl: string;
@@ -126,7 +127,8 @@ export default function NewTransaction() {
     timeFrame: "",
     startTime: "",
     direction: "",
-    tradingLogic: "",
+    context: "",
+    tradeItemsText: "",
     marketCycle: "",
     transactionType: "",
     tvUrl: "",
@@ -165,7 +167,7 @@ export default function NewTransaction() {
       !formData.timeFrame ||
       !formData.startTime ||
       !formData.direction ||
-      !formData.tradingLogic ||
+      !formData.context ||
       !formData.marketCycle ||
       !formData.transactionType ||
       !formData.entryPrice ||
@@ -183,6 +185,10 @@ export default function NewTransaction() {
     }
 
     const startTimestamp = new Date(formData.startTime).getTime();
+    const tradeItems = formData.tradeItemsText
+      .split(/\r?\n/)
+      .map(item => item.trim())
+      .filter(Boolean);
 
     // Snapshot the selected accountId at submit time so a later account
     // switch cannot misroute this in-flight create request.
@@ -192,7 +198,8 @@ export default function NewTransaction() {
       timeFrame: formData.timeFrame,
       startTime: startTimestamp,
       direction: formData.direction as "long" | "short",
-      tradingLogic: formData.tradingLogic,
+      context: formData.context,
+      tradeItems,
       marketCycle: formData.marketCycle as MarketCycle,
       transactionType: formData.transactionType as TransactionType,
       tvUrl: formData.tvUrl || undefined,
@@ -352,16 +359,11 @@ export default function NewTransaction() {
                 inputMode="decimal"
                 placeholder="0.00"
                 value={formData.positionSizeUsdt}
-                onChange={e =>
-                  updateField("positionSizeUsdt", e.target.value)
-                }
+                onChange={e => updateField("positionSizeUsdt", e.target.value)}
                 className={cn(INPUT_CLASS, "tabular-nums")}
               />
             </Field>
-            <Field
-              label="planned stop loss"
-              htmlFor="plannedStopLossPrice"
-            >
+            <Field label="planned stop loss" htmlFor="plannedStopLossPrice">
               <input
                 id="plannedStopLossPrice"
                 type="text"
@@ -374,10 +376,7 @@ export default function NewTransaction() {
                 className={cn(INPUT_CLASS, "tabular-nums")}
               />
             </Field>
-            <Field
-              label="planned take profit"
-              htmlFor="plannedTakeProfitPrice"
-            >
+            <Field label="planned take profit" htmlFor="plannedTakeProfitPrice">
               <input
                 id="plannedTakeProfitPrice"
                 type="text"
@@ -411,19 +410,16 @@ export default function NewTransaction() {
           </div>
         </section>
 
-        {/* Context */}
+        {/* Classification */}
         <section className="space-y-6">
-          <SectionHeader>context</SectionHeader>
+          <SectionHeader>classification</SectionHeader>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
             <Field label="market cycle" htmlFor="marketCycle">
               <select
                 id="marketCycle"
                 value={formData.marketCycle}
                 onChange={e =>
-                  updateField(
-                    "marketCycle",
-                    e.target.value as MarketCycle | ""
-                  )
+                  updateField("marketCycle", e.target.value as MarketCycle | "")
                 }
                 className={SELECT_CLASS}
               >
@@ -458,17 +454,27 @@ export default function NewTransaction() {
           </div>
         </section>
 
-        {/* Thesis */}
+        {/* Context */}
         <section className="space-y-6">
-          <SectionHeader>thesis</SectionHeader>
-          <Field label="why this trade?" htmlFor="tradingLogic">
+          <SectionHeader>context</SectionHeader>
+          <Field label="market background" htmlFor="context">
             <textarea
-              id="tradingLogic"
+              id="context"
               rows={5}
-              placeholder="state the setup, the trigger, the invalidation."
-              value={formData.tradingLogic}
-              onChange={e => updateField("tradingLogic", e.target.value)}
+              placeholder="state the broader market conditions."
+              value={formData.context}
+              onChange={e => updateField("context", e.target.value)}
               className={cn(TEXTAREA_CLASS, "min-h-[7rem]")}
+            />
+          </Field>
+          <Field label="trade items" htmlFor="tradeItemsText">
+            <textarea
+              id="tradeItemsText"
+              rows={4}
+              placeholder="one item per line"
+              value={formData.tradeItemsText}
+              onChange={e => updateField("tradeItemsText", e.target.value)}
+              className={cn(TEXTAREA_CLASS, "min-h-[6rem]")}
             />
           </Field>
           <Field label="tradingview url (optional)" htmlFor="tvUrl">
@@ -485,7 +491,10 @@ export default function NewTransaction() {
 
         {/* Submit row */}
         <div className="flex items-center gap-6 pt-6 border-t border-border">
-          <Button type="submit" disabled={createMutation.isPending || !accountId}>
+          <Button
+            type="submit"
+            disabled={createMutation.isPending || !accountId}
+          >
             {createMutation.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (

@@ -40,6 +40,8 @@ vi.mock("./db", () => ({
     endTime: Date.now() + 3600000,
     direction: "long",
     tradingLogic: "Test trade",
+    context: "Test trade",
+    tradeItems: [],
     marketCycle: "Upward Trend",
     transactionType: "Trend",
     outcome: "win",
@@ -151,7 +153,8 @@ describe("transaction procedures", () => {
         timeFrame: "4H",
         startTime: Date.now(),
         direction: "long",
-        tradingLogic: "Test trade logic",
+        context: "Test trade logic",
+        tradeItems: ["breakout", "retest"],
         marketCycle: "Upward Trend",
         transactionType: "Trend",
         entryPrice: "100",
@@ -163,7 +166,13 @@ describe("transaction procedures", () => {
       expect(result).toBeDefined();
       expect(result.id).toBe(1);
       expect(result.status).toBe("open");
-      expect(db.createTransactionWithElements).toHaveBeenCalled();
+      expect(db.createTransactionWithElements).toHaveBeenCalledWith(
+        expect.objectContaining({
+          context: "Test trade logic",
+          tradeItems: ["breakout", "retest"],
+          tradingLogic: "Test trade logic",
+        })
+      );
     });
 
     it("writes new transaction to the selected account when accountId differs from userId", async () => {
@@ -188,7 +197,8 @@ describe("transaction procedures", () => {
         timeFrame: "4H",
         startTime: Date.now(),
         direction: "long",
-        tradingLogic: "Switched account regression",
+        context: "Switched account regression",
+        tradeItems: [],
         marketCycle: "Upward Trend",
         transactionType: "Trend",
         entryPrice: "100",
@@ -219,7 +229,8 @@ describe("transaction procedures", () => {
           timeFrame: "4H",
           startTime: Date.now(),
           direction: "long",
-          tradingLogic: "Should be rejected",
+          context: "Should be rejected",
+          tradeItems: [],
           marketCycle: "Upward Trend",
           transactionType: "Trend",
           entryPrice: "100",
@@ -243,13 +254,14 @@ describe("transaction procedures", () => {
           timeFrame: "4H",
           startTime: Date.now(),
           direction: "long",
-          tradingLogic: "Test trade logic",
+          context: "Test trade logic",
+          tradeItems: [],
           transactionType: "Trend",
           entryPrice: "100",
           positionSizeUsdt: "1000",
           plannedStopLossPrice: "95",
           plannedTakeProfitPrice: "110",
-        } as any)
+        } as never)
       ).rejects.toThrow();
     });
 
@@ -264,14 +276,84 @@ describe("transaction procedures", () => {
           timeFrame: "4H",
           startTime: Date.now(),
           direction: "long",
-          tradingLogic: "Test trade logic",
+          context: "Test trade logic",
+          tradeItems: [],
           marketCycle: "Upward Trend",
           entryPrice: "100",
           positionSizeUsdt: "1000",
           plannedStopLossPrice: "95",
           plannedTakeProfitPrice: "110",
-        } as any)
+        } as never)
       ).rejects.toThrow();
+    });
+
+    it("rejects create without context", async () => {
+      const ctx = createAuthContext();
+      const caller = appRouter.createCaller(ctx);
+
+      await expect(
+        caller.transaction.create({
+          accountId: 1,
+          tradingPair: "BTCUSDT",
+          timeFrame: "4H",
+          startTime: Date.now(),
+          direction: "long",
+          tradeItems: [],
+          marketCycle: "Upward Trend",
+          transactionType: "Trend",
+          entryPrice: "100",
+          positionSizeUsdt: "1000",
+          plannedStopLossPrice: "95",
+          plannedTakeProfitPrice: "110",
+        } as never)
+      ).rejects.toThrow();
+    });
+
+    it("rejects create when tradeItems is not an array", async () => {
+      const ctx = createAuthContext();
+      const caller = appRouter.createCaller(ctx);
+
+      await expect(
+        caller.transaction.create({
+          accountId: 1,
+          tradingPair: "BTCUSDT",
+          timeFrame: "4H",
+          startTime: Date.now(),
+          direction: "long",
+          context: "Test trade logic",
+          tradeItems: "breakout",
+          marketCycle: "Upward Trend",
+          transactionType: "Trend",
+          entryPrice: "100",
+          positionSizeUsdt: "1000",
+          plannedStopLossPrice: "95",
+          plannedTakeProfitPrice: "110",
+        } as never)
+      ).rejects.toThrow();
+    });
+
+    it("rejects create payloads that still send tradingLogic", async () => {
+      const ctx = createAuthContext();
+      const caller = appRouter.createCaller(ctx);
+
+      await expect(
+        caller.transaction.create({
+          accountId: 1,
+          tradingPair: "BTCUSDT",
+          timeFrame: "4H",
+          startTime: Date.now(),
+          direction: "long",
+          context: "Test trade logic",
+          tradeItems: [],
+          tradingLogic: "Legacy field",
+          marketCycle: "Upward Trend",
+          transactionType: "Trend",
+          entryPrice: "100",
+          positionSizeUsdt: "1000",
+          plannedStopLossPrice: "95",
+          plannedTakeProfitPrice: "110",
+        } as never)
+      ).rejects.toThrow(/Unrecognized key/);
     });
   });
 
@@ -328,6 +410,8 @@ describe("transaction procedures", () => {
           endTime: null,
           direction: "long",
           tradingLogic: "Test trade",
+          context: "Test trade",
+          tradeItems: [],
           marketCycle: "Upward Trend",
           transactionType: "Trend",
           outcome: null,
@@ -369,6 +453,8 @@ describe("transaction procedures", () => {
           endTime: null,
           direction: "long",
           tradingLogic: "Test trade",
+          context: "Test trade",
+          tradeItems: [],
           marketCycle: "Upward Trend",
           transactionType: "Reversal",
           outcome: null,
@@ -410,6 +496,8 @@ describe("transaction procedures", () => {
           endTime: null,
           direction: "long",
           tradingLogic: "Test trade",
+          context: "Test trade",
+          tradeItems: [],
           marketCycle: "Upward Trend",
           transactionType: "Trend",
           outcome: null,
@@ -434,6 +522,8 @@ describe("transaction procedures", () => {
           endTime: null,
           direction: "short",
           tradingLogic: "Legacy trade",
+          context: "Legacy trade",
+          tradeItems: [],
           marketCycle: null,
           transactionType: null,
           outcome: null,
@@ -474,6 +564,8 @@ describe("transaction procedures", () => {
         endTime: Date.now() + 3600000,
         direction: "long",
         tradingLogic: "Test trade",
+        context: "Test trade",
+        tradeItems: [],
         marketCycle: "Upward Trend",
         transactionType: "Trend",
         outcome: "win",

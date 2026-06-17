@@ -116,8 +116,12 @@ async function ensureDatabaseSchema(db: SqliteRemoteDatabase): Promise<void> {
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
     )
     .all() as Array<{ name: string }>;
+  const hasMigrationTable = existingTables.some(
+    table => table.name === "__drizzle_migrations"
+  );
 
-  if (existingTables.length > 0) {
+  if (existingTables.length > 0 && !hasMigrationTable) {
+    ensureLegacyTransactionContextColumns();
     return;
   }
 
@@ -154,6 +158,64 @@ async function ensureDatabaseSchema(db: SqliteRemoteDatabase): Promise<void> {
     },
     { migrationsFolder: MIGRATIONS_FOLDER }
   );
+}
+
+function ensureLegacyTransactionContextColumns(): void {
+  if (!_sqliteDb) {
+    throw new Error("Database not available");
+  }
+
+  const hasTransactionsTable = _sqliteDb
+    .prepare(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'transactions'"
+    )
+    .get();
+
+  if (!hasTransactionsTable) {
+    return;
+  }
+
+  const columns = _sqliteDb
+    .prepare("PRAGMA table_info(transactions)")
+    .all() as Array<{ name: string }>;
+  const columnNames = new Set(columns.map(column => column.name));
+  const hasTradingLogic = columnNames.has("tradingLogic");
+  const needsContext = !columnNames.has("context");
+  const needsTradeItems = !columnNames.has("tradeItems");
+
+  if (!needsContext && !needsTradeItems) {
+    return;
+  }
+
+  _sqliteDb.exec("BEGIN IMMEDIATE");
+  try {
+    if (needsContext) {
+      _sqliteDb.exec(
+        "ALTER TABLE transactions ADD context text NOT NULL DEFAULT ''"
+      );
+    }
+    if (needsTradeItems) {
+      _sqliteDb.exec(
+        "ALTER TABLE transactions ADD tradeItems text NOT NULL DEFAULT '[]'"
+      );
+    }
+    if (hasTradingLogic) {
+      _sqliteDb.exec(
+        "UPDATE transactions SET context = tradingLogic WHERE context = ''"
+      );
+    }
+    _sqliteDb.exec("COMMIT");
+  } catch (error) {
+    try {
+      _sqliteDb.exec("ROLLBACK");
+    } catch (rollbackError) {
+      console.error(
+        "[Database] Failed to rollback legacy schema repair:",
+        rollbackError
+      );
+    }
+    throw error;
+  }
 }
 
 export async function getDb(): Promise<SqliteRemoteDatabase | null> {
@@ -386,10 +448,7 @@ export async function getTransactionById(
   const db = await getDb();
   if (!db) return undefined;
 
-  const conditions = [
-    eq(transactions.id, id),
-    eq(transactions.userId, userId),
-  ];
+  const conditions = [eq(transactions.id, id), eq(transactions.userId, userId)];
   if (accountId !== undefined) {
     conditions.push(eq(transactions.accountId, accountId));
   }
@@ -854,9 +913,7 @@ export async function createTransactionWithElements(
     data.accountId === undefined ||
     Number.isNaN(data.accountId)
   ) {
-    throw new Error(
-      "createTransactionWithElements requires a valid accountId"
-    );
+    throw new Error("createTransactionWithElements requires a valid accountId");
   }
 
   const insertData: InsertTransaction = {

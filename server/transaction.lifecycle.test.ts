@@ -94,6 +94,8 @@ async function setupCreateCaller() {
       endTime: data.endTime ?? null,
       direction: data.direction,
       tradingLogic: data.tradingLogic,
+      context: data.context,
+      tradeItems: data.tradeItems,
       outcome: data.outcome ?? null,
       consecutiveLosses: data.consecutiveLosses ?? 0,
       riskRewardRatio: data.riskRewardRatio ?? null,
@@ -149,6 +151,8 @@ async function setupCloseCaller(options?: {
     endTime: null,
     direction: "long",
     tradingLogic: "test",
+    context: "test",
+    tradeItems: [],
     outcome: null,
     consecutiveLosses: 0,
     riskRewardRatio: null,
@@ -210,35 +214,35 @@ async function setupCloseCaller(options?: {
       getTransactionById,
       updateTransaction,
       closeOpenTransaction,
-      createTransactionWithElements: vi
-        .fn()
-        .mockImplementation(async data => ({
-          id: 1,
-          status: data.status ?? "open",
-          userId: data.userId,
-          accountBalance: data.accountBalance ?? null,
-          tradingPair: data.tradingPair,
-          timeFrame: data.timeFrame,
-          startTime: data.startTime,
-          endTime: data.endTime ?? null,
-          direction: data.direction,
-          tradingLogic: data.tradingLogic,
-          outcome: data.outcome ?? null,
-          consecutiveLosses: data.consecutiveLosses ?? 0,
-          riskRewardRatio: data.riskRewardRatio ?? null,
-          returnAmount: data.returnAmount ?? null,
-          entryPrice: data.entryPrice ?? null,
-          positionSizeUsdt: data.positionSizeUsdt ?? null,
-          plannedStopLossPrice: data.plannedStopLossPrice ?? null,
-          plannedTakeProfitPrice: data.plannedTakeProfitPrice ?? null,
-          plannedRiskRewardRatio: data.plannedRiskRewardRatio ?? null,
-          exitPrice: data.exitPrice ?? null,
-          tvUrl: data.tvUrl ?? null,
-          reviewFeedback: null,
-          reviewChartUrl: null,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })),
+      createTransactionWithElements: vi.fn().mockImplementation(async data => ({
+        id: 1,
+        status: data.status ?? "open",
+        userId: data.userId,
+        accountBalance: data.accountBalance ?? null,
+        tradingPair: data.tradingPair,
+        timeFrame: data.timeFrame,
+        startTime: data.startTime,
+        endTime: data.endTime ?? null,
+        direction: data.direction,
+        tradingLogic: data.tradingLogic,
+        context: data.context,
+        tradeItems: data.tradeItems,
+        outcome: data.outcome ?? null,
+        consecutiveLosses: data.consecutiveLosses ?? 0,
+        riskRewardRatio: data.riskRewardRatio ?? null,
+        returnAmount: data.returnAmount ?? null,
+        entryPrice: data.entryPrice ?? null,
+        positionSizeUsdt: data.positionSizeUsdt ?? null,
+        plannedStopLossPrice: data.plannedStopLossPrice ?? null,
+        plannedTakeProfitPrice: data.plannedTakeProfitPrice ?? null,
+        plannedRiskRewardRatio: data.plannedRiskRewardRatio ?? null,
+        exitPrice: data.exitPrice ?? null,
+        tvUrl: data.tvUrl ?? null,
+        reviewFeedback: null,
+        reviewChartUrl: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })),
     })
   );
 
@@ -368,7 +372,7 @@ function runStatsScenario(
   const script = `
     const { DatabaseSync } = await import("node:sqlite");
     const db = new DatabaseSync(process.env.DATABASE_URL);
-    db.exec("CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, entryPrice TEXT, positionSizeUsdt TEXT, plannedStopLossPrice TEXT, plannedTakeProfitPrice TEXT, plannedRiskRewardRatio TEXT, exitPrice TEXT, tvUrl TEXT, marketCycle TEXT, transactionType TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));");
+    db.exec("CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, context TEXT NOT NULL DEFAULT '', tradeItems TEXT NOT NULL DEFAULT '[]', outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, entryPrice TEXT, positionSizeUsdt TEXT, plannedStopLossPrice TEXT, plannedTakeProfitPrice TEXT, plannedRiskRewardRatio TEXT, exitPrice TEXT, tvUrl TEXT, marketCycle TEXT, transactionType TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));");
     ${inserts}
     const { getCurrentBalance, getConsecutiveLosses, getStatistics } = await import(${JSON.stringify(dbModuleUrl)});
     const currentBalance = await getCurrentBalance(1, '1000.00');
@@ -435,7 +439,7 @@ function runUpdateScenario(
   const script = `
     const { DatabaseSync } = await import("node:sqlite");
     const db = new DatabaseSync(process.env.DATABASE_URL);
-    db.exec("CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, entryPrice TEXT, positionSizeUsdt TEXT, plannedStopLossPrice TEXT, plannedTakeProfitPrice TEXT, plannedRiskRewardRatio TEXT, exitPrice TEXT, tvUrl TEXT, marketCycle TEXT, transactionType TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));");
+    db.exec("CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, context TEXT NOT NULL DEFAULT '', tradeItems TEXT NOT NULL DEFAULT '[]', outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, entryPrice TEXT, positionSizeUsdt TEXT, plannedStopLossPrice TEXT, plannedTakeProfitPrice TEXT, plannedRiskRewardRatio TEXT, exitPrice TEXT, tvUrl TEXT, marketCycle TEXT, transactionType TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));");
     db.prepare("INSERT INTO transactions (id, userId, accountId, status, accountBalance, tradingPair, timeFrame, startTime, endTime, direction, tradingLogic, outcome, consecutiveLosses, riskRewardRatio, returnAmount, tvUrl, reviewFeedback, reviewChartUrl, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(1, 1, 1, ${JSON.stringify(options.status)}, '1000.00', 'BTCUSDT', '1H', 1000, 2000, 'long', 'Initial logic', ${JSON.stringify(options.outcome ?? "win")}, 0, '2.0', '50.00', null, ${JSON.stringify(options.reviewFeedback ?? null)}, ${JSON.stringify(options.reviewChartUrl ?? null)}, 1000, 1000);
     const { appRouter } = await import(${JSON.stringify(pathToFileURL(join(repoRoot, "server", "routers.ts")).href)});
     const caller = appRouter.createCaller({
@@ -466,7 +470,7 @@ function runUpdateScenario(
       };
     }
 
-    const transaction = db.prepare("SELECT id, status, tradingPair, timeFrame, tradingLogic, outcome, reviewFeedback, reviewChartUrl FROM transactions WHERE id = 1").get();
+    const transaction = db.prepare("SELECT id, status, tradingPair, timeFrame, tradingLogic, context, tradeItems, outcome, reviewFeedback, reviewChartUrl FROM transactions WHERE id = 1").get();
     db.close();
     console.log(JSON.stringify({ result, error, transaction }));
   `;
@@ -497,6 +501,8 @@ function runUpdateScenario(
       tradingPair: string;
       timeFrame: string;
       tradingLogic: string;
+      context: string;
+      tradeItems: string;
       outcome: "win" | "loss" | "breakeven";
       reviewFeedback: string | null;
       reviewChartUrl: string | null;
@@ -683,7 +689,8 @@ describe("transaction.update lifecycle rules", () => {
         id: 1,
         tradingPair: "ethusdt",
         timeFrame: "4H",
-        tradingLogic: "Updated logic",
+        context: "Updated context",
+        tradeItems: ["breakout", "retest"],
       },
     });
 
@@ -692,7 +699,9 @@ describe("transaction.update lifecycle rules", () => {
       status: "open",
       tradingPair: "ETHUSDT",
       timeFrame: "4H",
-      tradingLogic: "Updated logic",
+      tradingLogic: "Updated context",
+      context: "Updated context",
+      tradeItems: '["breakout","retest"]',
     });
   });
 
@@ -889,7 +898,7 @@ function runListScenario(
   const script = `
     const { DatabaseSync } = await import("node:sqlite");
     const db = new DatabaseSync(process.env.DATABASE_URL);
-    db.exec("CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, entryPrice TEXT, positionSizeUsdt TEXT, plannedStopLossPrice TEXT, plannedTakeProfitPrice TEXT, plannedRiskRewardRatio TEXT, exitPrice TEXT, tvUrl TEXT, marketCycle TEXT, transactionType TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));");
+    db.exec("CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, context TEXT NOT NULL DEFAULT '', tradeItems TEXT NOT NULL DEFAULT '[]', outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, entryPrice TEXT, positionSizeUsdt TEXT, plannedStopLossPrice TEXT, plannedTakeProfitPrice TEXT, plannedRiskRewardRatio TEXT, exitPrice TEXT, tvUrl TEXT, marketCycle TEXT, transactionType TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));");
     ${inserts}
     const { getTransactionsByUserId } = await import(${JSON.stringify(dbModuleUrl)});
     const allTransactions = await getTransactionsByUserId(1);
@@ -967,7 +976,7 @@ function runCloseLifecycleScenario(fileName: string) {
     db.exec(\`
       CREATE TABLE users (id INTEGER PRIMARY KEY, openId TEXT, name TEXT, email TEXT, loginMethod TEXT, role TEXT, initialBalance TEXT, activeTradingSystemId INTEGER, createdAt INTEGER, updatedAt INTEGER, lastSignedIn INTEGER);
       CREATE TABLE accounts (id INTEGER PRIMARY KEY, userId INTEGER NOT NULL, name TEXT NOT NULL, notes TEXT, initialBalance TEXT NOT NULL, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));
-      CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, entryPrice TEXT, positionSizeUsdt TEXT, plannedStopLossPrice TEXT, plannedTakeProfitPrice TEXT, plannedRiskRewardRatio TEXT, exitPrice TEXT, tvUrl TEXT, marketCycle TEXT, transactionType TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));
+      CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, context TEXT NOT NULL DEFAULT '', tradeItems TEXT NOT NULL DEFAULT '[]', outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, entryPrice TEXT, positionSizeUsdt TEXT, plannedStopLossPrice TEXT, plannedTakeProfitPrice TEXT, plannedRiskRewardRatio TEXT, exitPrice TEXT, tvUrl TEXT, marketCycle TEXT, transactionType TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));
     \`);
     db.prepare("INSERT INTO users (id, openId, name, email, loginMethod, role, initialBalance, createdAt, updatedAt, lastSignedIn) VALUES (?, 'u', 'u', 'u@e', 'anonymous', 'user', ?, 0, 0, 0)").run(${USER_ID}, ${JSON.stringify(INITIAL_BALANCE)});
     db.prepare("INSERT INTO accounts (id, userId, name, initialBalance, createdAt, updatedAt) VALUES (?, ?, 'Main', ?, 0, 0)").run(${ACCOUNT_ID}, ${USER_ID}, ${JSON.stringify(INITIAL_BALANCE)});
@@ -1065,7 +1074,7 @@ function runConcurrentCloseScenario(fileName: string) {
     db.exec(\`
       CREATE TABLE users (id INTEGER PRIMARY KEY, openId TEXT, name TEXT, email TEXT, loginMethod TEXT, role TEXT, initialBalance TEXT, activeTradingSystemId INTEGER, createdAt INTEGER, updatedAt INTEGER, lastSignedIn INTEGER);
       CREATE TABLE accounts (id INTEGER PRIMARY KEY, userId INTEGER NOT NULL, name TEXT NOT NULL, notes TEXT, initialBalance TEXT NOT NULL, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));
-      CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, entryPrice TEXT, positionSizeUsdt TEXT, plannedStopLossPrice TEXT, plannedTakeProfitPrice TEXT, plannedRiskRewardRatio TEXT, exitPrice TEXT, tvUrl TEXT, marketCycle TEXT, transactionType TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));
+      CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, context TEXT NOT NULL DEFAULT '', tradeItems TEXT NOT NULL DEFAULT '[]', outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, entryPrice TEXT, positionSizeUsdt TEXT, plannedStopLossPrice TEXT, plannedTakeProfitPrice TEXT, plannedRiskRewardRatio TEXT, exitPrice TEXT, tvUrl TEXT, marketCycle TEXT, transactionType TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));
     \`);
     db.prepare("INSERT INTO users (id, openId, name, email, loginMethod, role, initialBalance, createdAt, updatedAt, lastSignedIn) VALUES (?, 'u', 'u', 'u@e', 'anonymous', 'user', ?, 0, 0, 0)").run(${USER_ID}, ${JSON.stringify(INITIAL_BALANCE)});
     db.prepare("INSERT INTO accounts (id, userId, name, initialBalance, createdAt, updatedAt) VALUES (?, ?, 'Main', ?, 0, 0)").run(${ACCOUNT_ID}, ${USER_ID}, ${JSON.stringify(INITIAL_BALANCE)});
@@ -1293,7 +1302,8 @@ describe("transaction.create open-only lifecycle", () => {
       marketCycle: "Trading Range",
       transactionType: "Trend",
       startTime: Date.now(),
-      tradingLogic: "Breakout and retest",
+      context: "Breakout and retest",
+      tradeItems: ["breakout", "retest", "volume expansion"],
       entryPrice: "100",
       positionSizeUsdt: "1000",
       plannedStopLossPrice: "95",
@@ -1307,6 +1317,8 @@ describe("transaction.create open-only lifecycle", () => {
         tradingPair: "BTCUSDT",
         direction: "long",
         timeFrame: "4H",
+        context: "Breakout and retest",
+        tradeItems: ["breakout", "retest", "volume expansion"],
         tradingLogic: "Breakout and retest",
         entryPrice: "100.00000000",
         positionSizeUsdt: "1000.00",
@@ -1328,7 +1340,8 @@ describe("transaction.create open-only lifecycle", () => {
       marketCycle: "Trading Range",
       transactionType: "Trend",
       startTime: Date.now(),
-      tradingLogic: "Rejection at resistance",
+      context: "Rejection at resistance",
+      tradeItems: [],
       entryPrice: "2000",
       positionSizeUsdt: "500",
       plannedStopLossPrice: "2100",
@@ -1352,7 +1365,8 @@ describe("transaction.create open-only lifecycle", () => {
       marketCycle: "Trading Range",
       transactionType: "Trend",
       startTime: Date.now(),
-      tradingLogic: "Trend continuation",
+      context: "Trend continuation",
+      tradeItems: [],
       entryPrice: "100",
       positionSizeUsdt: "1000",
       plannedStopLossPrice: "95",
@@ -1381,7 +1395,8 @@ describe("transaction.create open-only lifecycle", () => {
         marketCycle: "Trading Range",
         transactionType: "Trend",
         startTime: Date.now(),
-        tradingLogic: "Invalid plan",
+        context: "Invalid plan",
+        tradeItems: [],
         entryPrice: "100",
         positionSizeUsdt: "1000",
         plannedStopLossPrice: "105", // above entry — invalid for long

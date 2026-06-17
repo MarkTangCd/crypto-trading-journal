@@ -1,5 +1,11 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  check,
+  index,
+  integer,
+  sqliteTable,
+  text,
+} from "drizzle-orm/sqlite-core";
 
 /**
  * Core user table backing auth flow.
@@ -55,8 +61,15 @@ export const transactions = sqliteTable(
     endTime: integer("endTime", { mode: "number" }),
     /** Trade direction: long or short */
     direction: text("direction").$type<"long" | "short">().notNull(),
-    /** Trading logic/rationale for the trade */
+    /** Legacy trading logic/rationale for the trade */
     tradingLogic: text("tradingLogic").notNull(),
+    /** Market context for the trade */
+    context: text("context").notNull().default(""),
+    /** Ordered trade setup items, stored as SQLite JSON text */
+    tradeItems: text("tradeItems", { mode: "json" })
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'`),
     /** Trade outcome: win, loss, or breakeven */
     outcome: text("outcome").$type<"win" | "loss" | "breakeven">(),
     /** Number of consecutive losses at time of trade */
@@ -116,10 +129,7 @@ export const transactions = sqliteTable(
       sql`${table.transactionType} is null or ${table.transactionType} in ('Trend', 'Reversal')`
     ),
     // Hot path: list/stats are scoped by account + status.
-    index("transactions_account_status_idx").on(
-      table.accountId,
-      table.status
-    ),
+    index("transactions_account_status_idx").on(table.accountId, table.status),
     // List view orders by startTime — SQLite can scan ASC indexes in reverse
     // to satisfy ORDER BY DESC.
     index("transactions_account_start_idx").on(

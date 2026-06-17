@@ -105,7 +105,8 @@ export const appRouter = router({
             timeFrame: z.string().min(1),
             startTime: z.number(),
             direction: z.enum(["long", "short"]),
-            tradingLogic: z.string().min(1),
+            context: z.string().min(1),
+            tradeItems: z.array(z.string().trim().min(1)),
             marketCycle: z.enum(MARKET_CYCLES),
             transactionType: z.enum(TRANSACTION_TYPES),
             tvUrl: z.string().optional(),
@@ -151,7 +152,9 @@ export const appRouter = router({
           startTime: input.startTime,
           endTime: null,
           direction: input.direction,
-          tradingLogic: input.tradingLogic,
+          tradingLogic: input.context,
+          context: input.context,
+          tradeItems: input.tradeItems,
           marketCycle: input.marketCycle,
           transactionType: input.transactionType,
           outcome: null,
@@ -352,7 +355,8 @@ export const appRouter = router({
           startTime: z.number().optional(),
           endTime: z.number().optional(),
           direction: z.enum(["long", "short"]).optional(),
-          tradingLogic: z.string().min(1).optional(),
+          context: z.string().min(1).optional(),
+          tradeItems: z.array(z.string().trim().min(1)).optional(),
           outcome: z.enum(["win", "loss", "breakeven"]).optional(),
           riskRewardRatio: z.string().optional(),
           returnAmount: z.string().optional(),
@@ -382,7 +386,8 @@ export const appRouter = router({
           data.startTime !== undefined ||
           data.endTime !== undefined ||
           data.direction !== undefined ||
-          data.tradingLogic !== undefined ||
+          data.context !== undefined ||
+          data.tradeItems !== undefined ||
           data.outcome !== undefined ||
           data.riskRewardRatio !== undefined ||
           data.returnAmount !== undefined ||
@@ -432,26 +437,14 @@ export const appRouter = router({
               : existingTransaction.plannedStopLossPrice;
           const plannedTakeProfitPrice =
             data.plannedTakeProfitPrice !== undefined
-              ? runTradeMath(() =>
-                  normalizePrice(data.plannedTakeProfitPrice!)
-                )
+              ? runTradeMath(() => normalizePrice(data.plannedTakeProfitPrice!))
               : existingTransaction.plannedTakeProfitPrice;
 
           // Recompute planned R/R only if a planning input or direction
-          // changed; for a pure tradingLogic/tvUrl edit, leave it alone.
-          let plannedRiskRewardRatio:
-            | string
-            | null
-            | undefined = undefined;
-          if (
-            hasPlanningFieldUpdates ||
-            data.direction !== undefined
-          ) {
-            if (
-              entryPrice &&
-              plannedStopLossPrice &&
-              plannedTakeProfitPrice
-            ) {
+          // changed; for a pure context/tradeItems/tvUrl edit, leave it alone.
+          let plannedRiskRewardRatio: string | null | undefined = undefined;
+          if (hasPlanningFieldUpdates || data.direction !== undefined) {
+            if (entryPrice && plannedStopLossPrice && plannedTakeProfitPrice) {
               plannedRiskRewardRatio = runTradeMath(() =>
                 calculatePlannedRiskRewardRatio({
                   direction,
@@ -473,7 +466,9 @@ export const appRouter = router({
             timeFrame: data.timeFrame,
             startTime: data.startTime,
             direction: data.direction,
-            tradingLogic: data.tradingLogic,
+            tradingLogic: data.context,
+            context: data.context,
+            tradeItems: data.tradeItems,
             tvUrl: data.tvUrl,
             entryPrice: data.entryPrice !== undefined ? entryPrice : undefined,
             positionSizeUsdt:

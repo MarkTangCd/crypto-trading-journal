@@ -43,6 +43,13 @@
       "when": 1781009465740,
       "tag": "0005_narrow_bulldozer",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1781709780000,
+      "tag": "0006_split_thesis_context",
+      "breakpoints": true
     }
   ]
 }

@@ -154,9 +154,7 @@ export default function TransactionDetail() {
       <header className="space-y-2">
         <div className="flex items-baseline gap-3 flex-wrap">
           <p className="text-title">{transaction.tradingPair}</p>
-          {statusMark && (
-            <span className="text-label">{statusMark}</span>
-          )}
+          {statusMark && <span className="text-label">{statusMark}</span>}
         </div>
         <p className="text-label">{headerMeta}</p>
       </header>
@@ -239,7 +237,9 @@ export default function TransactionDetail() {
               </p>
             )}
             <p className="text-label mt-4">
-              {outcome === "breakeven" ? "breakeven" : (outcome ?? "unresolved")}
+              {outcome === "breakeven"
+                ? "breakeven"
+                : (outcome ?? "unresolved")}
               {transaction.endTime && (
                 <>
                   {" · held "}
@@ -270,12 +270,12 @@ export default function TransactionDetail() {
             <Field label="cycle">{transaction.marketCycle.toLowerCase()}</Field>
           )}
           {transaction.transactionType && (
-            <Field label="type">{transaction.transactionType.toLowerCase()}</Field>
+            <Field label="type">
+              {transaction.transactionType.toLowerCase()}
+            </Field>
           )}
           {transaction.entryPrice && (
-            <Field label="entry">
-              {fmtDecimal(transaction.entryPrice)}
-            </Field>
+            <Field label="entry">{fmtDecimal(transaction.entryPrice)}</Field>
           )}
           {transaction.positionSizeUsdt && (
             <Field label="size (usdt)">
@@ -298,21 +298,29 @@ export default function TransactionDetail() {
             </Field>
           )}
           {balanceAtEntry !== null && (
-            <Field label="balance @ entry">
-              ${fmtMoney(balanceAtEntry)}
-            </Field>
+            <Field label="balance @ entry">${fmtMoney(balanceAtEntry)}</Field>
           )}
           <Field label="started">{fmtDateTime(transaction.startTime)}</Field>
           {transaction.endTime && (
             <Field label="closed">{fmtDateTime(transaction.endTime)}</Field>
           )}
         </div>
-        {transaction.tradingLogic && (
+        {transaction.context && (
           <div>
-            <p className="text-label">thesis</p>
+            <p className="text-label">context</p>
             <p className="mt-2 text-sm whitespace-pre-wrap">
-              {transaction.tradingLogic}
+              {transaction.context}
             </p>
+          </div>
+        )}
+        {transaction.tradeItems.length > 0 && (
+          <div>
+            <p className="text-label">trade items</p>
+            <ol className="mt-2 space-y-1 text-sm list-decimal list-inside">
+              {transaction.tradeItems.map((item, index) => (
+                <li key={`${item}-${index}`}>{item}</li>
+              ))}
+            </ol>
           </div>
         )}
         {transaction.tvUrl && (
