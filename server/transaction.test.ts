@@ -154,6 +154,10 @@ describe("transaction procedures", () => {
         tradingLogic: "Test trade logic",
         marketCycle: "Upward Trend",
         transactionType: "Trend",
+        entryPrice: "100",
+        positionSizeUsdt: "1000",
+        plannedStopLossPrice: "95",
+        plannedTakeProfitPrice: "110",
       });
 
       expect(result).toBeDefined();
@@ -187,6 +191,10 @@ describe("transaction procedures", () => {
         tradingLogic: "Switched account regression",
         marketCycle: "Upward Trend",
         transactionType: "Trend",
+        entryPrice: "100",
+        positionSizeUsdt: "1000",
+        plannedStopLossPrice: "95",
+        plannedTakeProfitPrice: "110",
       });
 
       expect(db.getAccountById).toHaveBeenCalledWith(2, 1);
@@ -214,6 +222,10 @@ describe("transaction procedures", () => {
           tradingLogic: "Should be rejected",
           marketCycle: "Upward Trend",
           transactionType: "Trend",
+          entryPrice: "100",
+          positionSizeUsdt: "1000",
+          plannedStopLossPrice: "95",
+          plannedTakeProfitPrice: "110",
         })
       ).rejects.toThrow(/Account not found/);
 
@@ -233,6 +245,10 @@ describe("transaction procedures", () => {
           direction: "long",
           tradingLogic: "Test trade logic",
           transactionType: "Trend",
+          entryPrice: "100",
+          positionSizeUsdt: "1000",
+          plannedStopLossPrice: "95",
+          plannedTakeProfitPrice: "110",
         } as any)
       ).rejects.toThrow();
     });
@@ -250,6 +266,10 @@ describe("transaction procedures", () => {
           direction: "long",
           tradingLogic: "Test trade logic",
           marketCycle: "Upward Trend",
+          entryPrice: "100",
+          positionSizeUsdt: "1000",
+          plannedStopLossPrice: "95",
+          plannedTakeProfitPrice: "110",
         } as any)
       ).rejects.toThrow();
     });

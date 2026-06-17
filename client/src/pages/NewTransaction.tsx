@@ -8,6 +8,7 @@ import {
   SectionHeader,
   TEXTAREA_CLASS,
   fmtMoney,
+  fmtRatio,
 } from "@/lib/ledger";
 import { MOCK_CANDLE_DATA } from "@/lib/mockCandleData";
 import { trpc } from "@/lib/trpc";
@@ -20,7 +21,7 @@ import {
 } from "@shared/const";
 import { Loader2 } from "lucide-react";
 import type React from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
 
@@ -37,6 +38,62 @@ interface FormData {
   marketCycle: MarketCycle | "";
   transactionType: TransactionType | "";
   tvUrl: string;
+  entryPrice: string;
+  positionSizeUsdt: string;
+  plannedStopLossPrice: string;
+  plannedTakeProfitPrice: string;
+}
+
+// Decimal input pattern matching the server's tradeMath parser.
+const DECIMAL_PATTERN = /^\d+(?:\.\d+)?$/;
+
+function parsePositiveDecimal(input: string): number | null {
+  const value = input.trim();
+  if (!DECIMAL_PATTERN.test(value)) return null;
+  const n = parseFloat(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+}
+
+type PlannedRrPreview =
+  | { kind: "empty" }
+  | { kind: "invalid"; reason: string }
+  | { kind: "ok"; value: number };
+
+// Mirrors server-side calculatePlannedRiskRewardRatio for UI preview only.
+// Server remains authoritative — payload never includes plannedRiskRewardRatio.
+function previewPlannedRiskReward(
+  direction: Direction,
+  entryStr: string,
+  stopStr: string,
+  targetStr: string
+): PlannedRrPreview {
+  if (!direction || !entryStr || !stopStr || !targetStr) {
+    return { kind: "empty" };
+  }
+  const entry = parsePositiveDecimal(entryStr);
+  const stop = parsePositiveDecimal(stopStr);
+  const target = parsePositiveDecimal(targetStr);
+  if (entry === null || stop === null || target === null) {
+    return { kind: "invalid", reason: "enter positive decimals" };
+  }
+  if (direction === "long") {
+    if (stop >= entry) {
+      return { kind: "invalid", reason: "stop must be below entry" };
+    }
+    if (target <= entry) {
+      return { kind: "invalid", reason: "target must be above entry" };
+    }
+    return { kind: "ok", value: (target - entry) / (entry - stop) };
+  }
+  // short
+  if (stop <= entry) {
+    return { kind: "invalid", reason: "stop must be above entry" };
+  }
+  if (target >= entry) {
+    return { kind: "invalid", reason: "target must be below entry" };
+  }
+  return { kind: "ok", value: (entry - target) / (stop - entry) };
 }
 
 export default function NewTransaction() {
@@ -73,7 +130,27 @@ export default function NewTransaction() {
     marketCycle: "",
     transactionType: "",
     tvUrl: "",
+    entryPrice: "",
+    positionSizeUsdt: "",
+    plannedStopLossPrice: "",
+    plannedTakeProfitPrice: "",
   });
+
+  const plannedRrPreview = useMemo(
+    () =>
+      previewPlannedRiskReward(
+        formData.direction,
+        formData.entryPrice,
+        formData.plannedStopLossPrice,
+        formData.plannedTakeProfitPrice
+      ),
+    [
+      formData.direction,
+      formData.entryPrice,
+      formData.plannedStopLossPrice,
+      formData.plannedTakeProfitPrice,
+    ]
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,9 +167,18 @@ export default function NewTransaction() {
       !formData.direction ||
       !formData.tradingLogic ||
       !formData.marketCycle ||
-      !formData.transactionType
+      !formData.transactionType ||
+      !formData.entryPrice ||
+      !formData.positionSizeUsdt ||
+      !formData.plannedStopLossPrice ||
+      !formData.plannedTakeProfitPrice
     ) {
       toast.error("fill in all required fields");
+      return;
+    }
+
+    if (plannedRrPreview.kind === "invalid") {
+      toast.error(`invalid plan: ${plannedRrPreview.reason}`);
       return;
     }
 
@@ -110,6 +196,10 @@ export default function NewTransaction() {
       marketCycle: formData.marketCycle as MarketCycle,
       transactionType: formData.transactionType as TransactionType,
       tvUrl: formData.tvUrl || undefined,
+      entryPrice: formData.entryPrice,
+      positionSizeUsdt: formData.positionSizeUsdt,
+      plannedStopLossPrice: formData.plannedStopLossPrice,
+      plannedTakeProfitPrice: formData.plannedTakeProfitPrice,
     });
   };
 
@@ -238,6 +328,87 @@ export default function NewTransaction() {
               className={INPUT_CLASS}
             />
           </Field>
+        </section>
+
+        {/* Plan */}
+        <section className="space-y-6">
+          <SectionHeader>plan</SectionHeader>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+            <Field label="entry price" htmlFor="entryPrice">
+              <input
+                id="entryPrice"
+                type="text"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={formData.entryPrice}
+                onChange={e => updateField("entryPrice", e.target.value)}
+                className={cn(INPUT_CLASS, "tabular-nums")}
+              />
+            </Field>
+            <Field label="position size (usdt)" htmlFor="positionSizeUsdt">
+              <input
+                id="positionSizeUsdt"
+                type="text"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={formData.positionSizeUsdt}
+                onChange={e =>
+                  updateField("positionSizeUsdt", e.target.value)
+                }
+                className={cn(INPUT_CLASS, "tabular-nums")}
+              />
+            </Field>
+            <Field
+              label="planned stop loss"
+              htmlFor="plannedStopLossPrice"
+            >
+              <input
+                id="plannedStopLossPrice"
+                type="text"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={formData.plannedStopLossPrice}
+                onChange={e =>
+                  updateField("plannedStopLossPrice", e.target.value)
+                }
+                className={cn(INPUT_CLASS, "tabular-nums")}
+              />
+            </Field>
+            <Field
+              label="planned take profit"
+              htmlFor="plannedTakeProfitPrice"
+            >
+              <input
+                id="plannedTakeProfitPrice"
+                type="text"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={formData.plannedTakeProfitPrice}
+                onChange={e =>
+                  updateField("plannedTakeProfitPrice", e.target.value)
+                }
+                className={cn(INPUT_CLASS, "tabular-nums")}
+              />
+            </Field>
+          </div>
+          <div className="border-t border-border pt-4">
+            <p className="text-label">planned r/r</p>
+            <p
+              className={cn(
+                "mt-2 text-2xl font-medium leading-none tabular-nums",
+                plannedRrPreview.kind === "invalid" && "status-loss"
+              )}
+            >
+              {plannedRrPreview.kind === "ok"
+                ? fmtRatio(plannedRrPreview.value)
+                : "—"}
+            </p>
+            {plannedRrPreview.kind === "invalid" && (
+              <p className="text-label mt-2 status-loss">
+                {plannedRrPreview.reason}
+              </p>
+            )}
+          </div>
         </section>
 
         {/* Context */}

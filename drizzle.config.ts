@@ -1,6 +1,7 @@
 import { defineConfig } from "drizzle-kit";
 
-const connectionString = process.env.DATABASE_URL || "file:./drizzle/dev.db";
+const connectionString =
+  process.env.DATABASE_URL || "file:./data/crypto-trading-journal.sqlite";
 if (!connectionString) {
   throw new Error("DATABASE_URL is required to run drizzle commands");
 }

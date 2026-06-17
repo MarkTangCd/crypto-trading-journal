@@ -65,6 +65,18 @@ export const transactions = sqliteTable(
     riskRewardRatio: text("riskRewardRatio"),
     /** Return amount - negative for loss, positive for profit */
     returnAmount: text("returnAmount"),
+    /** Planned entry price — text decimal up to 8 decimal places */
+    entryPrice: text("entryPrice"),
+    /** Planned position size in USDT — text decimal */
+    positionSizeUsdt: text("positionSizeUsdt"),
+    /** Planned stop loss price — text decimal up to 8 decimal places */
+    plannedStopLossPrice: text("plannedStopLossPrice"),
+    /** Planned take profit price — text decimal up to 8 decimal places */
+    plannedTakeProfitPrice: text("plannedTakeProfitPrice"),
+    /** Planned risk/reward ratio derived from entry/SL/TP — computed server-side */
+    plannedRiskRewardRatio: text("plannedRiskRewardRatio"),
+    /** Exit price recorded at close — text decimal up to 8 decimal places */
+    exitPrice: text("exitPrice"),
     /** Optional TradingView URL */
     tvUrl: text("tvUrl"),
     marketCycle: text("marketCycle"),

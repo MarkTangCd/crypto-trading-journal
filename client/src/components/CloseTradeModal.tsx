@@ -10,10 +10,11 @@ import {
 import {
   Field,
   INPUT_CLASS,
-  SELECT_CLASS,
   type Tone,
   fmtDateTime,
+  fmtDecimal,
   fmtMoney,
+  fmtRatio,
   toneClass,
 } from "@/lib/ledger";
 import { trpc } from "@/lib/trpc";
@@ -23,20 +24,14 @@ import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-type Outcome = "win" | "loss" | "breakeven" | "";
-
 interface FormData {
   endTime: string;
-  outcome: Outcome;
-  riskRewardRatio: string;
-  returnAmount: string;
+  exitPrice: string;
 }
 
 const EMPTY_FORM: FormData = {
   endTime: "",
-  outcome: "",
-  riskRewardRatio: "",
-  returnAmount: "",
+  exitPrice: "",
 };
 
 interface CloseTradeModalProps {
@@ -49,7 +44,60 @@ interface CloseTradeModalProps {
     direction: string;
     timeFrame: string;
     startTime: number;
+    entryPrice: string | null;
+    positionSizeUsdt: string | null;
+    plannedStopLossPrice: string | null;
+    plannedTakeProfitPrice: string | null;
+    plannedRiskRewardRatio: string | null;
   } | null;
+}
+
+const DECIMAL_PATTERN = /^\d+(?:\.\d+)?$/;
+
+function parsePositiveDecimal(input: string | null): number | null {
+  if (input === null) return null;
+  const value = input.trim();
+  if (!DECIMAL_PATTERN.test(value)) return null;
+  const n = parseFloat(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+}
+
+type ClosePreview =
+  | { kind: "missingExit" }
+  | { kind: "invalidExit" }
+  | {
+      kind: "ok";
+      actualRr: number;
+      returnAmount: number;
+      outcome: "win" | "loss" | "breakeven";
+    };
+
+// Mirrors server-side close calculations for preview only. The server is
+// authoritative and recomputes from the persisted plan when close runs.
+function previewClose(
+  direction: string,
+  entry: number,
+  stopLoss: number,
+  positionSize: number,
+  exitStr: string
+): ClosePreview {
+  if (!exitStr.trim()) return { kind: "missingExit" };
+  const exit = parsePositiveDecimal(exitStr);
+  if (exit === null) return { kind: "invalidExit" };
+
+  const isLong = direction === "long";
+  const reward = isLong ? exit - entry : entry - exit;
+  const risk = isLong ? entry - stopLoss : stopLoss - entry;
+  if (risk <= 0) return { kind: "invalidExit" };
+
+  const actualRr = reward / risk;
+  const priceDelta = isLong ? exit - entry : entry - exit;
+  const returnAmount = (positionSize * priceDelta) / entry;
+  const rounded = Math.round(returnAmount * 100) / 100;
+  const outcome: "win" | "loss" | "breakeven" =
+    rounded > 0 ? "win" : rounded < 0 ? "loss" : "breakeven";
+  return { kind: "ok", actualRr, returnAmount: rounded, outcome };
 }
 
 export function CloseTradeModal({
@@ -94,38 +142,70 @@ export function CloseTradeModal({
     },
   });
 
+  const entryNum = useMemo(
+    () => parsePositiveDecimal(trade?.entryPrice ?? null),
+    [trade?.entryPrice]
+  );
+  const stopNum = useMemo(
+    () => parsePositiveDecimal(trade?.plannedStopLossPrice ?? null),
+    [trade?.plannedStopLossPrice]
+  );
+  const positionNum = useMemo(
+    () => parsePositiveDecimal(trade?.positionSizeUsdt ?? null),
+    [trade?.positionSizeUsdt]
+  );
+
+  const isLegacyOpen =
+    !!trade &&
+    (entryNum === null || stopNum === null || positionNum === null);
+
   const currentBalanceNum = useMemo(() => {
     const v = parseFloat(formDefaults?.currentBalance || "0");
     return Number.isNaN(v) ? 0 : v;
   }, [formDefaults?.currentBalance]);
 
-  const returnNum = useMemo(() => {
-    const v = parseFloat(formData.returnAmount || "0");
-    return Number.isNaN(v) ? 0 : v;
-  }, [formData.returnAmount]);
+  const preview = useMemo<ClosePreview>(() => {
+    if (!trade) return { kind: "missingExit" };
+    if (entryNum === null || stopNum === null || positionNum === null) {
+      return { kind: "missingExit" };
+    }
+    return previewClose(
+      trade.direction,
+      entryNum,
+      stopNum,
+      positionNum,
+      formData.exitPrice
+    );
+  }, [trade, entryNum, stopNum, positionNum, formData.exitPrice]);
 
-  const previewBalance = currentBalanceNum + returnNum;
+  const hasOkPreview = preview.kind === "ok";
+  const previewReturn = hasOkPreview ? preview.returnAmount : 0;
+  const previewBalance = currentBalanceNum + previewReturn;
   const previewTone: Tone =
-    formData.outcome === "breakeven"
-      ? undefined
-      : returnNum > 0
-        ? "win"
-        : returnNum < 0
-          ? "loss"
-          : undefined;
-  const hasReturn = formData.returnAmount.trim() !== "";
+    hasOkPreview && preview.outcome === "win"
+      ? "win"
+      : hasOkPreview && preview.outcome === "loss"
+        ? "loss"
+        : undefined;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!trade) return;
 
-    if (
-      !formData.endTime ||
-      !formData.outcome ||
-      !formData.riskRewardRatio ||
-      !formData.returnAmount
-    ) {
+    if (isLegacyOpen) {
+      toast.error(
+        "this trade is missing entry price, position size, or planned stop loss"
+      );
+      return;
+    }
+
+    if (!formData.endTime || !formData.exitPrice) {
       toast.error("fill in all required fields");
+      return;
+    }
+
+    if (preview.kind === "invalidExit") {
+      toast.error("enter a valid positive exit price");
       return;
     }
 
@@ -138,9 +218,7 @@ export function CloseTradeModal({
     closeMutation.mutate({
       id: trade.id,
       endTime: endTimestamp,
-      outcome: formData.outcome as "win" | "loss" | "breakeven",
-      riskRewardRatio: formData.riskRewardRatio,
-      returnAmount: formData.returnAmount,
+      exitPrice: formData.exitPrice,
     });
   };
 
@@ -153,14 +231,18 @@ export function CloseTradeModal({
 
   if (!trade) return null;
 
+  const submitDisabled =
+    closeMutation.isPending || isLegacyOpen || !hasOkPreview;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[520px]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>close trade</DialogTitle>
             <DialogDescription>
-              resolve the open position with outcome, r/r, and final pnl.
+              record the exit price; outcome, r/r, and pnl are computed from
+              the trade plan.
             </DialogDescription>
           </DialogHeader>
 
@@ -181,6 +263,48 @@ export function CloseTradeModal({
               </p>
             </div>
 
+            {/* Legacy warning */}
+            {isLegacyOpen && (
+              <div className="border-l-2 border-foreground pl-3 py-1 status-loss">
+                <p className="text-sm">
+                  this trade predates the plan fields.
+                </p>
+                <p className="text-label mt-1">
+                  entry price, position size, or planned stop loss is missing.
+                  edit the trade to add them, or delete and re-record it.
+                </p>
+              </div>
+            )}
+
+            {/* Plan readout */}
+            <section
+              aria-labelledby="plan-readout"
+              className="space-y-4"
+            >
+              <p id="plan-readout" className="text-label">
+                trade plan
+              </p>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-4 tabular-nums">
+                <Field label="entry">
+                  {fmtDecimal(trade.entryPrice)}
+                </Field>
+                <Field label="size (usdt)">
+                  {trade.positionSizeUsdt
+                    ? fmtMoney(trade.positionSizeUsdt)
+                    : "—"}
+                </Field>
+                <Field label="planned stop">
+                  {fmtDecimal(trade.plannedStopLossPrice)}
+                </Field>
+                <Field label="planned target">
+                  {fmtDecimal(trade.plannedTakeProfitPrice)}
+                </Field>
+                <Field label="planned r/r">
+                  {fmtRatio(trade.plannedRiskRewardRatio)}
+                </Field>
+              </div>
+            </section>
+
             {/* Form */}
             <div className="space-y-6">
               <Field label="end time" htmlFor="endTime">
@@ -190,56 +314,64 @@ export function CloseTradeModal({
                   value={formData.endTime}
                   onChange={e => updateField("endTime", e.target.value)}
                   className={INPUT_CLASS}
+                  disabled={isLegacyOpen}
                 />
               </Field>
 
-              <div className="grid grid-cols-2 gap-x-6 gap-y-6">
-                <Field label="outcome" htmlFor="outcome">
-                  <select
-                    id="outcome"
-                    value={formData.outcome}
-                    onChange={e =>
-                      updateField("outcome", e.target.value as Outcome)
-                    }
-                    className={SELECT_CLASS}
-                  >
-                    <option value="">—</option>
-                    <option value="win">win</option>
-                    <option value="loss">loss</option>
-                    <option value="breakeven">breakeven</option>
-                  </select>
-                </Field>
-                <Field label="r/r ratio" htmlFor="riskRewardRatio">
-                  <input
-                    id="riskRewardRatio"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="2.5"
-                    value={formData.riskRewardRatio}
-                    onChange={e =>
-                      updateField("riskRewardRatio", e.target.value)
-                    }
-                    className={INPUT_CLASS}
-                  />
-                </Field>
-              </div>
-
-              <Field label="return amount" htmlFor="returnAmount">
+              <Field label="exit price" htmlFor="exitPrice">
                 <input
-                  id="returnAmount"
-                  type="number"
-                  step="0.01"
-                  placeholder="-50 or 100"
-                  value={formData.returnAmount}
-                  onChange={e => updateField("returnAmount", e.target.value)}
-                  className={INPUT_CLASS}
+                  id="exitPrice"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  value={formData.exitPrice}
+                  onChange={e => updateField("exitPrice", e.target.value)}
+                  className={cn(INPUT_CLASS, "tabular-nums")}
+                  disabled={isLegacyOpen}
                 />
-                <p className="text-label">
-                  negative for loss · positive for profit
-                </p>
+                {preview.kind === "invalidExit" && (
+                  <p className="text-label status-loss">
+                    enter a valid positive exit price
+                  </p>
+                )}
               </Field>
             </div>
+
+            {/* Computed readout */}
+            <section
+              aria-labelledby="computed-readout"
+              className="space-y-4"
+            >
+              <p id="computed-readout" className="text-label">
+                computed
+              </p>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-4 tabular-nums">
+                <Field label="actual r/r">
+                  <span className={hasOkPreview ? toneClass(previewTone) : ""}>
+                    {hasOkPreview ? fmtRatio(preview.actualRr) : "—"}
+                  </span>
+                </Field>
+                <Field label="outcome">
+                  <span className={hasOkPreview ? toneClass(previewTone) : ""}>
+                    {hasOkPreview
+                      ? preview.outcome === "breakeven"
+                        ? "breakeven"
+                        : preview.outcome
+                      : "—"}
+                  </span>
+                </Field>
+                <Field label="return">
+                  {hasOkPreview ? (
+                    <span className={toneClass(previewTone)}>
+                      {previewReturn >= 0 ? "+" : "-"}$
+                      {fmtMoney(Math.abs(previewReturn))}
+                    </span>
+                  ) : (
+                    "—"
+                  )}
+                </Field>
+              </div>
+            </section>
 
             {/* Hero: new balance preview */}
             <section
@@ -252,21 +384,21 @@ export function CloseTradeModal({
               <p
                 className={cn(
                   "mt-2 text-4xl font-medium leading-none tabular-nums",
-                  hasReturn && toneClass(previewTone)
+                  hasOkPreview && toneClass(previewTone)
                 )}
               >
                 ${fmtMoney(previewBalance)}
               </p>
               <p className="text-label mt-3">
                 from ${fmtMoney(currentBalanceNum)}
-                {hasReturn && (
+                {hasOkPreview && (
                   <>
                     <span className="mx-2" aria-hidden="true">
                       ·
                     </span>
                     <span className={toneClass(previewTone)}>
-                      {returnNum >= 0 ? "+" : "-"}$
-                      {fmtMoney(Math.abs(returnNum))}
+                      {previewReturn >= 0 ? "+" : "-"}$
+                      {fmtMoney(Math.abs(previewReturn))}
                     </span>
                   </>
                 )}
@@ -283,7 +415,7 @@ export function CloseTradeModal({
             >
               cancel
             </Button>
-            <Button type="submit" disabled={closeMutation.isPending}>
+            <Button type="submit" disabled={submitDisabled}>
               {closeMutation.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (

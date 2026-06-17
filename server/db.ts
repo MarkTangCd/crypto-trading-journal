@@ -512,6 +512,7 @@ export async function closeOpenTransaction(
   userId: number,
   data: {
     endTime: number;
+    exitPrice: string;
     outcome: "win" | "loss" | "breakeven";
     riskRewardRatio: string;
     returnAmount: string;
@@ -527,6 +528,7 @@ export async function closeOpenTransaction(
     .set({
       status: "closed",
       endTime: data.endTime,
+      exitPrice: data.exitPrice,
       outcome: data.outcome,
       riskRewardRatio: data.riskRewardRatio,
       returnAmount: data.returnAmount,
@@ -866,6 +868,12 @@ export async function createTransactionWithElements(
     riskRewardRatio: data.riskRewardRatio ?? null,
     returnAmount: data.returnAmount ?? null,
     accountBalance: data.accountBalance ?? null,
+    entryPrice: data.entryPrice ?? null,
+    positionSizeUsdt: data.positionSizeUsdt ?? null,
+    plannedStopLossPrice: data.plannedStopLossPrice ?? null,
+    plannedTakeProfitPrice: data.plannedTakeProfitPrice ?? null,
+    plannedRiskRewardRatio: data.plannedRiskRewardRatio ?? null,
+    exitPrice: data.exitPrice ?? null,
   };
 
   const result = await runInSqliteTransaction(async db => {

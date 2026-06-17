@@ -25,10 +25,39 @@ import type { TrpcContext } from "./_core/context";
 import type { Account, Transaction } from "../drizzle/schema";
 import { add as addFixedPoint } from "./_core/fixedPoint";
 import {
+  TradeMathError,
+  calculateActualRiskRewardRatio,
+  calculatePlannedRiskRewardRatio,
+  calculateReturnAmount,
+  deriveOutcome,
+  normalizeMoney,
+  normalizePrice,
+} from "./_core/tradeMath";
+import {
   ALLOWED_TRANSITIONS,
   MARKET_CYCLES,
   TRANSACTION_TYPES,
 } from "@shared/const";
+
+/**
+ * Run a tradeMath helper and surface its validation failures as BAD_REQUEST.
+ * Anything else (non-TradeMathError) is left to bubble.
+ */
+function runTradeMath<T>(operation: () => T): T {
+  try {
+    return operation();
+  } catch (error) {
+    if (error instanceof TradeMathError) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: error.message,
+      });
+    }
+    throw error;
+  }
+}
+
+const decimalString = z.string().min(1);
 
 // Ownership guards. Both throw FORBIDDEN when the row is missing or owned by
 // another user so that the procedure never silently leaks foreign data.
@@ -80,12 +109,38 @@ export const appRouter = router({
             marketCycle: z.enum(MARKET_CYCLES),
             transactionType: z.enum(TRANSACTION_TYPES),
             tvUrl: z.string().optional(),
+            entryPrice: decimalString,
+            positionSizeUsdt: decimalString,
+            plannedStopLossPrice: decimalString,
+            plannedTakeProfitPrice: decimalString,
           })
           .strict()
       )
       .mutation(async ({ ctx, input }) => {
         // Validate account ownership before doing any other work
         const account = await requireOwnedAccount(ctx, input.accountId);
+
+        // Normalise + validate price/size fields, then compute the
+        // server-authoritative planned R/R. Bubble validation errors as
+        // BAD_REQUEST so the client surfaces them inline.
+        const entryPrice = runTradeMath(() => normalizePrice(input.entryPrice));
+        const positionSizeUsdt = runTradeMath(() =>
+          normalizeMoney(input.positionSizeUsdt)
+        );
+        const plannedStopLossPrice = runTradeMath(() =>
+          normalizePrice(input.plannedStopLossPrice)
+        );
+        const plannedTakeProfitPrice = runTradeMath(() =>
+          normalizePrice(input.plannedTakeProfitPrice)
+        );
+        const plannedRiskRewardRatio = runTradeMath(() =>
+          calculatePlannedRiskRewardRatio({
+            direction: input.direction,
+            entryPrice,
+            plannedStopLossPrice,
+            plannedTakeProfitPrice,
+          })
+        );
 
         const transaction = await createTransactionWithElements({
           userId: ctx.user.id,
@@ -103,6 +158,12 @@ export const appRouter = router({
           riskRewardRatio: null,
           returnAmount: null,
           tvUrl: input.tvUrl || null,
+          entryPrice,
+          positionSizeUsdt,
+          plannedStopLossPrice,
+          plannedTakeProfitPrice,
+          plannedRiskRewardRatio,
+          exitPrice: null,
         });
 
         return transaction;
@@ -149,9 +210,7 @@ export const appRouter = router({
         z.object({
           id: z.number(),
           endTime: z.number(),
-          outcome: z.enum(["win", "loss", "breakeven"]),
-          riskRewardRatio: z.string(),
-          returnAmount: z.string(),
+          exitPrice: decimalString,
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -209,6 +268,41 @@ export const appRouter = router({
             });
           }
 
+          // Legacy guard — historical rows without entry/size/SL can't be
+          // auto-closed; the UI is expected to disable submit, but we
+          // double-check here so an old payload can't sneak past.
+          if (
+            !transaction.entryPrice ||
+            !transaction.positionSizeUsdt ||
+            !transaction.plannedStopLossPrice
+          ) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message:
+                "Trade is missing entry price, position size, or planned stop loss",
+            });
+          }
+
+          const exitPrice = runTradeMath(() => normalizePrice(input.exitPrice));
+
+          const riskRewardRatio = runTradeMath(() =>
+            calculateActualRiskRewardRatio({
+              direction: transaction.direction,
+              entryPrice: transaction.entryPrice!,
+              plannedStopLossPrice: transaction.plannedStopLossPrice!,
+              exitPrice,
+            })
+          );
+          const returnAmount = runTradeMath(() =>
+            calculateReturnAmount({
+              direction: transaction.direction,
+              entryPrice: transaction.entryPrice!,
+              positionSizeUsdt: transaction.positionSizeUsdt!,
+              exitPrice,
+            })
+          );
+          const outcome = deriveOutcome(returnAmount);
+
           const snapshot = await getAccountSnapshot(
             account.id,
             account.initialBalance
@@ -216,25 +310,23 @@ export const appRouter = router({
           const currentBalance = snapshot.currentBalance;
 
           let consecutiveLosses = snapshot.consecutiveLosses;
-          if (input.outcome === "loss") {
+          if (outcome === "loss") {
             consecutiveLosses += 1;
-          } else if (input.outcome === "win") {
+          } else if (outcome === "win") {
             consecutiveLosses = 0;
           }
 
-          const accountBalance = addFixedPoint([
-            currentBalance,
-            input.returnAmount,
-          ]);
+          const accountBalance = addFixedPoint([currentBalance, returnAmount]);
 
           // Conditional UPDATE — `WHERE status = 'open'` is the actual
           // race guard. If another tx already flipped status, affected=0
           // and we surface CONFLICT instead of silently double-counting.
           const result = await closeOpenTransaction(input.id, ctx.user.id, {
             endTime: input.endTime,
-            outcome: input.outcome,
-            riskRewardRatio: input.riskRewardRatio,
-            returnAmount: input.returnAmount,
+            exitPrice,
+            outcome,
+            riskRewardRatio,
+            returnAmount,
             accountBalance,
             consecutiveLosses,
           });
@@ -265,6 +357,10 @@ export const appRouter = router({
           riskRewardRatio: z.string().optional(),
           returnAmount: z.string().optional(),
           tvUrl: z.string().optional(),
+          entryPrice: decimalString.optional(),
+          positionSizeUsdt: decimalString.optional(),
+          plannedStopLossPrice: decimalString.optional(),
+          plannedTakeProfitPrice: decimalString.optional(),
           reviewFeedback: z.string().optional(),
           reviewChartUrl: z.string().optional(),
         })
@@ -273,6 +369,12 @@ export const appRouter = router({
         const { id, ...data } = input;
 
         const existingTransaction = await requireOwnedTransaction(ctx, id);
+
+        const hasPlanningFieldUpdates =
+          data.entryPrice !== undefined ||
+          data.positionSizeUsdt !== undefined ||
+          data.plannedStopLossPrice !== undefined ||
+          data.plannedTakeProfitPrice !== undefined;
 
         const hasEntryFieldUpdates =
           data.tradingPair !== undefined ||
@@ -284,7 +386,8 @@ export const appRouter = router({
           data.outcome !== undefined ||
           data.riskRewardRatio !== undefined ||
           data.returnAmount !== undefined ||
-          data.tvUrl !== undefined;
+          data.tvUrl !== undefined ||
+          hasPlanningFieldUpdates;
 
         const hasReviewFieldUpdates =
           data.reviewFeedback !== undefined ||
@@ -310,6 +413,58 @@ export const appRouter = router({
             });
           }
 
+          const direction = data.direction ?? existingTransaction.direction;
+
+          // Normalise any planning field that was supplied; fall back to
+          // the existing persisted value so the merged set is used for the
+          // planned R/R recalculation.
+          const entryPrice =
+            data.entryPrice !== undefined
+              ? runTradeMath(() => normalizePrice(data.entryPrice!))
+              : existingTransaction.entryPrice;
+          const positionSizeUsdt =
+            data.positionSizeUsdt !== undefined
+              ? runTradeMath(() => normalizeMoney(data.positionSizeUsdt!))
+              : existingTransaction.positionSizeUsdt;
+          const plannedStopLossPrice =
+            data.plannedStopLossPrice !== undefined
+              ? runTradeMath(() => normalizePrice(data.plannedStopLossPrice!))
+              : existingTransaction.plannedStopLossPrice;
+          const plannedTakeProfitPrice =
+            data.plannedTakeProfitPrice !== undefined
+              ? runTradeMath(() =>
+                  normalizePrice(data.plannedTakeProfitPrice!)
+                )
+              : existingTransaction.plannedTakeProfitPrice;
+
+          // Recompute planned R/R only if a planning input or direction
+          // changed; for a pure tradingLogic/tvUrl edit, leave it alone.
+          let plannedRiskRewardRatio:
+            | string
+            | null
+            | undefined = undefined;
+          if (
+            hasPlanningFieldUpdates ||
+            data.direction !== undefined
+          ) {
+            if (
+              entryPrice &&
+              plannedStopLossPrice &&
+              plannedTakeProfitPrice
+            ) {
+              plannedRiskRewardRatio = runTradeMath(() =>
+                calculatePlannedRiskRewardRatio({
+                  direction,
+                  entryPrice,
+                  plannedStopLossPrice,
+                  plannedTakeProfitPrice,
+                })
+              );
+            } else {
+              plannedRiskRewardRatio = null;
+            }
+          }
+
           const updatedTransaction = await updateTransaction(id, ctx.user.id, {
             tradingPair:
               data.tradingPair !== undefined
@@ -320,6 +475,20 @@ export const appRouter = router({
             direction: data.direction,
             tradingLogic: data.tradingLogic,
             tvUrl: data.tvUrl,
+            entryPrice: data.entryPrice !== undefined ? entryPrice : undefined,
+            positionSizeUsdt:
+              data.positionSizeUsdt !== undefined
+                ? positionSizeUsdt
+                : undefined,
+            plannedStopLossPrice:
+              data.plannedStopLossPrice !== undefined
+                ? plannedStopLossPrice
+                : undefined,
+            plannedTakeProfitPrice:
+              data.plannedTakeProfitPrice !== undefined
+                ? plannedTakeProfitPrice
+                : undefined,
+            plannedRiskRewardRatio,
           });
 
           return updatedTransaction;

@@ -15,7 +15,9 @@ import {
   SELECT_CLASS,
   type Tone,
   fmtDateTime,
+  fmtDecimal,
   fmtMoney,
+  fmtRatio,
   toneClass,
 } from "@/lib/ledger";
 import { trpc } from "@/lib/trpc";
@@ -123,6 +125,11 @@ export default function Transactions() {
     direction: string;
     timeFrame: string;
     startTime: number;
+    entryPrice: string | null;
+    positionSizeUsdt: string | null;
+    plannedStopLossPrice: string | null;
+    plannedTakeProfitPrice: string | null;
+    plannedRiskRewardRatio: string | null;
   } | null>(null);
 
   const { data: transactions, isLoading } = trpc.transaction.list.useQuery(
@@ -375,6 +382,21 @@ export default function Transactions() {
                   .filter(Boolean)
                   .join(" · ")
                   .toLowerCase();
+                const planMetaParts: string[] = [];
+                if (tx.entryPrice) {
+                  planMetaParts.push(`entry ${fmtDecimal(tx.entryPrice)}`);
+                }
+                if (tx.positionSizeUsdt) {
+                  planMetaParts.push(
+                    `size ${fmtMoney(tx.positionSizeUsdt)} usdt`
+                  );
+                }
+                const planMeta = planMetaParts.join(" · ");
+                const isOpen = tx.status === "open";
+                const ratioValue = isOpen
+                  ? tx.plannedRiskRewardRatio
+                  : tx.riskRewardRatio;
+                const ratioLabel = isOpen ? "plan" : null;
                 const statusMark =
                   tx.status === "open"
                     ? "[open]"
@@ -403,6 +425,11 @@ export default function Transactions() {
                           {meta}
                         </div>
                       )}
+                      {planMeta && (
+                        <div className="mt-1 text-xs text-muted-foreground tabular-nums">
+                          {planMeta}
+                        </div>
+                      )}
                     </td>
                     <td className="py-4 px-4">{tx.direction}</td>
                     <td className={cn("py-4 px-4", toneClass(outcomeTone))}>
@@ -424,7 +451,16 @@ export default function Transactions() {
                         )}
                     </td>
                     <td className="py-4 px-4 text-right">
-                      {tx.riskRewardRatio ?? (
+                      {ratioValue ? (
+                        <span className="inline-flex items-baseline gap-1 justify-end">
+                          {ratioLabel && (
+                            <span className="text-xs text-muted-foreground">
+                              {ratioLabel}
+                            </span>
+                          )}
+                          <span>{fmtRatio(ratioValue)}</span>
+                        </span>
+                      ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
                     </td>
@@ -465,6 +501,14 @@ export default function Transactions() {
                                 direction: tx.direction,
                                 timeFrame: tx.timeFrame,
                                 startTime: tx.startTime,
+                                entryPrice: tx.entryPrice ?? null,
+                                positionSizeUsdt: tx.positionSizeUsdt ?? null,
+                                plannedStopLossPrice:
+                                  tx.plannedStopLossPrice ?? null,
+                                plannedTakeProfitPrice:
+                                  tx.plannedTakeProfitPrice ?? null,
+                                plannedRiskRewardRatio:
+                                  tx.plannedRiskRewardRatio ?? null,
                               })
                             }
                             className="hover:text-foreground transition-colors"

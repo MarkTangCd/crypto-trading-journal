@@ -9,8 +9,10 @@ import {
   SectionHeader,
   type Tone,
   fmtDateTime,
+  fmtDecimal,
   fmtDuration,
   fmtMoney,
+  fmtRatio,
   toneClass,
 } from "@/lib/ledger";
 import { trpc } from "@/lib/trpc";
@@ -42,6 +44,11 @@ export default function TransactionDetail() {
     direction: string;
     timeFrame: string;
     startTime: number;
+    entryPrice: string | null;
+    positionSizeUsdt: string | null;
+    plannedStopLossPrice: string | null;
+    plannedTakeProfitPrice: string | null;
+    plannedRiskRewardRatio: string | null;
   } | null>(null);
 
   useEffect(() => {
@@ -176,6 +183,14 @@ export default function TransactionDetail() {
                   direction: transaction.direction,
                   timeFrame: transaction.timeFrame,
                   startTime: transaction.startTime,
+                  entryPrice: transaction.entryPrice ?? null,
+                  positionSizeUsdt: transaction.positionSizeUsdt ?? null,
+                  plannedStopLossPrice:
+                    transaction.plannedStopLossPrice ?? null,
+                  plannedTakeProfitPrice:
+                    transaction.plannedTakeProfitPrice ?? null,
+                  plannedRiskRewardRatio:
+                    transaction.plannedRiskRewardRatio ?? null,
                 })
               }
             >
@@ -217,7 +232,9 @@ export default function TransactionDetail() {
                   </span>
                 )}
                 {transaction.riskRewardRatio && (
-                  <span>r/r {transaction.riskRewardRatio}</span>
+                  <span>
+                    actual r/r {fmtRatio(transaction.riskRewardRatio)}
+                  </span>
                 )}
               </p>
             )}
@@ -255,8 +272,30 @@ export default function TransactionDetail() {
           {transaction.transactionType && (
             <Field label="type">{transaction.transactionType.toLowerCase()}</Field>
           )}
-          {transaction.riskRewardRatio && (
-            <Field label="r/r">{transaction.riskRewardRatio}</Field>
+          {transaction.entryPrice && (
+            <Field label="entry">
+              {fmtDecimal(transaction.entryPrice)}
+            </Field>
+          )}
+          {transaction.positionSizeUsdt && (
+            <Field label="size (usdt)">
+              {fmtMoney(transaction.positionSizeUsdt)}
+            </Field>
+          )}
+          {transaction.plannedStopLossPrice && (
+            <Field label="planned stop">
+              {fmtDecimal(transaction.plannedStopLossPrice)}
+            </Field>
+          )}
+          {transaction.plannedTakeProfitPrice && (
+            <Field label="planned target">
+              {fmtDecimal(transaction.plannedTakeProfitPrice)}
+            </Field>
+          )}
+          {transaction.plannedRiskRewardRatio && (
+            <Field label="planned r/r">
+              {fmtRatio(transaction.plannedRiskRewardRatio)}
+            </Field>
           )}
           {balanceAtEntry !== null && (
             <Field label="balance @ entry">
@@ -297,6 +336,22 @@ export default function TransactionDetail() {
               <span className={toneClass(heroTone)}>
                 {outcome === "breakeven" ? "breakeven" : (outcome ?? "—")}
               </span>
+            </Field>
+            <Field label="exit">
+              {transaction.exitPrice ? (
+                fmtDecimal(transaction.exitPrice)
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )}
+            </Field>
+            <Field label="actual r/r">
+              {transaction.riskRewardRatio ? (
+                <span className={toneClass(heroTone)}>
+                  {fmtRatio(transaction.riskRewardRatio)}
+                </span>
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )}
             </Field>
             <Field label="return">
               {returnNum !== null ? (

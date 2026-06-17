@@ -24,6 +24,30 @@ export function fmtMoney(value: number | string): string {
   });
 }
 
+// Show a decimal with trailing zeros stripped, capped at maxFractionDigits.
+// Returns "—" for null / undefined / empty / NaN so callers don't have to.
+export function fmtDecimal(
+  value: number | string | null | undefined,
+  maxFractionDigits: number = 8
+): string {
+  if (value === null || value === undefined || value === "") return "—";
+  const n = typeof value === "string" ? parseFloat(value) : value;
+  if (Number.isNaN(n)) return "—";
+  return n.toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: maxFractionDigits,
+    useGrouping: false,
+  });
+}
+
+// Render a risk/reward ratio at 2 decimal places, "—" for missing values.
+export function fmtRatio(value: number | string | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "—";
+  const n = typeof value === "string" ? parseFloat(value) : value;
+  if (Number.isNaN(n)) return "—";
+  return n.toFixed(2);
+}
+
 export function fmtDateTime(ts: number | Date): string {
   return format(ts, "MMM d, yyyy HH:mm").toLowerCase();
 }

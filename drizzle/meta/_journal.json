@@ -36,6 +36,13 @@
       "when": 1780930000000,
       "tag": "0004_index_tune",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1781009465740,
+      "tag": "0005_narrow_bulldozer",
+      "breakpoints": true
     }
   ]
 }
