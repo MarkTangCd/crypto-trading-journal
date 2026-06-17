@@ -393,10 +393,8 @@ export default function Transactions() {
                 }
                 const planMeta = planMetaParts.join(" · ");
                 const isOpen = tx.status === "open";
-                const ratioValue = isOpen
-                  ? tx.plannedRiskRewardRatio
-                  : tx.riskRewardRatio;
-                const ratioLabel = isOpen ? "plan" : null;
+                const ratioValue = tx.plannedRiskRewardRatio;
+                const ratioLabel = ratioValue ? "plan" : null;
                 const statusMark =
                   tx.status === "open"
                     ? "[open]"
