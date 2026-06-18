@@ -611,25 +611,6 @@ export async function closeOpenTransaction(
   return { transaction, affected };
 }
 
-export async function migrateTransactionStatus(): Promise<number> {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  const reviewedRows = await db
-    .update(transactions)
-    .set({ status: "reviewed" })
-    .where(eq(sql<number>`isReviewed`, 1))
-    .returning({ id: transactions.id });
-
-  const closedRows = await db
-    .update(transactions)
-    .set({ status: "closed" })
-    .where(eq(sql<number>`isReviewed`, 0))
-    .returning({ id: transactions.id });
-
-  return reviewedRows.length + closedRows.length;
-}
-
 export async function deleteTransaction(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

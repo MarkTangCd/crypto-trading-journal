@@ -122,14 +122,14 @@ export default function TransactionDetail() {
       : null;
   const outcome = transaction.outcome;
   const isOpen = transaction.status === "open";
-  const isReviewed = transaction.status === "reviewed";
+  const reviewed = transaction.status === "reviewed";
   const heroTone: Tone =
     outcome === "win" ? "win" : outcome === "loss" ? "loss" : undefined;
   const returnPct =
     returnNum !== null && balanceAtEntry !== null && balanceAtEntry > 0
       ? (returnNum / balanceAtEntry) * 100
       : null;
-  const statusMark = isOpen ? "[open]" : isReviewed ? "[reviewed]" : null;
+  const statusMark = isOpen ? "[open]" : reviewed ? "[reviewed]" : null;
   const headerMeta = [
     transaction.direction,
     transaction.timeFrame,

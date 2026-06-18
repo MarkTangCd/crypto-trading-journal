@@ -1,9 +1,11 @@
 ---
 id: TASK-7
 title: Prune Manus-template scaffolding and unused dependencies
-status: To Do
-assignee: []
-created_date: "2026-06-18 01:24"
+status: In Progress
+assignee:
+  - '@agent'
+created_date: '2026-06-18 01:24'
+updated_date: '2026-06-18 01:53'
 labels:
   - tech-debt
   - cleanup
