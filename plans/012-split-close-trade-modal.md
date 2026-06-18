@@ -81,13 +81,13 @@ reduces the internal cognitive load by half.
 
 ## Commands you will need
 
-| Purpose      | Command                                            | Expected           |
-| ------------ | -------------------------------------------------- | ------------------ |
-| Typecheck    | `npm run check`                                    | exit 0             |
-| Tests        | `npm test -- --run`                                | 104 passed         |
-| E2E (smoke)  | `npm run test:e2e`                                 | smoke spec passes  |
-| Build        | `npm run build`                                    | exit 0             |
-| Format       | `npm run format`                                   | exit 0             |
+| Purpose     | Command             | Expected          |
+| ----------- | ------------------- | ----------------- |
+| Typecheck   | `npm run check`     | exit 0            |
+| Tests       | `npm test -- --run` | 104 passed        |
+| E2E (smoke) | `npm run test:e2e`  | smoke spec passes |
+| Build       | `npm run build`     | exit 0            |
+| Format      | `npm run format`    | exit 0            |
 
 ## Scope
 
@@ -345,15 +345,9 @@ ALL must hold:
 - [ ] `npm test -- --run` reports `Tests 104 passed (104)`.
 - [ ] `npm run test:e2e` passes.
 - [ ] `npm run build` exits 0.
-- [ ] `git status` shows changes only in:
-        - `client/src/components/CloseTradeModal.tsx` (deleted)
-        - `client/src/components/close-trade/*.tsx` (new + the moved
-          modal)
-        - `client/src/lib/closePreview.ts` (new)
-        - `client/src/pages/Transactions.tsx` (one import line, or
-          one import line in whatever sub-file plan 010 produced)
-        - `client/src/pages/TransactionDetail.tsx` (one import line)
-        - `plans/README.md` (status update)
+- [ ] `git status` shows changes only in: - `client/src/components/CloseTradeModal.tsx` (deleted) - `client/src/components/close-trade/*.tsx` (new + the moved
+      modal) - `client/src/lib/closePreview.ts` (new) - `client/src/pages/Transactions.tsx` (one import line, or
+      one import line in whatever sub-file plan 010 produced) - `client/src/pages/TransactionDetail.tsx` (one import line) - `plans/README.md` (status update)
 - [ ] `plans/README.md` row for plan 012 set to DONE.
 
 ## STOP conditions
@@ -372,7 +366,7 @@ Stop and report if:
   call site vs. the modal. The shape is the load-bearing contract;
   resurface the diff rather than narrowing the type at one call site.
 - The "from $X · +$Y" caption mis-renders when `preview.kind ===
-  "invalidExit"`. The original collapsed the `· +$Y` branch when
+"invalidExit"`. The original collapsed the `· +$Y` branch when
   `hasOkPreview` is false (line 383-393). Preserve that in
   `NewBalanceHero`.
 

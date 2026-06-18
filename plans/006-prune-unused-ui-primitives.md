@@ -130,37 +130,37 @@ done
 
 Drop because their sole importer is one of the deleted UI files:
 
-| Dep | Sole importer (about to be deleted) |
-| --- | --- |
-| `@hookform/resolvers` | (none — zero importers already) |
-| `@radix-ui/react-accordion` | `ui/accordion.tsx` |
-| `@radix-ui/react-aspect-ratio` | `ui/aspect-ratio.tsx` |
-| `@radix-ui/react-avatar` | `ui/avatar.tsx` |
-| `@radix-ui/react-checkbox` | `ui/checkbox.tsx` |
-| `@radix-ui/react-collapsible` | `ui/collapsible.tsx` |
-| `@radix-ui/react-context-menu` | `ui/context-menu.tsx` |
-| `@radix-ui/react-hover-card` | `ui/hover-card.tsx` |
-| `@radix-ui/react-menubar` | `ui/menubar.tsx` |
-| `@radix-ui/react-navigation-menu` | `ui/navigation-menu.tsx` |
-| `@radix-ui/react-popover` | `ui/popover.tsx` |
-| `@radix-ui/react-progress` | `ui/progress.tsx` |
-| `@radix-ui/react-radio-group` | `ui/radio-group.tsx` |
-| `@radix-ui/react-scroll-area` | `ui/scroll-area.tsx` |
-| `@radix-ui/react-select` | `ui/select.tsx` |
-| `@radix-ui/react-slider` | `ui/slider.tsx` |
-| `@radix-ui/react-switch` | `ui/switch.tsx` |
-| `@radix-ui/react-tabs` | `ui/tabs.tsx` |
-| `@radix-ui/react-toggle` | `ui/toggle.tsx` |
-| `@radix-ui/react-toggle-group` | `ui/toggle-group.tsx` |
-| `cmdk` | `ui/command.tsx` |
-| `embla-carousel-react` | `ui/carousel.tsx` |
-| `framer-motion` | (none — zero importers already) |
-| `input-otp` | `ui/input-otp.tsx` |
-| `react-day-picker` | `ui/calendar.tsx` |
-| `react-hook-form` | `ui/form.tsx` |
-| `react-resizable-panels` | `ui/resizable.tsx` |
-| `recharts` | `ui/chart.tsx` (this also drops `lodash`) |
-| `vaul` | `ui/drawer.tsx` |
+| Dep                               | Sole importer (about to be deleted)       |
+| --------------------------------- | ----------------------------------------- |
+| `@hookform/resolvers`             | (none — zero importers already)           |
+| `@radix-ui/react-accordion`       | `ui/accordion.tsx`                        |
+| `@radix-ui/react-aspect-ratio`    | `ui/aspect-ratio.tsx`                     |
+| `@radix-ui/react-avatar`          | `ui/avatar.tsx`                           |
+| `@radix-ui/react-checkbox`        | `ui/checkbox.tsx`                         |
+| `@radix-ui/react-collapsible`     | `ui/collapsible.tsx`                      |
+| `@radix-ui/react-context-menu`    | `ui/context-menu.tsx`                     |
+| `@radix-ui/react-hover-card`      | `ui/hover-card.tsx`                       |
+| `@radix-ui/react-menubar`         | `ui/menubar.tsx`                          |
+| `@radix-ui/react-navigation-menu` | `ui/navigation-menu.tsx`                  |
+| `@radix-ui/react-popover`         | `ui/popover.tsx`                          |
+| `@radix-ui/react-progress`        | `ui/progress.tsx`                         |
+| `@radix-ui/react-radio-group`     | `ui/radio-group.tsx`                      |
+| `@radix-ui/react-scroll-area`     | `ui/scroll-area.tsx`                      |
+| `@radix-ui/react-select`          | `ui/select.tsx`                           |
+| `@radix-ui/react-slider`          | `ui/slider.tsx`                           |
+| `@radix-ui/react-switch`          | `ui/switch.tsx`                           |
+| `@radix-ui/react-tabs`            | `ui/tabs.tsx`                             |
+| `@radix-ui/react-toggle`          | `ui/toggle.tsx`                           |
+| `@radix-ui/react-toggle-group`    | `ui/toggle-group.tsx`                     |
+| `cmdk`                            | `ui/command.tsx`                          |
+| `embla-carousel-react`            | `ui/carousel.tsx`                         |
+| `framer-motion`                   | (none — zero importers already)           |
+| `input-otp`                       | `ui/input-otp.tsx`                        |
+| `react-day-picker`                | `ui/calendar.tsx`                         |
+| `react-hook-form`                 | `ui/form.tsx`                             |
+| `react-resizable-panels`          | `ui/resizable.tsx`                        |
+| `recharts`                        | `ui/chart.tsx` (this also drops `lodash`) |
+| `vaul`                            | `ui/drawer.tsx`                           |
 
 KEEP (still imported, do NOT touch the line in `package.json`):
 
@@ -197,15 +197,15 @@ dotenv                               (server/_core/index.ts: import "dotenv/conf
 
 ## Commands you will need
 
-| Purpose      | Command                       | Expected on success                |
-| ------------ | ----------------------------- | ---------------------------------- |
-| Install      | `npm install`                 | exit 0                             |
-| Typecheck    | `npm run check`               | exit 0, zero errors                |
-| Tests        | `npm test -- --run`           | all 104 tests pass                 |
-| Format       | `npm run format`              | exit 0                             |
-| Build        | `npm run build`               | exit 0, writes `dist/`             |
-| E2E (smoke)  | `npm run test:e2e`            | smoke spec passes (run last)       |
-| Audit        | `npm audit --omit=dev`        | no `lodash` or `recharts` advisories |
+| Purpose     | Command                | Expected on success                  |
+| ----------- | ---------------------- | ------------------------------------ |
+| Install     | `npm install`          | exit 0                               |
+| Typecheck   | `npm run check`        | exit 0, zero errors                  |
+| Tests       | `npm test -- --run`    | all 104 tests pass                   |
+| Format      | `npm run format`       | exit 0                               |
+| Build       | `npm run build`        | exit 0, writes `dist/`               |
+| E2E (smoke) | `npm run test:e2e`     | smoke spec passes (run last)         |
+| Audit       | `npm audit --omit=dev` | no `lodash` or `recharts` advisories |
 
 ## Scope
 

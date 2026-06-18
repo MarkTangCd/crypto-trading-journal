@@ -3,9 +3,9 @@ id: TASK-6
 title: Remove dead migrateTransactionStatus migration code
 status: Done
 assignee:
-  - '@agent'
-created_date: '2026-06-18 01:24'
-updated_date: '2026-06-18 07:43'
+  - "@agent"
+created_date: "2026-06-18 01:24"
+updated_date: "2026-06-18 07:43"
 labels:
   - tech-debt
   - server

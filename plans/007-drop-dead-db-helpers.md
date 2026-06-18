@@ -167,12 +167,12 @@ without losing coverage:
 
 ## Commands you will need
 
-| Purpose      | Command                                            | Expected           |
-| ------------ | -------------------------------------------------- | ------------------ |
-| Typecheck    | `npm run check`                                    | exit 0             |
-| Tests        | `npm test -- --run`                                | 104 passed         |
-| One file     | `npx vitest run server/transaction.lifecycle.test.ts` | passes          |
-| Format       | `npm run format`                                   | exit 0             |
+| Purpose   | Command                                               | Expected   |
+| --------- | ----------------------------------------------------- | ---------- |
+| Typecheck | `npm run check`                                       | exit 0     |
+| Tests     | `npm test -- --run`                                   | 104 passed |
+| One file  | `npx vitest run server/transaction.lifecycle.test.ts` | passes     |
+| Format    | `npm run format`                                      | exit 0     |
 
 ## Scope
 
