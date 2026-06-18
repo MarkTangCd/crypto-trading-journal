@@ -14,8 +14,8 @@ pure deletion; 005 unlocks safe UI refactors later.
 
 | Plan | Title                                                 | Priority | Effort | Depends on | Status |
 | ---- | ----------------------------------------------------- | -------- | ------ | ---------- | ------ |
-| 001  | Bind HTTP server to loopback only                     | P1       | S      | —          | TODO   |
-| 002  | Tighten Express JSON body limit                       | P1       | S      | —          | TODO   |
+| 001  | Bind HTTP server to loopback only                     | P1       | S      | —          | DONE   |
+| 002  | Tighten Express JSON body limit                       | P1       | S      | —          | DONE   |
 | 003  | Remove dead `migrateTransactionStatus` migration code | P2       | S      | —          | DONE   |
 | 004  | Prune Manus-template scaffolding and unused deps      | P2       | M      | —          | DONE   |
 | 005  | Add Playwright smoke-test baseline                    | P2       | M      | —          | DONE   |
