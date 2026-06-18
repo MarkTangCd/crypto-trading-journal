@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { CloseTradeModal } from "@/components/CloseTradeModal";
+import { CloseTradeModal } from "@/components/close-trade/CloseTradeModal";
 import { DeleteTradeDialog } from "@/components/transactions/DeleteTradeDialog";
 import {
   TransactionsFilters,
