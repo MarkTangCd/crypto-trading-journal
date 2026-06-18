@@ -24,7 +24,7 @@ function runNodeEval(script: string, databaseUrl: string): string {
 
 function bootstrapSqlite(databaseUrl: string): void {
   const schemaSql =
-    "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, openId TEXT NOT NULL UNIQUE, name TEXT, email TEXT, loginMethod TEXT, role TEXT NOT NULL DEFAULT 'user', createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), lastSignedIn INTEGER NOT NULL DEFAULT (unixepoch() * 1000), initialBalance TEXT DEFAULT '0'); " +
+    "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, openId TEXT NOT NULL UNIQUE, name TEXT, email TEXT, loginMethod TEXT, role TEXT NOT NULL DEFAULT 'user', createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), lastSignedIn INTEGER NOT NULL DEFAULT (unixepoch() * 1000)); " +
     "CREATE TABLE IF NOT EXISTS accounts (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, notes TEXT, initialBalance TEXT NOT NULL DEFAULT '0', createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000)); " +
     "CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, context TEXT NOT NULL DEFAULT '', tradeItems TEXT NOT NULL DEFAULT '[]', outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, entryPrice TEXT, positionSizeUsdt TEXT, plannedStopLossPrice TEXT, plannedTakeProfitPrice TEXT, plannedRiskRewardRatio TEXT, exitPrice TEXT, tvUrl TEXT, marketCycle TEXT, transactionType TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));";
 
@@ -482,7 +482,6 @@ console.log("ok");`;
       const script = `
 const {
   upsertUser,
-  updateUserInitialBalance,
   createTransactionWithElements,
   getAccountSnapshot,
   getStatistics,
@@ -499,8 +498,6 @@ const accountSeed = sqlite.prepare("insert into accounts (userId, name, notes, i
 const accountId = Number(accountSeed.lastInsertRowid);
 sqlite.close();
 if (!user || typeof user.id !== "number") throw new Error("missing-user");
-
-await updateUserInitialBalance(user.id, "1000.10");
 
 const trades = [
   { amount: "0.10", outcome: "win" },
@@ -562,7 +559,6 @@ console.log("ok");`;
       const script = `
 const {
   upsertUser,
-  updateUserInitialBalance,
   createTransactionWithElements,
   updateTransaction,
   closeDb,
@@ -605,7 +601,7 @@ seed.prepare("update users set updatedAt = 1 where id = ?").run(user.id);
 seed.prepare("update transactions set updatedAt = 1 where id = ?").run(transaction.id);
 seed.close();
 
-await updateUserInitialBalance(user.id, "2000.00");
+await upsertUser({ openId: "oid-task6-updated", name: "Updated User Again", loginMethod: "oidc" });
 await updateTransaction(transaction.id, user.id, { reviewFeedback: "looks good" });
 closeDb();
 

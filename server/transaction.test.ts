@@ -5,7 +5,6 @@ import * as db from "./db";
 
 // Mock the database functions
 vi.mock("./db", () => ({
-  getUserById: vi.fn().mockResolvedValue({ id: 1, initialBalance: "10000" }),
   getAccountSnapshot: vi
     .fn()
     .mockResolvedValue({ currentBalance: "10000", consecutiveLosses: 0 }),
@@ -78,7 +77,6 @@ vi.mock("./db", () => ({
     originalBalance: 10000,
     latestBalance: 10525,
   }),
-  updateUserInitialBalance: vi.fn().mockResolvedValue(undefined),
   // Account functions
   createAccount: vi.fn().mockImplementation(data => ({
     id: 1,
@@ -124,7 +122,6 @@ function createAuthContext(): TrpcContext {
       createdAt: new Date(),
       updatedAt: new Date(),
       lastSignedIn: new Date(),
-      initialBalance: "10000",
     },
   };
 }
@@ -658,7 +655,6 @@ describe("account procedures", () => {
       createdAt: new Date(),
       updatedAt: new Date(),
       lastSignedIn: new Date(),
-      initialBalance: "10000",
     },
   });
 

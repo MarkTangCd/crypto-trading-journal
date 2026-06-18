@@ -5,7 +5,6 @@ import * as db from "./db";
 
 // Mock the database functions
 vi.mock("./db", () => ({
-  getUserById: vi.fn().mockResolvedValue({ id: 1, initialBalance: "10000" }),
   createAccount: vi.fn().mockImplementation(data => ({
     id: 1,
     ...data,
@@ -68,7 +67,6 @@ describe("Account Router", () => {
       createdAt: new Date(),
       updatedAt: new Date(),
       lastSignedIn: new Date(),
-      initialBalance: "10000",
     },
   };
 

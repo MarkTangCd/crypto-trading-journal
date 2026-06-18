@@ -400,33 +400,6 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// ============ User Settings ============
-
-export async function updateUserInitialBalance(
-  userId: number,
-  initialBalance: string
-) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  await db
-    .update(users)
-    .set({ initialBalance, updatedAt: new Date() })
-    .where(eq(users.id, userId));
-}
-
-export async function getUserById(userId: number) {
-  const db = await getDb();
-  if (!db) return undefined;
-
-  const result = await db
-    .select()
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-  return result.length > 0 ? result[0] : undefined;
-}
-
 // ============ Transaction Queries ============
 
 export async function getTransactionById(

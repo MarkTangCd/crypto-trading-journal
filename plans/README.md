@@ -27,7 +27,7 @@ end-to-end safety net.
 | 006  | Prune unused shadcn UI primitives + deps (kills lodash HIGH) | P1       | M      | —          | DONE   |
 | 007  | Drop dead `server/db.ts` helpers                             | P2       | S      | —          | DONE   |
 | 008  | Delete dead `HttpError` family and `manusTypes.ts`           | P2       | S      | —          | DONE   |
-| 009  | Drop `users.initialBalance` column + helpers                 | P2       | M      | —          | TODO   |
+| 009  | Drop `users.initialBalance` column + helpers                 | P2       | M      | —          | DONE   |
 | 010  | Split `Transactions.tsx` (599 LOC) into <200 LOC             | P2       | M      | 005        | TODO   |
 | 011  | Split `NewTransaction.tsx` (550 LOC) into <200 LOC           | P2       | M      | 005        | TODO   |
 | 012  | Split `CloseTradeModal.tsx` (419 LOC) into <200 LOC          | P3       | M      | 005        | TODO   |

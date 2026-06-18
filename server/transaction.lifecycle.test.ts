@@ -22,7 +22,6 @@ function createAuthContext(): TrpcContext {
     name: "Test User",
     loginMethod: "manus",
     role: "user",
-    initialBalance: "1000.00",
     createdAt: new Date(),
     updatedAt: new Date(),
     lastSignedIn: new Date(),
@@ -56,8 +55,6 @@ function buildDbMock(overrides: Record<string, unknown> = {}) {
     }),
     getStatistics: vi.fn().mockResolvedValue({}),
     getUniqueTradingPairs: vi.fn().mockResolvedValue([]),
-    updateUserInitialBalance: vi.fn().mockResolvedValue(undefined),
-    getUserById: vi.fn().mockResolvedValue({ id: 1, initialBalance: "1000" }),
     getAccountById: vi.fn().mockResolvedValue({
       id: 1,
       userId: 1,
@@ -197,7 +194,6 @@ async function setupCloseCaller(options?: {
 
   vi.doMock("./db", () =>
     buildDbMock({
-      getUserById: vi.fn().mockResolvedValue({ id: 1, initialBalance: "1000" }),
       getAccountSnapshot: vi.fn().mockResolvedValue({
         currentBalance: options?.currentBalance ?? "1000.00",
         consecutiveLosses: options?.consecutiveLosses ?? 0,
@@ -255,7 +251,6 @@ async function setupGetFormDefaultsCaller() {
 
   vi.doMock("./db", () =>
     buildDbMock({
-      getUserById: vi.fn().mockResolvedValue({ id: 1, initialBalance: "1000" }),
       getAccountSnapshot: vi
         .fn()
         .mockResolvedValue({ currentBalance: "1050", consecutiveLosses: 2 }),
@@ -818,11 +813,11 @@ function runCloseLifecycleScenario(fileName: string) {
     const { DatabaseSync } = await import("node:sqlite");
     const db = new DatabaseSync(process.env.DATABASE_URL);
     db.exec(\`
-      CREATE TABLE users (id INTEGER PRIMARY KEY, openId TEXT, name TEXT, email TEXT, loginMethod TEXT, role TEXT, initialBalance TEXT, activeTradingSystemId INTEGER, createdAt INTEGER, updatedAt INTEGER, lastSignedIn INTEGER);
+      CREATE TABLE users (id INTEGER PRIMARY KEY, openId TEXT, name TEXT, email TEXT, loginMethod TEXT, role TEXT, activeTradingSystemId INTEGER, createdAt INTEGER, updatedAt INTEGER, lastSignedIn INTEGER);
       CREATE TABLE accounts (id INTEGER PRIMARY KEY, userId INTEGER NOT NULL, name TEXT NOT NULL, notes TEXT, initialBalance TEXT NOT NULL, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));
       CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, context TEXT NOT NULL DEFAULT '', tradeItems TEXT NOT NULL DEFAULT '[]', outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, entryPrice TEXT, positionSizeUsdt TEXT, plannedStopLossPrice TEXT, plannedTakeProfitPrice TEXT, plannedRiskRewardRatio TEXT, exitPrice TEXT, tvUrl TEXT, marketCycle TEXT, transactionType TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));
     \`);
-    db.prepare("INSERT INTO users (id, openId, name, email, loginMethod, role, initialBalance, createdAt, updatedAt, lastSignedIn) VALUES (?, 'u', 'u', 'u@e', 'anonymous', 'user', ?, 0, 0, 0)").run(${USER_ID}, ${JSON.stringify(INITIAL_BALANCE)});
+    db.prepare("INSERT INTO users (id, openId, name, email, loginMethod, role, createdAt, updatedAt, lastSignedIn) VALUES (?, 'u', 'u', 'u@e', 'anonymous', 'user', 0, 0, 0)").run(${USER_ID});
     db.prepare("INSERT INTO accounts (id, userId, name, initialBalance, createdAt, updatedAt) VALUES (?, ?, 'Main', ?, 0, 0)").run(${ACCOUNT_ID}, ${USER_ID}, ${JSON.stringify(INITIAL_BALANCE)});
     // entry=100, size=1000, SL=95: long exit=110 yields +100 (win, R/R=2.00); exit=95 yields -50 (loss, R/R=-1.00)
     db.prepare("INSERT INTO transactions (id, userId, accountId, status, tradingPair, timeFrame, startTime, direction, tradingLogic, entryPrice, positionSizeUsdt, plannedStopLossPrice, plannedTakeProfitPrice, plannedRiskRewardRatio, createdAt, updatedAt) VALUES (?, ?, ?, 'open', 'BTCUSDT', '1H', 1000, 'long', 'first', '100.00000000', '1000.00', '95.00000000', '110.00000000', '2.00', 1000, 1000)").run(101, ${USER_ID}, ${ACCOUNT_ID});
@@ -839,7 +834,6 @@ function runCloseLifecycleScenario(fileName: string) {
         email: 'test@example.com',
         loginMethod: 'anonymous',
         role: 'user',
-        initialBalance: ${JSON.stringify(INITIAL_BALANCE)},
         createdAt: new Date(),
         updatedAt: new Date(),
         lastSignedIn: new Date(),
@@ -916,11 +910,11 @@ function runConcurrentCloseScenario(fileName: string) {
     const { DatabaseSync } = await import("node:sqlite");
     const db = new DatabaseSync(process.env.DATABASE_URL);
     db.exec(\`
-      CREATE TABLE users (id INTEGER PRIMARY KEY, openId TEXT, name TEXT, email TEXT, loginMethod TEXT, role TEXT, initialBalance TEXT, activeTradingSystemId INTEGER, createdAt INTEGER, updatedAt INTEGER, lastSignedIn INTEGER);
+      CREATE TABLE users (id INTEGER PRIMARY KEY, openId TEXT, name TEXT, email TEXT, loginMethod TEXT, role TEXT, activeTradingSystemId INTEGER, createdAt INTEGER, updatedAt INTEGER, lastSignedIn INTEGER);
       CREATE TABLE accounts (id INTEGER PRIMARY KEY, userId INTEGER NOT NULL, name TEXT NOT NULL, notes TEXT, initialBalance TEXT NOT NULL, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));
       CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, context TEXT NOT NULL DEFAULT '', tradeItems TEXT NOT NULL DEFAULT '[]', outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, entryPrice TEXT, positionSizeUsdt TEXT, plannedStopLossPrice TEXT, plannedTakeProfitPrice TEXT, plannedRiskRewardRatio TEXT, exitPrice TEXT, tvUrl TEXT, marketCycle TEXT, transactionType TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));
     \`);
-    db.prepare("INSERT INTO users (id, openId, name, email, loginMethod, role, initialBalance, createdAt, updatedAt, lastSignedIn) VALUES (?, 'u', 'u', 'u@e', 'anonymous', 'user', ?, 0, 0, 0)").run(${USER_ID}, ${JSON.stringify(INITIAL_BALANCE)});
+    db.prepare("INSERT INTO users (id, openId, name, email, loginMethod, role, createdAt, updatedAt, lastSignedIn) VALUES (?, 'u', 'u', 'u@e', 'anonymous', 'user', 0, 0, 0)").run(${USER_ID});
     db.prepare("INSERT INTO accounts (id, userId, name, initialBalance, createdAt, updatedAt) VALUES (?, ?, 'Main', ?, 0, 0)").run(${ACCOUNT_ID}, ${USER_ID}, ${JSON.stringify(INITIAL_BALANCE)});
     // entry=100, size=1000, SL=95: long exit=110 -> +100 (win)
     db.prepare("INSERT INTO transactions (id, userId, accountId, status, tradingPair, timeFrame, startTime, direction, tradingLogic, entryPrice, positionSizeUsdt, plannedStopLossPrice, plannedTakeProfitPrice, plannedRiskRewardRatio, createdAt, updatedAt) VALUES (?, ?, ?, 'open', 'BTCUSDT', '1H', 1000, 'long', 'race', '100.00000000', '1000.00', '95.00000000', '110.00000000', '2.00', 1000, 1000)").run(500, ${USER_ID}, ${ACCOUNT_ID});
@@ -936,7 +930,6 @@ function runConcurrentCloseScenario(fileName: string) {
         email: 'test@example.com',
         loginMethod: 'anonymous',
         role: 'user',
-        initialBalance: ${JSON.stringify(INITIAL_BALANCE)},
         createdAt: new Date(),
         updatedAt: new Date(),
         lastSignedIn: new Date(),
