@@ -12,13 +12,13 @@ self-contained — there is no shared state you need to recall between plans.
 Default order. Plan 001/002 are quick localhost-hardening wins; 003/004 are
 pure deletion; 005 unlocks safe UI refactors later.
 
-| Plan | Title                                                | Priority | Effort | Depends on | Status |
-|------|------------------------------------------------------|----------|--------|------------|--------|
-| 001  | Bind HTTP server to loopback only                    | P1       | S      | —          | TODO   |
-| 002  | Tighten Express JSON body limit                      | P1       | S      | —          | TODO   |
-| 003  | Remove dead `migrateTransactionStatus` migration code| P2       | S      | —          | TODO   |
-| 004  | Prune Manus-template scaffolding and unused deps     | P2       | M      | —          | TODO   |
-| 005  | Add Playwright smoke-test baseline                   | P2       | M      | —          | TODO   |
+| Plan | Title                                                 | Priority | Effort | Depends on | Status |
+| ---- | ----------------------------------------------------- | -------- | ------ | ---------- | ------ |
+| 001  | Bind HTTP server to loopback only                     | P1       | S      | —          | TODO   |
+| 002  | Tighten Express JSON body limit                       | P1       | S      | —          | TODO   |
+| 003  | Remove dead `migrateTransactionStatus` migration code | P2       | S      | —          | TODO   |
+| 004  | Prune Manus-template scaffolding and unused deps      | P2       | M      | —          | TODO   |
+| 005  | Add Playwright smoke-test baseline                    | P2       | M      | —          | TODO   |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale)

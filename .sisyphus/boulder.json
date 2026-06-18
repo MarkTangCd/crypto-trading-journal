@@ -1,9 +1,7 @@
 {
   "active_plan": "/Users/marktang/programming/personal-projects/crypto-trading-journal/.sisyphus/plans/add-market-cycle-and-transaction-type.md",
   "started_at": "2026-04-07T03:32:43.601Z",
-  "session_ids": [
-    "ses_29cb0340affe8ghI3xjfV2Tqkp"
-  ],
+  "session_ids": ["ses_29cb0340affe8ghI3xjfV2Tqkp"],
   "plan_name": "add-market-cycle-and-transaction-type",
   "agent": "atlas",
   "session_origins": {

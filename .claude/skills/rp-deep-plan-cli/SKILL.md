@@ -22,19 +22,20 @@ rp-cli -e '<command>'
 
 **Quick reference:**
 
-| MCP Tool | CLI Command |
-|----------|-------------|
-| `get_file_tree` | `rp-cli -e 'tree'` |
-| `file_search` | `rp-cli -e 'search "pattern"'` |
-| `get_code_structure` | `rp-cli -e 'structure path/'` |
-| `read_file` | `rp-cli -e 'read path/file.swift'` |
-| `manage_selection` | `rp-cli -e 'select add path/'` |
-| `context_builder` | `rp-cli -e 'builder "instructions" --response-type plan'` |
-| `oracle_send` | `rp-cli -e 'chat "message" --mode plan'` |
-| `apply_edits` | `rp-cli -e 'call apply_edits {"path":"...","search":"...","replace":"..."}'` |
-| `file_actions` | `rp-cli -e 'call file_actions {"action":"create","path":"..."}'` |
+| MCP Tool             | CLI Command                                                                  |
+| -------------------- | ---------------------------------------------------------------------------- |
+| `get_file_tree`      | `rp-cli -e 'tree'`                                                           |
+| `file_search`        | `rp-cli -e 'search "pattern"'`                                               |
+| `get_code_structure` | `rp-cli -e 'structure path/'`                                                |
+| `read_file`          | `rp-cli -e 'read path/file.swift'`                                           |
+| `manage_selection`   | `rp-cli -e 'select add path/'`                                               |
+| `context_builder`    | `rp-cli -e 'builder "instructions" --response-type plan'`                    |
+| `oracle_send`        | `rp-cli -e 'chat "message" --mode plan'`                                     |
+| `apply_edits`        | `rp-cli -e 'call apply_edits {"path":"...","search":"...","replace":"..."}'` |
+| `file_actions`       | `rp-cli -e 'call file_actions {"action":"create","path":"..."}'`             |
 
 Chain commands with `&&`:
+
 ```bash
 rp-cli -e 'select set src/ && context'
 ```
@@ -46,6 +47,7 @@ JSON args (`-j`) accept inline JSON, file paths (`.json` auto-detected), `@file`
 **⚠️ TIMEOUT WARNING:** The `builder` and `chat` commands can take several minutes to complete. When invoking rp-cli, **set your command timeout to at least 2700 seconds (45 minutes)** to avoid premature termination.
 
 ---
+
 This workflow is delegation-heavy. Explore agents map seams and pull external research. `builder` produces the draft plan in plan mode. A design agent does a bounded critique. **You own the writing**, the structure, and the final shape.
 
 ## Core principles
@@ -70,15 +72,18 @@ rp-cli -w <window_id> -e 'tree --type roots'
 ```
 
 **Check the output:**
+
 - If your target root appears in a window → note the window ID and proceed to Phase 1
 - If not → the codebase isn't loaded in any window
 
 **CLI Window Routing:**
+
 - CLI invocations are stateless—you MUST pass `-w <window_id>` to target the correct window
 - Use `rp-cli -e 'windows'` to list all open windows and their workspaces
 - Always include `-w <window_id>` in ALL subsequent commands
 
 ---
+
 ## Phase 1: User Involvement Decision (REQUIRED — first interactive action)
 
 Before any exploration, ask the user how involved they want to be. This is the **only** mandatory user prompt — the rest of the run pauses for input only at the chosen checkpoint.
@@ -89,11 +94,11 @@ rp-cli -w <window_id> -e 'call ask_user {"question":"How involved would you like
 
 The answer drives the rest of the run:
 
-| Mode | Where you pause for the user |
-|------|------------------------------|
-| **Up front** | Phase 1.5 — grounded interview before broad exploration |
-| **Mid-flow** | Phase 5 — review the draft before the design critique |
-| **Hands-off** | Phase 7 — final hand-off, then interactive refinement |
+| Mode          | Where you pause for the user                            |
+| ------------- | ------------------------------------------------------- |
+| **Up front**  | Phase 1.5 — grounded interview before broad exploration |
+| **Mid-flow**  | Phase 5 — review the draft before the design critique   |
+| **Hands-off** | Phase 7 — final hand-off, then interactive refinement   |
 
 ### Handling the answer
 
@@ -115,9 +120,9 @@ rp-cli -w <window_id> -e 'agent_run op=start model_id=explore session_name="Ambi
 
 When the explores return, ask 2–4 questions the findings made askable. Good shapes:
 
-- *"Two existing patterns could apply: `<patternA>` in `<file>` and `<patternB>` in `<file>`. Which fits — or does this need a new pattern?"*
-- *"Current behavior assumes `<invariant>`. Is that load-bearing, or are you open to changing it?"*
-- *"This work could land in `<module A>` or `<module B>`. Any preference on scope?"*
+- _"Two existing patterns could apply: `<patternA>` in `<file>` and `<patternB>` in `<file>`. Which fits — or does this need a new pattern?"_
+- _"Current behavior assumes `<invariant>`. Is that load-bearing, or are you open to changing it?"_
+- _"This work could land in `<module A>` or `<module B>`. Any preference on scope?"_
 
 Use `ask_user` per question, or batch related ones. Wait for answers; fold them into your working understanding before Phase 2.
 
@@ -129,11 +134,11 @@ The user picked **Up front** — they explicitly asked to be involved here. If a
 
 Dispatch explore agents in parallel to map the surface area the plan will touch. Three lanes — use only what's relevant:
 
-| Lane | When to use | Question shape |
-|------|-------------|----------------|
-| **In-workspace seams** | Always | "How does `<subsystem>` connect to `<adjacent area>`? Key types, extension points, file:line refs." |
-| **External research** | Only when the plan depends on external APIs, libraries, standards, or behaviour outside the repo | "Look up <library/API/RFC>. Report current behavior, version notes, and links." |
-| **Prior art** | When the area has likely been touched before | "Check `docs/plans/`, `docs/completed/`, recent commits in `<area>`. Anything similar tried? Summarize." |
+| Lane                   | When to use                                                                                      | Question shape                                                                                           |
+| ---------------------- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| **In-workspace seams** | Always                                                                                           | "How does `<subsystem>` connect to `<adjacent area>`? Key types, extension points, file:line refs."      |
+| **External research**  | Only when the plan depends on external APIs, libraries, standards, or behaviour outside the repo | "Look up <library/API/RFC>. Report current behavior, version notes, and links."                          |
+| **Prior art**          | When the area has likely been touched before                                                     | "Check `docs/plans/`, `docs/completed/`, recent commits in `<area>`. Anything similar tried? Summarize." |
 
 Each explore gets ONE narrow question. Spawn with `detach: true`, then wait on the batch.
 
@@ -147,7 +152,7 @@ rp-cli -w <window_id> -e 'agent_run op=wait session_ids=["<id1>","<id2>"] timeou
 
 Skip lanes that don't apply. **Don't dispatch external research just because you can** — the relevance trigger is "the plan depends on facts I can't see in this workspace."
 
-**Capture the findings — don't just absorb them.** The explore agents did real reconnaissance, but they also return a lot. Curate: distill the *load-bearing* evidence — file:line refs, type names, extension points, links, prior art (including anything useful the Phase 1.5 ambiguity scouts surfaced) — into the plan's `## Background` when you scaffold the file next. The goal is enough grounding that `builder` doesn't re-derive seams from scratch — not a verbatim dump of every agent's output. When unsure whether a concrete reference matters, keep it; leave the raw transcripts and narration behind.
+**Capture the findings — don't just absorb them.** The explore agents did real reconnaissance, but they also return a lot. Curate: distill the _load-bearing_ evidence — file:line refs, type names, extension points, links, prior art (including anything useful the Phase 1.5 ambiguity scouts surfaced) — into the plan's `## Background` when you scaffold the file next. The goal is enough grounding that `builder` doesn't re-derive seams from scratch — not a verbatim dump of every agent's output. When unsure whether a concrete reference matters, keep it; leave the raw transcripts and narration behind.
 
 ---
 
@@ -188,11 +193,11 @@ rp-cli -w <window_id> -e 'builder "<task><user task, restated in the codebase'\'
 Produce a concrete approach + ordered work items. Note tradeoffs only when they change the recommended path.</context>" --response-type plan --export'
 ```
 
-The tool returns `oracle_export_path`. **The export is your draft** — `builder`'s plan pass is more grounded than your scaffold, and if it framed the approach and work items well, that framing *is* design output worth keeping. Build the plan body *out of it*; don't pre-edit it down.
+The tool returns `oracle_export_path`. **The export is your draft** — `builder`'s plan pass is more grounded than your scaffold, and if it framed the approach and work items well, that framing _is_ design output worth keeping. Build the plan body _out of it_; don't pre-edit it down.
 
 1. Read the export with `read_file`.
 2. Copy its substantive content — the proposed approach, ordered work items, named seams — into the plan file (the plan substance, not any raw file dumps or transcripts the export may carry). This becomes the body of your plan. Keep the export's framing where it's good; you're assembling the draft, not second-guessing its specificity. That's the Phase 6 critique's job.
-3. Keep the scaffold's framing: your `## Goal` (restated in the codebase's terms) stays, and make sure each work item carries the repo's convention — **Goal**, **Done when**, **Key files**, **Dependencies**, and **Size**. `Done when` pins the *outcome* without dictating the *path*.
+3. Keep the scaffold's framing: your `## Goal` (restated in the codebase's terms) stays, and make sure each work item carries the repo's convention — **Goal**, **Done when**, **Key files**, **Dependencies**, and **Size**. `Done when` pins the _outcome_ without dictating the _path_.
 4. Assert voice and fill genuine gaps: tidy `builder`'s phrasing into the plan's voice, and where the export is thin or hand-waves a seam, enhance it from your Phase 2 findings. Don't strip detail just because it looks tactical — leave specificity calls to Phase 6.
 5. **Leave the export in place** — it is a reference input to the Phase 6 design critique. Don't delete it yet; save that path for later.
 
@@ -202,7 +207,7 @@ rp-cli -w <window_id> -e 'call apply_edits {"path":"docs/plans/<topic>-<YYYY-MM-
 # Keep <oracle_export_path> for Phase 6 — do not delete it here.
 ```
 
-Assemble and tidy here — don't gut the draft, and don't agonize over how much *how* belongs. Phase 6 calls that.
+Assemble and tidy here — don't gut the draft, and don't agonize over how much _how_ belongs. Phase 6 calls that.
 
 ---
 
@@ -252,7 +257,7 @@ The plan should be **clearer and tighter** after this pass. The Phase 6 critique
 - [ ] Open questions only if they would block or shape implementation
 - [ ] A reader unfamiliar with the area can pick it up and execute
 
-If the user picked **Hands-off**, surface the plan now and offer interactive refinement: *"Plan is at `<path>`. Want me to revise any section, expand scope, or trim anything?"* Treat each round as a focused edit pass on the file, not a re-plan.
+If the user picked **Hands-off**, surface the plan now and offer interactive refinement: _"Plan is at `<path>`. Want me to revise any section, expand scope, or trim anything?"_ Treat each round as a focused edit pass on the file, not a re-plan.
 
 For **all** modes, report:
 
@@ -288,8 +293,8 @@ rp-cli -w <window_id> -e 'call file_actions {"action":"delete","path":"/absolute
 - 🚫 Pasting full file contents into the plan — refer to `file:line`, don't reproduce
 - 🚫 Losing the Phase 2 explore findings — distill the load-bearing evidence into `## Background`; it's `builder`'s critical context
 - 🚫 Dumping raw explore-agent output into `## Background` — curate it; the section is distilled evidence, not transcripts
-- 🚫 Treating the `builder` export as a skeleton to mine — it's your *draft*; build the plan out of it and keep its framing where it's good
-- 🚫 Pre-editing the export's specificity in Phase 4 — copy it in faithfully; the Phase 6 critique is the arbiter of how much *how* belongs
+- 🚫 Treating the `builder` export as a skeleton to mine — it's your _draft_; build the plan out of it and keep its framing where it's good
+- 🚫 Pre-editing the export's specificity in Phase 4 — copy it in faithfully; the Phase 6 critique is the arbiter of how much _how_ belongs
 - 🚫 Over-specifying tactical choices the implementation agent should own — the plan locks down decisions, not every step
 - 🚫 Deleting the `builder` export before the Phase 6 design critique has used it — it's a critique input; delete it only after the critique is folded in
 - 🚫 Letting the design critique rewrite the plan — it's a critic, not a co-author

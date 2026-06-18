@@ -3,7 +3,7 @@ id: TASK-6
 title: Remove dead migrateTransactionStatus migration code
 status: To Do
 assignee: []
-created_date: '2026-06-18 01:24'
+created_date: "2026-06-18 01:24"
 labels:
   - tech-debt
   - server
@@ -16,11 +16,15 @@ priority: medium
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
+
 Implementation plan: plans/003-remove-migrate-status.md. Delete the migrateTransactionStatus function (references a column dropped from the schema), its caller script, and the three dead test cases. Follow the plan file step-by-step.
+
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
+
 <!-- AC:BEGIN -->
+
 - [ ] #1 scripts/migrate-transaction-status.ts is deleted
 - [ ] #2 server/db.ts no longer exports or defines migrateTransactionStatus
 - [ ] #3 server/transaction.lifecycle.test.ts no longer contains the migrateTransactionStatus describe block or its runScenario helper

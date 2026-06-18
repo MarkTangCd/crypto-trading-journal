@@ -31,11 +31,12 @@ account snapshot) — total ~1,800 lines and are exercised only by manual
 click-through.
 
 Symptoms this enables:
+
 - Any future UI refactor (most obviously splitting the 607-line
   `Transactions.tsx`) is a blind rewrite.
 - A typo in a tRPC procedure name reaches localhost before anyone notices.
 - The tRPC client/server contract is verified at the type level but not at
-  the *behavioral* level.
+  the _behavioral_ level.
 
 `playwright.config.ts` already exists and is wired for a `./e2e` test
 directory, with `baseURL: "http://localhost:3000"`, Chromium-only, headless.
@@ -72,9 +73,7 @@ Relevant files:
       headless: true,
     },
 
-    projects: [
-      { name: "chromium", use: { ...devices["Desktop Chrome"] } },
-    ],
+    projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   });
   ```
 
@@ -118,19 +117,20 @@ Repo conventions:
 
 ## Commands you will need
 
-| Purpose                  | Command                                                   | Expected on success |
-|--------------------------|-----------------------------------------------------------|---------------------|
-| Install                  | `npm install`                                             | exit 0              |
-| Install browser binaries | `npx playwright install chromium`                         | exit 0; chromium downloaded (only first run) |
-| Typecheck                | `npm run check`                                           | exit 0              |
-| Vitest                   | `npm run test`                                            | unaffected; all pass |
-| Playwright (new script)  | `npm run test:e2e`                                        | new: all tests pass |
-| Dev server (background)  | `npm run dev`                                             | listens on :3000    |
-| Format                   | `npm run format`                                          | exit 0              |
+| Purpose                  | Command                           | Expected on success                          |
+| ------------------------ | --------------------------------- | -------------------------------------------- |
+| Install                  | `npm install`                     | exit 0                                       |
+| Install browser binaries | `npx playwright install chromium` | exit 0; chromium downloaded (only first run) |
+| Typecheck                | `npm run check`                   | exit 0                                       |
+| Vitest                   | `npm run test`                    | unaffected; all pass                         |
+| Playwright (new script)  | `npm run test:e2e`                | new: all tests pass                          |
+| Dev server (background)  | `npm run dev`                     | listens on :3000                             |
+| Format                   | `npm run format`                  | exit 0                                       |
 
 ## Scope
 
 **In scope** (create / modify):
+
 - Create: `e2e/smoke.spec.ts` (the smoke test).
 - Create: `e2e/helpers.ts` (small file with reusable navigation helpers, only
   if you actually share two or more steps; otherwise inline everything in
@@ -147,6 +147,7 @@ Repo conventions:
   ```
 
 **Out of scope**:
+
 - Setting up a CI workflow that runs Playwright in GitHub Actions / similar.
   Local-only is fine for this plan.
 - Resetting / seeding the database between test runs (single-tenant, single
@@ -207,6 +208,7 @@ Keep alphabetical order if that's the convention (it isn't strictly in this
 repo — match neighbors). Suggested placement: right after `"test"`.
 
 **Verify**:
+
 ```
 cat package.json | grep -A1 '"test"'
 ```
@@ -327,12 +329,15 @@ Match the existing comment column / spacing.
 ### Step 7: Run the test against a live dev server
 
 In one terminal:
+
 ```
 npm run dev
 ```
+
 Wait for `Server running on http://localhost:3000/`.
 
 In another terminal:
+
 ```
 npm run test:e2e
 ```
@@ -340,6 +345,7 @@ npm run test:e2e
 **Verify**: exits 0; the single spec passes.
 
 If it fails:
+
 - The first failure mode you'll see is a selector mismatch. Use
   `npx playwright test --debug` to step through; fix selectors. Don't add
   `await page.waitForTimeout(…)` — that's a smell. Use Playwright's
@@ -376,6 +382,7 @@ The plan **is** the test plan. To be specific:
   - List view (`transaction.list` query, status badge, outcome rendering).
 
 What is **not** covered (and should be in a follow-on plan):
+
 - Loss & breakeven outcomes.
 - Account deletion guard ("cannot delete the last account").
 - Filter / sort UI state.

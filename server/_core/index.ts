@@ -11,7 +11,7 @@ import { serveStatic, setupVite } from "./vite";
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
     const server = net.createServer();
-    server.listen(port, () => {
+    server.listen(port, "127.0.0.1", () => {
       server.close(() => resolve(true));
     });
     server.on("error", () => resolve(false));
@@ -30,9 +30,9 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
-  // Configure body parser with larger size limit for file uploads
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  // tRPC payloads top out at a few KB; cap well under that to bound DoS surface.
+  app.use(express.json({ limit: "1mb" }));
+  app.use(express.urlencoded({ limit: "1mb", extended: true }));
   // tRPC API
   app.use(
     "/api/trpc",
@@ -61,7 +61,7 @@ async function startServer() {
     console.warn("[Database] invariant check failed:", err);
   });
 
-  server.listen(port, () => {
+  server.listen(port, "127.0.0.1", () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
 }

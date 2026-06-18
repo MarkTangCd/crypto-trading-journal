@@ -74,7 +74,7 @@ Repo conventions:
 ## Commands you will need
 
 | Purpose   | Command          | Expected on success |
-|-----------|------------------|---------------------|
+| --------- | ---------------- | ------------------- |
 | Install   | `npm install`    | exit 0              |
 | Typecheck | `npm run check`  | exit 0              |
 | Tests     | `npm run test`   | all pass            |
@@ -83,9 +83,11 @@ Repo conventions:
 ## Scope
 
 **In scope** (only file you should modify):
+
 - `server/_core/index.ts`
 
 **Out of scope**:
+
 - Any test files. The tRPC tests use `appRouter.createCaller`, not HTTP, so
   the body limit doesn't apply to them.
 - Changing the URL-encoded `extended` flag (leave as `true`).

@@ -273,27 +273,17 @@
       "indexes": {
         "transactions_account_status_idx": {
           "name": "transactions_account_status_idx",
-          "columns": [
-            "accountId",
-            "status"
-          ],
+          "columns": ["accountId", "status"],
           "isUnique": false
         },
         "transactions_account_start_idx": {
           "name": "transactions_account_start_idx",
-          "columns": [
-            "accountId",
-            "startTime"
-          ],
+          "columns": ["accountId", "startTime"],
           "isUnique": false
         },
         "transactions_account_end_id_idx": {
           "name": "transactions_account_end_id_idx",
-          "columns": [
-            "accountId",
-            "endTime",
-            "id"
-          ],
+          "columns": ["accountId", "endTime", "id"],
           "isUnique": false
         }
       },
@@ -405,9 +395,7 @@
       "indexes": {
         "users_openId_unique": {
           "name": "users_openId_unique",
-          "columns": [
-            "openId"
-          ],
+          "columns": ["openId"],
           "isUnique": true
         }
       },

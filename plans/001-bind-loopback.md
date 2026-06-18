@@ -26,8 +26,8 @@
 
 `CLAUDE.md` declares this project as single-tenant, anonymous, local-use
 software where the tRPC context always returns the same `getOrCreateAnonymousUser`
-and every procedure is `publicProcedure`. It explicitly warns: *"Do not expose
-the port to a network without adding real auth first."*
+and every procedure is `publicProcedure`. It explicitly warns: _"Do not expose
+the port to a network without adding real auth first."_
 
 The HTTP server today calls `server.listen(port, () => …)` with no host
 argument. Node's `net.Server.listen` defaults to binding `0.0.0.0` (all
@@ -77,22 +77,24 @@ Repo conventions:
 
 ## Commands you will need
 
-| Purpose   | Command                | Expected on success |
-|-----------|------------------------|---------------------|
-| Install   | `npm install`          | exit 0              |
-| Typecheck | `npm run check`        | exit 0, no errors   |
-| Tests     | `npm run test`         | all pass            |
-| Format    | `npm run format`       | exit 0              |
-| Smoke run | `npm run dev`          | logs `Server running on http://localhost:3000/`; port-bind to loopback (see step 3) |
+| Purpose   | Command          | Expected on success                                                                 |
+| --------- | ---------------- | ----------------------------------------------------------------------------------- |
+| Install   | `npm install`    | exit 0                                                                              |
+| Typecheck | `npm run check`  | exit 0, no errors                                                                   |
+| Tests     | `npm run test`   | all pass                                                                            |
+| Format    | `npm run format` | exit 0                                                                              |
+| Smoke run | `npm run dev`    | logs `Server running on http://localhost:3000/`; port-bind to loopback (see step 3) |
 
 (Exact commands from `package.json` — verified during recon.)
 
 ## Scope
 
 **In scope** (only file you should modify):
+
 - `server/_core/index.ts`
 
 **Out of scope** (do NOT touch, even though they look related):
+
 - `vite.config.ts` `server: { host: true }` — that controls the Vite dev
   middleware host, which Vite handles internally via its own allowlist
   (`allowedHosts: [...]`). Leave it alone.

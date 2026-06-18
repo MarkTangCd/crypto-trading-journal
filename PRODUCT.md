@@ -85,7 +85,7 @@ failed.
    activities that matter; every page belongs to one of them, and the page
    makes that clear within the first second. No screen tries to be both.
 4. **Earn every panel.** A panel exists only if it carries decision-relevant
-   information *at this moment*. The exchange-UI instinct to surround the
+   information _at this moment_. The exchange-UI instinct to surround the
    user with available data is rejected; the journal answers one question per
    screen.
 5. **Motion is feedback, not atmosphere.** Animation marks a state change
@@ -99,7 +99,7 @@ failed.
 - Respect `prefers-reduced-motion`: every transition has an instant or
   crossfade alternative, and the giant-number entrance is suppressed.
 - Win / loss / breakeven must remain distinguishable without color (label,
-  position, or shape — color carries the *vibe*, not the *meaning*).
+  position, or shape — color carries the _vibe_, not the _meaning_).
 - Keyboard-complete: new-trade form, review form, and navigation must all be
   fully operable without a pointer. This trader will reach for the keyboard
   mid-position.

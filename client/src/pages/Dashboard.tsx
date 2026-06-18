@@ -1,16 +1,10 @@
 import { Button } from "@/components/ui/button";
-import {
-  SectionHeader,
-  type Tone,
-  fmtMoney,
-  toneClass,
-} from "@/lib/ledger";
+import { SectionHeader, type Tone, fmtMoney, toneClass } from "@/lib/ledger";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { useAccount } from "@/contexts/AccountContext";
 import { Loader2 } from "lucide-react";
 import { useLocation } from "wouter";
-
 
 function Stat({
   label,

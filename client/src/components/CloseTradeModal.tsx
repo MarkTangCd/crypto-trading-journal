@@ -156,8 +156,7 @@ export function CloseTradeModal({
   );
 
   const isLegacyOpen =
-    !!trade &&
-    (entryNum === null || stopNum === null || positionNum === null);
+    !!trade && (entryNum === null || stopNum === null || positionNum === null);
 
   const currentBalanceNum = useMemo(() => {
     const v = parseFloat(formDefaults?.currentBalance || "0");
@@ -241,8 +240,8 @@ export function CloseTradeModal({
           <DialogHeader>
             <DialogTitle>close trade</DialogTitle>
             <DialogDescription>
-              record the exit price; outcome, r/r, and pnl are computed from
-              the trade plan.
+              record the exit price; outcome, r/r, and pnl are computed from the
+              trade plan.
             </DialogDescription>
           </DialogHeader>
 
@@ -266,9 +265,7 @@ export function CloseTradeModal({
             {/* Legacy warning */}
             {isLegacyOpen && (
               <div className="border-l-2 border-foreground pl-3 py-1 status-loss">
-                <p className="text-sm">
-                  this trade predates the plan fields.
-                </p>
+                <p className="text-sm">this trade predates the plan fields.</p>
                 <p className="text-label mt-1">
                   entry price, position size, or planned stop loss is missing.
                   edit the trade to add them, or delete and re-record it.
@@ -277,17 +274,12 @@ export function CloseTradeModal({
             )}
 
             {/* Plan readout */}
-            <section
-              aria-labelledby="plan-readout"
-              className="space-y-4"
-            >
+            <section aria-labelledby="plan-readout" className="space-y-4">
               <p id="plan-readout" className="text-label">
                 trade plan
               </p>
               <div className="grid grid-cols-2 gap-x-6 gap-y-4 tabular-nums">
-                <Field label="entry">
-                  {fmtDecimal(trade.entryPrice)}
-                </Field>
+                <Field label="entry">{fmtDecimal(trade.entryPrice)}</Field>
                 <Field label="size (usdt)">
                   {trade.positionSizeUsdt
                     ? fmtMoney(trade.positionSizeUsdt)
@@ -338,10 +330,7 @@ export function CloseTradeModal({
             </div>
 
             {/* Computed readout */}
-            <section
-              aria-labelledby="computed-readout"
-              className="space-y-4"
-            >
+            <section aria-labelledby="computed-readout" className="space-y-4">
               <p id="computed-readout" className="text-label">
                 computed
               </p>

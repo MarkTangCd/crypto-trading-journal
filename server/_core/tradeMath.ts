@@ -48,8 +48,7 @@ function parseDecimalToScaled(
     );
   }
   const isNegative = value.startsWith("-");
-  const unsigned =
-    value.startsWith("+") || isNegative ? value.slice(1) : value;
+  const unsigned = value.startsWith("+") || isNegative ? value.slice(1) : value;
   const [whole, fractional = ""] = unsigned.split(".");
   if (fractional.length > scale) {
     throw new TradeMathError(
@@ -90,7 +89,7 @@ function divideAndRound(
   }
 
   const sign =
-    (numerator < 0n) !== (denominator < 0n) && numerator !== 0n ? -1n : 1n;
+    numerator < 0n !== denominator < 0n && numerator !== 0n ? -1n : 1n;
   const absNum = numerator < 0n ? -numerator : numerator;
   const absDen = denominator < 0n ? -denominator : denominator;
 
@@ -132,10 +131,7 @@ function parsePositiveMoney(input: string, label: string): bigint {
 }
 
 export function normalizePrice(input: string): string {
-  return formatScaledToDecimal(
-    parsePositivePrice(input, "price"),
-    PRICE_SCALE
-  );
+  return formatScaledToDecimal(parsePositivePrice(input, "price"), PRICE_SCALE);
 }
 
 export function normalizeMoney(input: string): string {
@@ -238,8 +234,7 @@ export function calculatePlannedRiskRewardRatio(
 
   const reward =
     input.direction === "long" ? takeProfit - entry : entry - takeProfit;
-  const risk =
-    input.direction === "long" ? entry - stopLoss : stopLoss - entry;
+  const risk = input.direction === "long" ? entry - stopLoss : stopLoss - entry;
 
   const ratio = divideAndRound(
     reward,
@@ -271,8 +266,7 @@ export function calculateActualRiskRewardRatio(
   assertActualPriceShape(input.direction, entry, stopLoss);
 
   const reward = input.direction === "long" ? exit - entry : entry - exit;
-  const risk =
-    input.direction === "long" ? entry - stopLoss : stopLoss - entry;
+  const risk = input.direction === "long" ? entry - stopLoss : stopLoss - entry;
 
   const ratio = divideAndRound(
     reward,
@@ -313,7 +307,11 @@ export function calculateReturnAmount(input: ReturnAmountInput): string {
 export function deriveOutcome(
   returnAmount: string
 ): "win" | "loss" | "breakeven" {
-  const value = parseDecimalToScaled(returnAmount, MONEY_SCALE, "return amount");
+  const value = parseDecimalToScaled(
+    returnAmount,
+    MONEY_SCALE,
+    "return amount"
+  );
   if (value > 0n) return "win";
   if (value < 0n) return "loss";
   return "breakeven";

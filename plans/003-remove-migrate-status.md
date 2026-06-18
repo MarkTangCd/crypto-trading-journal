@@ -137,17 +137,18 @@ Repo conventions:
 
 ## Commands you will need
 
-| Purpose   | Command                                       | Expected on success |
-|-----------|-----------------------------------------------|---------------------|
-| Install   | `npm install`                                 | exit 0              |
-| Typecheck | `npm run check`                               | exit 0              |
-| Tests     | `npm run test`                                | all pass, fewer than before by exactly the 3 deleted `it` blocks |
-| One file  | `npx vitest run server/transaction.lifecycle.test.ts` | all pass     |
-| Format    | `npm run format`                              | exit 0              |
+| Purpose   | Command                                               | Expected on success                                              |
+| --------- | ----------------------------------------------------- | ---------------------------------------------------------------- |
+| Install   | `npm install`                                         | exit 0                                                           |
+| Typecheck | `npm run check`                                       | exit 0                                                           |
+| Tests     | `npm run test`                                        | all pass, fewer than before by exactly the 3 deleted `it` blocks |
+| One file  | `npx vitest run server/transaction.lifecycle.test.ts` | all pass                                                         |
+| Format    | `npm run format`                                      | exit 0                                                           |
 
 ## Scope
 
 **In scope**:
+
 - Delete: `scripts/migrate-transaction-status.ts`
 - Edit: `server/db.ts` (remove the `migrateTransactionStatus` function)
 - Edit: `server/transaction.lifecycle.test.ts` (remove the dead
@@ -159,6 +160,7 @@ directory in place** — it is not in `.gitignore` and other future scripts
 may live there.
 
 **Out of scope**:
+
 - `drizzle/migrations/*.sql` history (the `isReviewed` column shows up in
   early migrations — that's correct, those reflect the past state of the
   schema and must stay accurate).
@@ -245,6 +247,7 @@ npm run test
 ```
 
 **Verify**:
+
 - Exit 0.
 - The number of passing tests is exactly 3 lower than before (the three
   deleted `it` blocks under `migrateTransactionStatus`). Other suites

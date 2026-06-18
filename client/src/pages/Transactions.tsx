@@ -186,11 +186,11 @@ export default function Transactions() {
 
   const hasFilters = Boolean(
     outcomeFilter ||
-      directionFilter ||
-      statusFilter ||
-      marketCycleFilter ||
-      transactionTypeFilter ||
-      pairFilter
+    directionFilter ||
+    statusFilter ||
+    marketCycleFilter ||
+    transactionTypeFilter ||
+    pairFilter
   );
 
   return (
@@ -257,9 +257,7 @@ export default function Transactions() {
             label="cycle"
             value={marketCycleFilter ?? "all"}
             onChange={v =>
-              setMarketCycleFilter(
-                v === "all" ? undefined : (v as MarketCycle)
-              )
+              setMarketCycleFilter(v === "all" ? undefined : (v as MarketCycle))
             }
           >
             <option value="all">all</option>
@@ -359,9 +357,7 @@ export default function Transactions() {
                       ? "loss"
                       : undefined;
                 const returnNum =
-                  tx.returnAmount !== null
-                    ? parseFloat(tx.returnAmount)
-                    : null;
+                  tx.returnAmount !== null ? parseFloat(tx.returnAmount) : null;
                 const returnTone: Tone =
                   returnNum === null
                     ? undefined
@@ -374,11 +370,7 @@ export default function Transactions() {
                   tx.accountBalance !== null
                     ? parseFloat(tx.accountBalance)
                     : null;
-                const meta = [
-                  tx.timeFrame,
-                  tx.marketCycle,
-                  tx.transactionType,
-                ]
+                const meta = [tx.timeFrame, tx.marketCycle, tx.transactionType]
                   .filter(Boolean)
                   .join(" · ")
                   .toLowerCase();

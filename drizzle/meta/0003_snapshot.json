@@ -231,18 +231,12 @@
       "indexes": {
         "transactions_account_status_idx": {
           "name": "transactions_account_status_idx",
-          "columns": [
-            "accountId",
-            "status"
-          ],
+          "columns": ["accountId", "status"],
           "isUnique": false
         },
         "transactions_account_created_idx": {
           "name": "transactions_account_created_idx",
-          "columns": [
-            "accountId",
-            "createdAt"
-          ],
+          "columns": ["accountId", "createdAt"],
           "isUnique": false
         }
       },
@@ -354,9 +348,7 @@
       "indexes": {
         "users_openId_unique": {
           "name": "users_openId_unique",
-          "columns": [
-            "openId"
-          ],
+          "columns": ["openId"],
           "isUnique": true
         }
       },

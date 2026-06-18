@@ -312,10 +312,7 @@ export default function Accounts() {
             </Field>
           </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsCreateOpen(false)}
-            >
+            <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
               cancel
             </Button>
             <Button
@@ -375,10 +372,7 @@ export default function Accounts() {
             </Field>
           </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setEditingAccount(null)}
-            >
+            <Button variant="outline" onClick={() => setEditingAccount(null)}>
               cancel
             </Button>
             <Button

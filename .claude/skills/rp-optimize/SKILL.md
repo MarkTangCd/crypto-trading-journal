@@ -34,19 +34,26 @@ This workflow is delegation-heavy by design. Implementation, measurement, deep c
 Before any optimization work, bind to the target codebase using its working directory:
 
 ```json
-{"tool":"bind_context","args":{"op":"bind","working_dirs":["/absolute/path/to/project"]}}
+{
+  "tool": "bind_context",
+  "args": { "op": "bind", "working_dirs": ["/absolute/path/to/project"] }
+}
 ```
+
 This auto-resolves to the window containing your project. No need to list windows first.
 
 **If binding succeeds** → proceed to Phase 1
 **If no match** → the codebase isn't loaded. Find and open the workspace:
+
 ```json
 {"tool":"manage_workspaces","args":{"action":"list"}}
 {"tool":"manage_workspaces","args":{"action":"switch","workspace":"<workspace_name>","open_in_new_window":true}}
 ```
+
 Then retry the `working_dirs` bind.
 
 ---
+
 ## Phase 1: Surface Mapping & Bottleneck Scouting (delegate to explore agents)
 
 Your job here is **prompt translation + orchestrated scouting**, not codebase exploration. Spend at most 1–2 navigation calls turning the user's request into the codebase's actual nouns, then **fan out explore agents in parallel** to scout for bottleneck candidates around the named target.
@@ -58,12 +65,14 @@ The user names what to optimize, but the actual bottleneck is rarely just inside
 Rewrite the user's request in the repo's likely terminology — don't dive deeper yet.
 
 Example:
-- Raw: *"Speed up search"*
-- Translated: *"Reduce p95 latency of path-matching under the test fixtures — likely `PathMatcher` and friends. Need to confirm exact module and existing benchmarks."*
+
+- Raw: _"Speed up search"_
+- Translated: _"Reduce p95 latency of path-matching under the test fixtures — likely `PathMatcher` and friends. Need to confirm exact module and existing benchmarks."_
 
 **Default: run the full fan-out.** Even when the user names the function, the cost is rarely all inside that function — callers, inputs, and adjacent operations often dominate. Bottleneck scouting is what surfaces that.
 
 Two narrow exceptions:
+
 - **Profile data already exists** (user attached a sample report or pointed at a recent profiler trace in the repo) → dispatch one focused explore to read the trace + summarize bottleneck candidates, then go to Phase 2. Skip the rest of the fan-out.
 - **User gave a feature/feeling** ("feels slow during X") → full fan-out, plus add `<X>`-entry-point discovery to the "Target & call graph" brief.
 
@@ -71,13 +80,13 @@ Two narrow exceptions:
 
 Spawn explore agents — each with one narrow question — for the facts you need before `context_builder` can plan. **The bottleneck-candidates explore is the heart of this phase.** Typical fan-out:
 
-| Explore | Question |
-|---------|----------|
+| Explore                   | Question                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Bottleneck candidates** | "Scout for performance bottlenecks around `<translated target>`. Look at the target itself AND its surrounding context: callers (especially loops or hot code paths that invoke the target frequently), data dependencies (how inputs to the target are constructed upstream), adjacent operations that run together in the same code path, shared infrastructure the target touches (locks, caches, allocators). Hunt for: tight loops with per-iteration allocations, redundant computation across iterations, locking/serialization, expensive data transformations (JSON/XML/string), sync I/O on hot paths, O(n²) patterns, repeated work that could be cached, unbatched UI/IO updates. Report 2–3 ranked candidates with `file:line` refs and a one-sentence rationale per candidate ('suspicious because…'). Don't propose fixes yet — just identify what looks expensive." |
-| Target & call graph | "Locate the implementation of `<translated target>`. Then map its call graph: who calls it, how often, and in what context (tight loop? cold init? user-driven? background job?). Report the implementation `file:line` and the 3–5 most relevant call sites with the surrounding code context that explains how the target is invoked." |
-| Prior perf work | "Find prior performance work related to `<area>`. Look for: (a) existing benchmarks, perf tests, or instrumentation in code (search `*Tests`, `*Bench*`, `*Perf*`, `benchmarks/`, `bench/`); (b) profiler traces, sample reports, or perf logs in the repo (look under `error-triage/`, `reports/`, `docs/investigations/`, `perf/`, or similar); (c) TODOs/FIXMEs/comments mentioning 'slow', 'perf', 'O(n', 'hot path', 'bottleneck' in or near `<area>`. Report what exists, where it lives, and (for benchmarks/instrumentation) how to invoke it." |
-| Conventions | "Read AGENTS.md (or the project's testing/benchmarking doc). Report: how to run unit tests, how to run benchmarks if any, how to launch a debug harness, and any sanctioned measurement commands. Quote the exact commands." |
-| Scope | "Identify the file/module boundary that defines `<area>` — which files are in scope for changes, which are clearly out of scope. List both." |
+| Target & call graph       | "Locate the implementation of `<translated target>`. Then map its call graph: who calls it, how often, and in what context (tight loop? cold init? user-driven? background job?). Report the implementation `file:line` and the 3–5 most relevant call sites with the surrounding code context that explains how the target is invoked."                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Prior perf work           | "Find prior performance work related to `<area>`. Look for: (a) existing benchmarks, perf tests, or instrumentation in code (search `*Tests`, `*Bench*`, `*Perf*`, `benchmarks/`, `bench/`); (b) profiler traces, sample reports, or perf logs in the repo (look under `error-triage/`, `reports/`, `docs/investigations/`, `perf/`, or similar); (c) TODOs/FIXMEs/comments mentioning 'slow', 'perf', 'O(n', 'hot path', 'bottleneck' in or near `<area>`. Report what exists, where it lives, and (for benchmarks/instrumentation) how to invoke it."                                                                                                                                                                                                                                                                                                                             |
+| Conventions               | "Read AGENTS.md (or the project's testing/benchmarking doc). Report: how to run unit tests, how to run benchmarks if any, how to launch a debug harness, and any sanctioned measurement commands. Quote the exact commands."                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Scope                     | "Identify the file/module boundary that defines `<area>` — which files are in scope for changes, which are clearly out of scope. List both."                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 
 Use `detach:true` so they run concurrently:
 
@@ -121,7 +130,7 @@ When the explores return, write down (in your head or as scratch — no need for
 4. **Measurement command**: the exact command(s) the explores reported (from Conventions + Prior perf work).
 5. **Ranked bottleneck candidates**: 2–3 candidates with `file:line` and rationale, augmented by call-site context from the call-graph explore.
 
-If the bottleneck candidates and the user's named target diverge significantly — e.g., user said "speed up `PathMatcher.match`" but the explore reports the real cost is in the **caller's per-iteration allocation** of `MatchOptions` — **pause** before dispatching Phase 2 and ask the user explicitly: *"Scouting suggests the bigger lever is X (file:line). Pursue X, stay on the original target, or both?"* Wait for their answer; don't reframe the scope unilaterally.
+If the bottleneck candidates and the user's named target diverge significantly — e.g., user said "speed up `PathMatcher.match`" but the explore reports the real cost is in the **caller's per-iteration allocation** of `MatchOptions` — **pause** before dispatching Phase 2 and ask the user explicitly: _"Scouting suggests the bigger lever is X (file:line). Pursue X, stay on the original target, or both?"_ Wait for their answer; don't reframe the scope unilaterally.
 
 You'll feed all five to `context_builder` in Phase 2.
 
@@ -137,11 +146,14 @@ Now that the surface is mapped and bottleneck candidates are in hand, route the 
 - **Scoreboard scaffold** — the markdown shape for `prompt-exports/optimize-<slug>-runs.md`.
 
 ```json
-{"tool":"context_builder","args":{
-	"instructions":"<task>Design the setup for an iterative optimization loop targeting <metric> on <scope>.\n\nReturn an actionable plan with:\n1. Instrumentation strategy: which file to add/extend (must be a test/support file, not production code), the debug-build gate to use (e.g. #if DEBUG / cfg(debug_assertions) / NODE_ENV / etc. — pick what matches this repo's convention), and the smallest hook the production code needs to expose.\n2. Baseline procedure: how many samples, how to discard outliers, expected variance band, and the exact command to run (per AGENTS.md).\n3. First-pass optimization candidates: 2–3 concrete optimizations ranked by (expected delta / risk). For each: the change, why it should help the metric, and what could regress.\n4. Scoreboard scaffold: the initial contents for prompt-exports/optimize-<slug>-runs.md.</task>\n\n<context>\nUser request: <raw request>\nMetric + units: <name + units>\nStop criterion: <threshold or 'oracle-satisfied'>\nScope: <files/modules in play>\nMeasurement command (from Conventions explore): <exact command>\nTarget & call graph (from Target explore): <implementation file:line + 3–5 callers with context>\nBottleneck candidates (from Bottleneck explore — the heart of Phase 1): <ranked list with file:line and one-sentence rationale per candidate>\nPrior perf work (from Prior perf work explore): <existing benchmarks, profiler traces, perf TODOs and what they say>\nProject conventions doc: AGENTS.md (already summarized by explore — the agent doesn't need to re-read it)\n\nWhen ranking first-pass optimization candidates, treat the Bottleneck candidates list as the seed. Each item there is a hypothesis about where time is going; the plan should propose how to address each, with risk and verification.\n</context>",
-	"response_type":"plan",
-	"export_response":true
-}}
+{
+  "tool": "context_builder",
+  "args": {
+    "instructions": "<task>Design the setup for an iterative optimization loop targeting <metric> on <scope>.\n\nReturn an actionable plan with:\n1. Instrumentation strategy: which file to add/extend (must be a test/support file, not production code), the debug-build gate to use (e.g. #if DEBUG / cfg(debug_assertions) / NODE_ENV / etc. — pick what matches this repo's convention), and the smallest hook the production code needs to expose.\n2. Baseline procedure: how many samples, how to discard outliers, expected variance band, and the exact command to run (per AGENTS.md).\n3. First-pass optimization candidates: 2–3 concrete optimizations ranked by (expected delta / risk). For each: the change, why it should help the metric, and what could regress.\n4. Scoreboard scaffold: the initial contents for prompt-exports/optimize-<slug>-runs.md.</task>\n\n<context>\nUser request: <raw request>\nMetric + units: <name + units>\nStop criterion: <threshold or 'oracle-satisfied'>\nScope: <files/modules in play>\nMeasurement command (from Conventions explore): <exact command>\nTarget & call graph (from Target explore): <implementation file:line + 3–5 callers with context>\nBottleneck candidates (from Bottleneck explore — the heart of Phase 1): <ranked list with file:line and one-sentence rationale per candidate>\nPrior perf work (from Prior perf work explore): <existing benchmarks, profiler traces, perf TODOs and what they say>\nProject conventions doc: AGENTS.md (already summarized by explore — the agent doesn't need to re-read it)\n\nWhen ranking first-pass optimization candidates, treat the Bottleneck candidates list as the seed. Each item there is a hypothesis about where time is going; the plan should propose how to address each, with risk and verification.\n</context>",
+    "response_type": "plan",
+    "export_response": true
+  }
+}
 ```
 
 The tool returns `oracle_export_path` and `oracle_export_instruction`. **Save the export path** — Phase 3 and every loop iteration reference it.
@@ -155,12 +167,15 @@ If the plan looks thin (no concrete instrumentation site, vague candidates), ref
 You don't run measurements. Dispatch a single `pair` agent to execute the setup plan:
 
 ```json
-{"tool":"agent_run","args":{
-	"op":"start",
-	"model_id":"pair",
-	"session_name":"Optimize setup: instrumentation + baseline",
-	"message":"Read the setup plan at <plan path> with read_file first. Execute the setup phase only — do not pursue any optimization yet:\n\n1. Land the instrumentation per the plan: keep it in a secondary test/support file, gate it behind the repo's debug build flag, and expose only the minimum hook in production code.\n2. Verify a release build with instrumentation stripped still compiles cleanly.\n3. Capture the baseline: run the measurement command 3–5 times. Discard obvious outliers. Record the median and p95 (or whichever is appropriate for this metric). Note the variance band — if optimizations smaller than that band would be invisible, say so explicitly.\n4. Create prompt-exports/optimize-<slug>-runs.md from the scoreboard scaffold in the plan, fill in the baseline row with median, p95, environment notes, and current commit.\n5. Report back: instrumentation files touched, the exact command used, baseline numbers, variance, and any concerns about measurement reliability.\n\nDo not attempt any optimization yet — that's the next iteration. Skip oracle review; the orchestrator handles that."
-}}
+{
+  "tool": "agent_run",
+  "args": {
+    "op": "start",
+    "model_id": "pair",
+    "session_name": "Optimize setup: instrumentation + baseline",
+    "message": "Read the setup plan at <plan path> with read_file first. Execute the setup phase only — do not pursue any optimization yet:\n\n1. Land the instrumentation per the plan: keep it in a secondary test/support file, gate it behind the repo's debug build flag, and expose only the minimum hook in production code.\n2. Verify a release build with instrumentation stripped still compiles cleanly.\n3. Capture the baseline: run the measurement command 3–5 times. Discard obvious outliers. Record the median and p95 (or whichever is appropriate for this metric). Note the variance band — if optimizations smaller than that band would be invisible, say so explicitly.\n4. Create prompt-exports/optimize-<slug>-runs.md from the scoreboard scaffold in the plan, fill in the baseline row with median, p95, environment notes, and current commit.\n5. Report back: instrumentation files touched, the exact command used, baseline numbers, variance, and any concerns about measurement reliability.\n\nDo not attempt any optimization yet — that's the next iteration. Skip oracle review; the orchestrator handles that."
+  }
+}
 ```
 
 When the pair returns:
@@ -174,7 +189,10 @@ When the pair returns:
 Sessions persist after agents finish — useful when you might revisit output, but they pile up over a multi-agent workflow. Once you've recorded what an agent produced, you can dismiss its session:
 
 ```json
-{"tool":"agent_manage","args":{"op":"cleanup_sessions","session_ids":["<session_id>"]}}
+{
+  "tool": "agent_manage",
+  "args": { "op": "cleanup_sessions", "session_ids": ["<session_id>"] }
+}
 ```
 
 Explore-agent sessions are good to dismiss right away — narrow reconnaissance, no follow-up value. Keep heavier agent sessions if you might revisit them.
@@ -211,12 +229,15 @@ If the plan proposes more than one change, pick the one with the **best expected
 Dispatch **one `pair` agent** for the selected change. The brief covers landing the optimization **and** hardening it in one shot — implementation, tests, re-measurement, scoreboard append:
 
 ```json
-{"tool":"agent_run","args":{
-	"op":"start",
-	"model_id":"pair",
-	"session_name":"Optimize <N>: <change summary>",
-	"message":"Read the plan at <plan path> with read_file first. Run one full optimize-and-harden loop:\n\n1. Implement the change in <files>.\n2. Run the project's standard test command (see AGENTS.md) for the touched modules — fix anything that breaks.\n3. Re-run the same measurement command used for the baseline (in prompt-exports/optimize-<slug>-runs.md). Take the same number of samples as the baseline so deltas are comparable. Append a new row — don't overwrite.\n4. If the change regressed the metric or broke correctness, either revert it or iterate once to fix, then report back.\n5. Summarize: what you changed, what the metric moved to, tests touched, concerns worth flagging.\n\nStay inside <scope>. Don't pursue tangential optimizations — one attributed change per loop. Skip oracle review; the orchestrator handles that."
-}}
+{
+  "tool": "agent_run",
+  "args": {
+    "op": "start",
+    "model_id": "pair",
+    "session_name": "Optimize <N>: <change summary>",
+    "message": "Read the plan at <plan path> with read_file first. Run one full optimize-and-harden loop:\n\n1. Implement the change in <files>.\n2. Run the project's standard test command (see AGENTS.md) for the touched modules — fix anything that breaks.\n3. Re-run the same measurement command used for the baseline (in prompt-exports/optimize-<slug>-runs.md). Take the same number of samples as the baseline so deltas are comparable. Append a new row — don't overwrite.\n4. If the change regressed the metric or broke correctness, either revert it or iterate once to fix, then report back.\n5. Summarize: what you changed, what the metric moved to, tests touched, concerns worth flagging.\n\nStay inside <scope>. Don't pursue tangential optimizations — one attributed change per loop. Skip oracle review; the orchestrator handles that."
+  }
+}
 ```
 
 Always use `pair`. Optimizations involve trade-offs (correctness, locality, complexity) that benefit from the more capable agent, and re-measurement requires interpreting noisy results. Use `engineer` only if you have a specific reason — and the user has agreed it's safe to drop trade-off review.
@@ -275,7 +296,13 @@ Same session-cleanup hygiene as Phase 3. Also delete superseded plan exports eac
 Plan and review exports generated during orchestration (via `export_response:true` on `context_builder` or `oracle_send`) accumulate under `prompt-exports/` as files like `oracle-plan-<date>-<slug>.md` or `oracle-review-<date>-<slug>.md`. Once an export has been superseded by a newer plan, consumed by the sub-agent it was meant for, or otherwise made irrelevant by completed work, delete it so the folder reflects only live, in-progress plans. `file_actions.delete` requires a true absolute filesystem path, not the relative display path shown under `prompt-exports/`; use `get_file_tree` with `type:"roots"` if you need the loaded root's absolute path. When unsure, leave it.
 
 ```json
-{"tool":"file_actions","args":{"action":"delete","path":"/absolute/path/to/repo/prompt-exports/<stale-export>.md"}}
+{
+  "tool": "file_actions",
+  "args": {
+    "action": "delete",
+    "path": "/absolute/path/to/repo/prompt-exports/<stale-export>.md"
+  }
+}
 ```
 
 ---
@@ -283,6 +310,7 @@ Plan and review exports generated during orchestration (via `export_response:tru
 ## Phase 5: Final Rollup
 
 After all iterations complete, give the user a **final rollup**:
+
 - What was accomplished per iteration
 - Any failures or partial completions
 - Any conflicts or coordination issues that surfaced
@@ -302,18 +330,19 @@ Specifically for optimize:
 
 You (the agent) own triage, prompt translation, scoreboard reads, sub-agent verification, and the stop decision. Everything else is delegated:
 
-| Capability | Explore Agents | `context_builder` | Pair (setup) | Pair (each loop) | Oracle (`oracle_send`) |
-|---|---|---|---|---|---|
-| Map surface (AGENTS.md, target & call graph, prior perf work, scope) | ✅ Primary | — | — | — | — |
-| Scout bottleneck candidates around target | ✅ Primary | — | — | — | — |
-| Plan setup (metric, instrumentation, candidates from scouting) | — | ✅ Primary | — | — | — |
-| Land instrumentation + capture baseline | — | — | ✅ Primary | — | — |
-| Plan one optimization | — | ✅ Primary | — | — | ⚠️ sanity-check only |
-| Implement + test + re-measure + append scoreboard | — | — | — | ✅ Primary | — |
-| Delegated spot-check / diff summary | ✅ on demand | — | — | — | — |
-| Decide continue vs stop | — | — | — | — | ✅ Primary |
+| Capability                                                           | Explore Agents | `context_builder` | Pair (setup) | Pair (each loop) | Oracle (`oracle_send`) |
+| -------------------------------------------------------------------- | -------------- | ----------------- | ------------ | ---------------- | ---------------------- |
+| Map surface (AGENTS.md, target & call graph, prior perf work, scope) | ✅ Primary     | —                 | —            | —                | —                      |
+| Scout bottleneck candidates around target                            | ✅ Primary     | —                 | —            | —                | —                      |
+| Plan setup (metric, instrumentation, candidates from scouting)       | —              | ✅ Primary        | —            | —                | —                      |
+| Land instrumentation + capture baseline                              | —              | —                 | ✅ Primary   | —                | —                      |
+| Plan one optimization                                                | —              | ✅ Primary        | —            | —                | ⚠️ sanity-check only   |
+| Implement + test + re-measure + append scoreboard                    | —              | —                 | —            | ✅ Primary       | —                      |
+| Delegated spot-check / diff summary                                  | ✅ on demand   | —                 | —            | —                | —                      |
+| Decide continue vs stop                                              | —              | —                 | —            | —                | ✅ Primary             |
 
 **Cheat sheet for the four operations you'll repeat:**
+
 ```
 agent_run op=start  model_id=<explore|pair>  detach=true       # dispatch
 agent_run op=wait   session_ids=["..."]      timeout=N         # block

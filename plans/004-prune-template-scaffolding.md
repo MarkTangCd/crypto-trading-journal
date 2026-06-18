@@ -53,26 +53,26 @@ Verified during recon (`grep -rEn` across `server/`, `client/`, `shared/`):
 
 ### Server-side dead files (no production caller)
 
-| File | Verified by |
-|---|---|
-| `server/_core/llm.ts` | only self-references |
-| `server/_core/voiceTranscription.ts` | only self-references |
-| `server/_core/imageGeneration.ts` | only self-references (the `storagePut` call inside is also dead) |
-| `server/_core/map.ts` | only self-references |
-| `server/_core/dataApi.ts` | only self-references |
-| `server/_core/notification.ts` | called by `server/_core/systemRouter.ts` `system.notifyOwner`; that procedure has no client-side caller |
-| `server/storage.ts` | only called by `server/_core/imageGeneration.ts` |
-| `server/_core/types/cookie.d.ts` | only referenced by code in the dead files (cookie parsing pattern from the removed auth layer) |
+| File                                 | Verified by                                                                                             |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| `server/_core/llm.ts`                | only self-references                                                                                    |
+| `server/_core/voiceTranscription.ts` | only self-references                                                                                    |
+| `server/_core/imageGeneration.ts`    | only self-references (the `storagePut` call inside is also dead)                                        |
+| `server/_core/map.ts`                | only self-references                                                                                    |
+| `server/_core/dataApi.ts`            | only self-references                                                                                    |
+| `server/_core/notification.ts`       | called by `server/_core/systemRouter.ts` `system.notifyOwner`; that procedure has no client-side caller |
+| `server/storage.ts`                  | only called by `server/_core/imageGeneration.ts`                                                        |
+| `server/_core/types/cookie.d.ts`     | only referenced by code in the dead files (cookie parsing pattern from the removed auth layer)          |
 
 ### Client-side dead files
 
-| File | Verified by |
-|---|---|
-| `client/src/pages/Home.tsx` | not routed in `client/src/App.tsx`; also self-redirects to `/` infinitely |
-| `client/src/pages/ComponentShowcase.tsx` | 1440 lines; not routed in `App.tsx` |
-| `client/src/components/Map.tsx` | only referenced by `ComponentShowcase.tsx` |
-| `client/src/components/AIChatBox.tsx` | only referenced by `ComponentShowcase.tsx` |
-| `client/src/components/ManusDialog.tsx` | only used by its own export |
+| File                                     | Verified by                                                               |
+| ---------------------------------------- | ------------------------------------------------------------------------- |
+| `client/src/pages/Home.tsx`              | not routed in `client/src/App.tsx`; also self-redirects to `/` infinitely |
+| `client/src/pages/ComponentShowcase.tsx` | 1440 lines; not routed in `App.tsx`                                       |
+| `client/src/components/Map.tsx`          | only referenced by `ComponentShowcase.tsx`                                |
+| `client/src/components/AIChatBox.tsx`    | only referenced by `ComponentShowcase.tsx`                                |
+| `client/src/components/ManusDialog.tsx`  | only used by its own export                                               |
 
 ### Router cleanup
 
@@ -89,15 +89,15 @@ After the file deletions above, the following `dependencies` in
 `package.json` should have **zero** production importers. Verify each in
 Step 4 before removing:
 
-| Dep | Used by (today, before this plan) |
-|---|---|
-| `@aws-sdk/client-s3` | nothing (imageGeneration's storagePut is unused) |
-| `@aws-sdk/s3-request-presigner` | nothing |
-| `axios` | nothing (the LLM/forge calls use native `fetch`) |
-| `streamdown` | `AIChatBox.tsx` only |
-| `jose` | nothing (auth layer was removed in commit `c365e36`) |
-| `cookie` | nothing (auth layer removal) |
-| `@types/google.maps` | `Map.tsx` only |
+| Dep                             | Used by (today, before this plan)                    |
+| ------------------------------- | ---------------------------------------------------- |
+| `@aws-sdk/client-s3`            | nothing (imageGeneration's storagePut is unused)     |
+| `@aws-sdk/s3-request-presigner` | nothing                                              |
+| `axios`                         | nothing (the LLM/forge calls use native `fetch`)     |
+| `streamdown`                    | `AIChatBox.tsx` only                                 |
+| `jose`                          | nothing (auth layer was removed in commit `c365e36`) |
+| `cookie`                        | nothing (auth layer removal)                         |
+| `@types/google.maps`            | `Map.tsx` only                                       |
 
 Repo conventions:
 
@@ -108,14 +108,14 @@ Repo conventions:
 
 ## Commands you will need
 
-| Purpose                | Command                                            | Expected on success |
-|------------------------|----------------------------------------------------|---------------------|
-| Install                | `npm install`                                      | exit 0              |
-| Typecheck              | `npm run check`                                    | exit 0              |
-| Tests                  | `npm run test`                                     | all pass            |
-| Format                 | `npm run format`                                   | exit 0              |
-| Production build       | `npm run build`                                    | dist/ produced without errors |
-| Targeted import search | `grep -rn "<symbol>" --include='*.ts' --include='*.tsx' server client shared` | used in steps |
+| Purpose                | Command                                                                       | Expected on success           |
+| ---------------------- | ----------------------------------------------------------------------------- | ----------------------------- |
+| Install                | `npm install`                                                                 | exit 0                        |
+| Typecheck              | `npm run check`                                                               | exit 0                        |
+| Tests                  | `npm run test`                                                                | all pass                      |
+| Format                 | `npm run format`                                                              | exit 0                        |
+| Production build       | `npm run build`                                                               | dist/ produced without errors |
+| Targeted import search | `grep -rn "<symbol>" --include='*.ts' --include='*.tsx' server client shared` | used in steps                 |
 
 ## Scope
 
@@ -169,6 +169,7 @@ grep -rn "pages/Home\\b\|from .*\"@/pages/Home\"" --include='*.ts' --include='*.
 ```
 
 For each target, **expect** matches only inside:
+
 - the target file itself,
 - the other files marked for deletion in this plan,
 - documentation / comments.
@@ -228,6 +229,7 @@ Expected: exits 0. Any error here means an importer slipped past Step 1 —
 STOP and follow the compiler's error trail.
 
 Commit:
+
 ```
 git commit -m "chore: delete unused server-side template helpers"
 ```
@@ -249,12 +251,13 @@ npm run check
 ```
 
 Expected: exits 0. If any error, STOP — most likely
-`ComponentShowcase.tsx` imported a UI primitive that is *only* used by it.
+`ComponentShowcase.tsx` imported a UI primitive that is _only_ used by it.
 Track the import down and either keep the primitive (if it's a generic
 `components/ui/*` shadcn file already used elsewhere — leave it alone) or
 add it to the deletion list.
 
 Commit:
+
 ```
 git commit -m "chore: delete unused client-side template widgets and pages"
 ```
@@ -262,7 +265,7 @@ git commit -m "chore: delete unused client-side template widgets and pages"
 ### Step 5: Remove the orphaned dependencies
 
 For each dep in the "Dependencies that drop out" table, run the verification
-grep (substring search of the package name in source — *not* lockfile, *not*
+grep (substring search of the package name in source — _not_ lockfile, _not_
 `node_modules`):
 
 ```
@@ -314,6 +317,7 @@ imported somewhere the typechecker didn't catch (e.g. inside a `// @ts-expect-er
 … though the repo bans that).
 
 Commit:
+
 ```
 git commit -m "chore: drop dependencies whose only callers were removed"
 ```
@@ -325,6 +329,7 @@ npm run format
 ```
 
 If any files were touched by formatting, amend the last commit:
+
 ```
 git add -A
 git commit --amend --no-edit

@@ -1,11 +1,13 @@
 # Plan: Remove Trading Systems & Elements
 
 ## Goal
+
 彻底移除 Trading Systems 和 Trading Elements 功能的所有前后端代码、数据库表和列。confidenceLevel 字段一并删除。
 
 ## Scope of removal
 
 ### Database schema (`drizzle/schema.ts`)
+
 - Drop tables: `trading_elements`, `trading_systems`, `trading_system_elements`, `transaction_elements`
 - Drop columns from `transactions`: `tradingSystemId`, `confidenceLevel`
 - Drop columns from `users`: `initialBalance` 保留（按 multi-account 设计仍可能存在）；删除 `activeTradingSystemId`
@@ -13,6 +15,7 @@
 - 生成新的 migration（drizzle-kit generate）
 
 ### Backend (`server/`)
+
 - `server/routers.ts`:
   - 删除整个 `tradingElement` router
   - 删除整个 `tradingSystem` router
@@ -28,6 +31,7 @@
 - 测试：删除 `server/tradingSystem.test.ts`；更新 `server/transaction.test.ts`、`server/transaction.lifecycle.test.ts`、`server/account.test.ts`、`server/sqlite.integration.test.ts` 等中所有相关断言/输入
 
 ### Frontend (`client/`)
+
 - 删除 `client/src/pages/TradingSystems.tsx`
 - 删除 `client/src/pages/TradingElements.tsx`
 - `client/src/App.tsx`：删除两条 Route 和 import
@@ -41,14 +45,17 @@
 - `e2e/confidence-score.spec.ts`：删除整个文件
 
 ### Shared (`shared/`)
+
 - `shared/types.ts`、`shared/const.ts`：移除相关类型/常量
 
 ### Docs
+
 - `CLAUDE.md` schema 描述更新（6 表 → 3 表）
 - `AGENTS.md` 移除 tradingSystem.test.ts 引用
 - README / PRODUCT.md / DESIGN.md 如有提及一并删除
 
 ## Execution order
+
 1. **后端 + schema 同步删除**（一次性完成，避免类型断裂中间态）：
    - 修改 schema.ts、relations.ts
    - 重写 db.ts、routers.ts
@@ -65,6 +72,7 @@
    - 启动 dev server 简单巡检（如果可行）
 
 ## Done when
+
 - [ ] schema 中不再出现 tradingElements / tradingSystems / tradingSystemElements / transactionElements / tradingSystemId / activeTradingSystemId / confidenceLevel
 - [ ] grep "tradingSystem\|tradingElement\|TradingSystem\|TradingElement\|confidenceLevel" 在 src/server/client/shared/drizzle 下零命中（文档除外）
 - [ ] App.tsx 中无 /trading-systems、/trading-elements 路由
