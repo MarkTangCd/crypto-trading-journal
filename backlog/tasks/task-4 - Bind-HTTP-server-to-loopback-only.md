@@ -1,0 +1,28 @@
+---
+id: TASK-4
+title: Bind HTTP server to loopback only
+status: To Do
+assignee: []
+created_date: '2026-06-18 01:23'
+labels:
+  - security
+  - server
+dependencies: []
+documentation:
+  - plans/001-bind-loopback.md
+priority: high
+---
+
+## Description
+
+<!-- SECTION:DESCRIPTION:BEGIN -->
+Implementation plan: plans/001-bind-loopback.md. Bind the Express HTTP listener (and its port probe) to 127.0.0.1 so the anonymous tRPC surface is unreachable from the LAN. Follow the plan file step-by-step.
+<!-- SECTION:DESCRIPTION:END -->
+
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [ ] #1 server/_core/index.ts main server.listen call binds to "127.0.0.1"
+- [ ] #2 server/_core/index.ts isPortAvailable probe binds to "127.0.0.1"
+- [ ] #3 Manual smoke: curl loopback returns 200, curl LAN IP refuses connection (or N/A on no-LAN host)
+- [ ] #4 npm run check and npm run test both exit 0
+<!-- AC:END -->
