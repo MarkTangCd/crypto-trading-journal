@@ -190,8 +190,10 @@ iterate visually.
 
 ## Error Handling
 
-- Use `TRPCError` in tRPC middleware/procedures where appropriate.
-- For shared HTTP-style errors, use `HttpError` and helpers from `shared/_core/errors.ts`.
+- In tRPC procedures and middleware, throw `TRPCError`. Validation
+  failures from `server/_core/tradeMath.ts` (`TradeMathError`) are
+  translated to `TRPCError({ code: "BAD_REQUEST" })` by the
+  `runTradeMath` wrapper in `server/routers.ts`.
 - Client mutations surface failures with toasts.
 - No empty catch blocks. If a catch intentionally swallows, document why, keep narrow.
 - Logging uses scoped prefixes (`[Database]`, `[API Query Error]`); keep similar.
