@@ -429,17 +429,6 @@ export async function getUserById(userId: number) {
 
 // ============ Transaction Queries ============
 
-export async function createTransaction(
-  data: InsertTransaction
-): Promise<Transaction> {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  const result = await db.insert(transactions).values(data).returning();
-
-  return result[0];
-}
-
 export async function getTransactionById(
   id: number,
   userId: number,
@@ -611,29 +600,6 @@ export async function closeOpenTransaction(
   return { transaction, affected };
 }
 
-export async function deleteTransaction(id: number, userId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  await db
-    .delete(transactions)
-    .where(and(eq(transactions.id, id), eq(transactions.userId, userId)));
-}
-
-export async function getLastTransaction(userId: number) {
-  const db = await getDb();
-  if (!db) return undefined;
-
-  const result = await db
-    .select()
-    .from(transactions)
-    .where(eq(transactions.userId, userId))
-    .orderBy(desc(transactions.createdAt))
-    .limit(1);
-
-  return result.length > 0 ? result[0] : undefined;
-}
-
 export interface AccountSnapshot {
   currentBalance: string;
   consecutiveLosses: number;
@@ -693,19 +659,6 @@ export async function getAccountSnapshot(
   }
 
   return { currentBalance, consecutiveLosses };
-}
-
-export async function getConsecutiveLosses(accountId: number): Promise<number> {
-  const snapshot = await getAccountSnapshot(accountId, ZERO_DECIMAL);
-  return snapshot.consecutiveLosses;
-}
-
-export async function getCurrentBalance(
-  accountId: number,
-  initialBalance: string
-): Promise<string> {
-  const snapshot = await getAccountSnapshot(accountId, initialBalance);
-  return snapshot.currentBalance;
 }
 
 export async function getStatistics(accountId: number, initialBalance: string) {

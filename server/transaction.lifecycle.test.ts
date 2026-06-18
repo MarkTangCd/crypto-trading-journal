@@ -50,8 +50,6 @@ function buildDbMock(overrides: Record<string, unknown> = {}) {
       .fn()
       .mockResolvedValue({ transaction: null, affected: 0 }),
     deleteTransactionWithElements: vi.fn().mockResolvedValue(undefined),
-    getConsecutiveLosses: vi.fn().mockResolvedValue(0),
-    getCurrentBalance: vi.fn().mockResolvedValue("1000.00"),
     getAccountSnapshot: vi.fn().mockResolvedValue({
       currentBalance: "1000.00",
       consecutiveLosses: 0,
@@ -200,12 +198,6 @@ async function setupCloseCaller(options?: {
   vi.doMock("./db", () =>
     buildDbMock({
       getUserById: vi.fn().mockResolvedValue({ id: 1, initialBalance: "1000" }),
-      getCurrentBalance: vi
-        .fn()
-        .mockResolvedValue(options?.currentBalance ?? "1000.00"),
-      getConsecutiveLosses: vi
-        .fn()
-        .mockResolvedValue(options?.consecutiveLosses ?? 0),
       getAccountSnapshot: vi.fn().mockResolvedValue({
         currentBalance: options?.currentBalance ?? "1000.00",
         consecutiveLosses: options?.consecutiveLosses ?? 0,
@@ -264,8 +256,6 @@ async function setupGetFormDefaultsCaller() {
   vi.doMock("./db", () =>
     buildDbMock({
       getUserById: vi.fn().mockResolvedValue({ id: 1, initialBalance: "1000" }),
-      getCurrentBalance: vi.fn().mockResolvedValue("1050"),
-      getConsecutiveLosses: vi.fn().mockResolvedValue(2),
       getAccountSnapshot: vi
         .fn()
         .mockResolvedValue({ currentBalance: "1050", consecutiveLosses: 2 }),
@@ -306,9 +296,10 @@ function runStatsScenario(
     const db = new DatabaseSync(process.env.DATABASE_URL);
     db.exec("CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, context TEXT NOT NULL DEFAULT '', tradeItems TEXT NOT NULL DEFAULT '[]', outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, entryPrice TEXT, positionSizeUsdt TEXT, plannedStopLossPrice TEXT, plannedTakeProfitPrice TEXT, plannedRiskRewardRatio TEXT, exitPrice TEXT, tvUrl TEXT, marketCycle TEXT, transactionType TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));");
     ${inserts}
-    const { getCurrentBalance, getConsecutiveLosses, getStatistics } = await import(${JSON.stringify(dbModuleUrl)});
-    const currentBalance = await getCurrentBalance(1, '1000.00');
-    const consecutiveLosses = await getConsecutiveLosses(1);
+    const { getAccountSnapshot, getStatistics } = await import(${JSON.stringify(dbModuleUrl)});
+    const snapshot = await getAccountSnapshot(1, '1000.00');
+    const currentBalance = snapshot.currentBalance;
+    const consecutiveLosses = snapshot.consecutiveLosses;
     const statistics = await getStatistics(1, '1000.00');
     db.close();
     console.log(JSON.stringify({ currentBalance, consecutiveLosses, statistics }));
@@ -447,7 +438,7 @@ function runUpdateScenario(
 }
 
 describe("statistics exclude open trades", () => {
-  it("getCurrentBalance excludes open trades", () => {
+  it("getAccountSnapshot excludes open trades from currentBalance", () => {
     const result = runStatsScenario("task-4-current-balance.sqlite", [
       {
         status: "closed",
@@ -472,7 +463,7 @@ describe("statistics exclude open trades", () => {
     expect(result.currentBalance).toBe("1050.00");
   });
 
-  it("getConsecutiveLosses ignores open trades", () => {
+  it("getAccountSnapshot ignores open trades for consecutiveLosses", () => {
     const result = runStatsScenario("task-4-consecutive-losses.sqlite", [
       {
         status: "closed",

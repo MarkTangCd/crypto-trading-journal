@@ -25,7 +25,7 @@ end-to-end safety net.
 | 004  | Prune Manus-template scaffolding and unused deps             | P2       | M      | —          | DONE   |
 | 005  | Add Playwright smoke-test baseline                           | P2       | M      | —          | DONE   |
 | 006  | Prune unused shadcn UI primitives + deps (kills lodash HIGH) | P1       | M      | —          | DONE   |
-| 007  | Drop dead `server/db.ts` helpers                             | P2       | S      | —          | TODO   |
+| 007  | Drop dead `server/db.ts` helpers                             | P2       | S      | —          | DONE   |
 | 008  | Delete dead `HttpError` family and `manusTypes.ts`           | P2       | S      | —          | TODO   |
 | 009  | Drop `users.initialBalance` column + helpers                 | P2       | M      | —          | TODO   |
 | 010  | Split `Transactions.tsx` (599 LOC) into <200 LOC             | P2       | M      | 005        | TODO   |

@@ -23,13 +23,6 @@ vi.mock("./db", () => ({
     createdAt: new Date(),
     updatedAt: new Date(),
   }),
-  createTransaction: vi.fn().mockImplementation(data => ({
-    id: 1,
-    status: "open",
-    ...data,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  })),
   getTransactionById: vi.fn().mockResolvedValue({
     id: 1,
     userId: 1,
@@ -62,7 +55,6 @@ vi.mock("./db", () => ({
     status: "reviewed",
     reviewFeedback: "Good trade",
   }),
-  deleteTransaction: vi.fn().mockResolvedValue(undefined),
   createTransactionWithElements: vi.fn().mockImplementation(data => ({
     id: 1,
     ...data,

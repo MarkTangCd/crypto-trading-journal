@@ -484,7 +484,7 @@ const {
   upsertUser,
   updateUserInitialBalance,
   createTransactionWithElements,
-  getCurrentBalance,
+  getAccountSnapshot,
   getStatistics,
   closeDb,
 } = await import("./server/db.ts");
@@ -531,7 +531,8 @@ for (const [index, trade] of trades.entries()) {
   });
 }
 
-const currentBalance = await getCurrentBalance(accountId, "1000.10");
+const snapshot = await getAccountSnapshot(accountId, "1000.10");
+const currentBalance = snapshot.currentBalance;
 const stats = await getStatistics(accountId, "1000.10");
 closeDb();
 
