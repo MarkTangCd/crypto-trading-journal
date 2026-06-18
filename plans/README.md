@@ -17,20 +17,20 @@ is ordered cleanup-first → page-split-second; 006–009 are mutually
 independent, and 010/011/012 only need 005 (already DONE) as the
 end-to-end safety net.
 
-| Plan | Title                                                       | Priority | Effort | Depends on | Status |
-| ---- | ----------------------------------------------------------- | -------- | ------ | ---------- | ------ |
-| 001  | Bind HTTP server to loopback only                           | P1       | S      | —          | DONE   |
-| 002  | Tighten Express JSON body limit                             | P1       | S      | —          | DONE   |
-| 003  | Remove dead `migrateTransactionStatus` migration code       | P2       | S      | —          | DONE   |
-| 004  | Prune Manus-template scaffolding and unused deps            | P2       | M      | —          | DONE   |
-| 005  | Add Playwright smoke-test baseline                          | P2       | M      | —          | DONE   |
-| 006  | Prune unused shadcn UI primitives + deps (kills lodash HIGH) | P1      | M      | —          | TODO   |
-| 007  | Drop dead `server/db.ts` helpers                            | P2       | S      | —          | TODO   |
-| 008  | Delete dead `HttpError` family and `manusTypes.ts`          | P2       | S      | —          | TODO   |
-| 009  | Drop `users.initialBalance` column + helpers                | P2       | M      | —          | TODO   |
-| 010  | Split `Transactions.tsx` (599 LOC) into <200 LOC            | P2       | M      | 005        | TODO   |
-| 011  | Split `NewTransaction.tsx` (550 LOC) into <200 LOC          | P2       | M      | 005        | TODO   |
-| 012  | Split `CloseTradeModal.tsx` (419 LOC) into <200 LOC         | P3       | M      | 005        | TODO   |
+| Plan | Title                                                        | Priority | Effort | Depends on | Status |
+| ---- | ------------------------------------------------------------ | -------- | ------ | ---------- | ------ |
+| 001  | Bind HTTP server to loopback only                            | P1       | S      | —          | DONE   |
+| 002  | Tighten Express JSON body limit                              | P1       | S      | —          | DONE   |
+| 003  | Remove dead `migrateTransactionStatus` migration code        | P2       | S      | —          | DONE   |
+| 004  | Prune Manus-template scaffolding and unused deps             | P2       | M      | —          | DONE   |
+| 005  | Add Playwright smoke-test baseline                           | P2       | M      | —          | DONE   |
+| 006  | Prune unused shadcn UI primitives + deps (kills lodash HIGH) | P1       | M      | —          | DONE   |
+| 007  | Drop dead `server/db.ts` helpers                             | P2       | S      | —          | TODO   |
+| 008  | Delete dead `HttpError` family and `manusTypes.ts`           | P2       | S      | —          | TODO   |
+| 009  | Drop `users.initialBalance` column + helpers                 | P2       | M      | —          | TODO   |
+| 010  | Split `Transactions.tsx` (599 LOC) into <200 LOC             | P2       | M      | 005        | TODO   |
+| 011  | Split `NewTransaction.tsx` (550 LOC) into <200 LOC           | P2       | M      | 005        | TODO   |
+| 012  | Split `CloseTradeModal.tsx` (419 LOC) into <200 LOC          | P3       | M      | 005        | TODO   |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason)
 | REJECTED (with one-line rationale)
