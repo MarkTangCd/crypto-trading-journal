@@ -28,8 +28,6 @@ export const users = sqliteTable(
     lastSignedIn: integer("lastSignedIn", { mode: "timestamp_ms" })
       .default(sql`(unixepoch() * 1000)`)
       .notNull(),
-    /** Initial account balance set by user */
-    initialBalance: text("initialBalance").default("0"),
   },
   table => [check("users_role_check", sql`${table.role} in ('user', 'admin')`)]
 );

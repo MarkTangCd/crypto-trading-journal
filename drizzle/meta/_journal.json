@@ -50,6 +50,13 @@
       "when": 1781709780000,
       "tag": "0006_split_thesis_context",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1781800000000,
+      "tag": "0007_drop_users_initial_balance",
+      "breakpoints": true
     }
   ]
 }
