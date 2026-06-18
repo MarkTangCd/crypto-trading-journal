@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@myself'
 created_date: '2026-06-18 03:51'
-updated_date: '2026-06-18 04:15'
+updated_date: '2026-06-18 07:43'
 labels:
   - tech-debt
   - server
@@ -13,6 +13,7 @@ dependencies: []
 documentation:
   - plans/007-drop-dead-db-helpers.md
 priority: medium
+ordinal: 4000
 ---
 
 ## Description

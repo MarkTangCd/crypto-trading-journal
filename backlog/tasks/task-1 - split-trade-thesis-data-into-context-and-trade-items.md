@@ -3,14 +3,15 @@ id: task-1
 title: Split trade thesis data into context and trade items
 status: Done
 assignee: []
-created_date: "2026-06-17"
-updated_date: "2026-06-17 09:06"
+created_date: '2026-06-17'
+updated_date: '2026-06-18 07:43'
 labels:
   - backend
   - database
   - trade-entry
 dependencies: []
 priority: high
+ordinal: 12000
 ---
 
 ## Description

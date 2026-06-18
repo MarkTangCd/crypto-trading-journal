@@ -3,9 +3,9 @@ id: TASK-7
 title: Prune Manus-template scaffolding and unused dependencies
 status: Done
 assignee:
-  - "@agent"
-created_date: "2026-06-18 01:24"
-updated_date: "2026-06-18 01:57"
+  - '@agent'
+created_date: '2026-06-18 01:24'
+updated_date: '2026-06-18 07:43'
 labels:
   - tech-debt
   - cleanup
@@ -13,6 +13,7 @@ dependencies: []
 documentation:
   - plans/004-prune-template-scaffolding.md
 priority: medium
+ordinal: 6000
 ---
 
 ## Description

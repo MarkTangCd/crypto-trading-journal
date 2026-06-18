@@ -3,9 +3,9 @@ id: task-3
 title: Show planned risk reward in Transactions list
 status: Done
 assignee:
-  - "@codex"
-created_date: "2026-06-17"
-updated_date: "2026-06-17 12:29"
+  - '@codex'
+created_date: '2026-06-17'
+updated_date: '2026-06-18 07:43'
 labels:
   - frontend
   - transactions
@@ -13,6 +13,7 @@ dependencies: []
 modified_files:
   - client/src/pages/Transactions.tsx
 priority: medium
+ordinal: 10000
 ---
 
 ## Description

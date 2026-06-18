@@ -1,9 +1,10 @@
 ---
 id: TASK-9
 title: Prune unused shadcn UI primitives and kill lodash HIGH advisories
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-06-18 03:51'
+updated_date: '2026-06-18 07:43'
 labels:
   - tech-debt
   - security
@@ -12,6 +13,7 @@ dependencies: []
 documentation:
   - plans/006-prune-unused-ui-primitives.md
 priority: high
+ordinal: 1000
 ---
 
 ## Description

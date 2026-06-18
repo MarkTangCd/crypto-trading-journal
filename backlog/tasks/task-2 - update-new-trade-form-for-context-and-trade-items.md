@@ -3,9 +3,9 @@ id: task-2
 title: Update New Trade form for context and trade items
 status: Done
 assignee:
-  - "@codex"
-created_date: "2026-06-17"
-updated_date: "2026-06-17 09:17"
+  - '@codex'
+created_date: '2026-06-17'
+updated_date: '2026-06-18 07:43'
 labels:
   - frontend
   - trade-entry
@@ -14,6 +14,7 @@ dependencies:
 modified_files:
   - client/src/pages/NewTransaction.tsx
 priority: high
+ordinal: 11000
 ---
 
 ## Description

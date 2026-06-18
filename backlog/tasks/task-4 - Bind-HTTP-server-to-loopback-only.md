@@ -3,9 +3,9 @@ id: TASK-4
 title: Bind HTTP server to loopback only
 status: Done
 assignee:
-  - "@agent"
-created_date: "2026-06-18 01:23"
-updated_date: "2026-06-18 01:29"
+  - '@agent'
+created_date: '2026-06-18 01:23'
+updated_date: '2026-06-18 07:43'
 labels:
   - security
   - server
@@ -13,6 +13,7 @@ dependencies: []
 documentation:
   - plans/001-bind-loopback.md
 priority: high
+ordinal: 9000
 ---
 
 ## Description

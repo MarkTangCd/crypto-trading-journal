@@ -4,13 +4,14 @@ title: Delete unused HttpError module and manus auth types
 status: Done
 assignee: []
 created_date: '2026-06-18 03:51'
-updated_date: '2026-06-18 07:25'
+updated_date: '2026-06-18 07:43'
 labels:
   - tech-debt
 dependencies: []
 documentation:
   - plans/008-delete-http-error-and-manus-types.md
 priority: medium
+ordinal: 3000
 ---
 
 ## Description

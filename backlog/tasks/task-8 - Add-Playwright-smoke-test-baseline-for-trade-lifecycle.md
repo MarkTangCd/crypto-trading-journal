@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@opencode'
 created_date: '2026-06-18 01:24'
-updated_date: '2026-06-18 02:25'
+updated_date: '2026-06-18 07:43'
 labels:
   - testing
   - e2e
@@ -13,6 +13,7 @@ dependencies: []
 documentation:
   - plans/005-playwright-smoke-baseline.md
 priority: medium
+ordinal: 5000
 ---
 
 ## Description

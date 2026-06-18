@@ -3,8 +3,8 @@ id: TASK-5
 title: Tighten Express JSON body limit to 1mb
 status: Done
 assignee: []
-created_date: "2026-06-18 01:24"
-updated_date: "2026-06-18 01:40"
+created_date: '2026-06-18 01:24'
+updated_date: '2026-06-18 07:43'
 labels:
   - security
   - server
@@ -12,6 +12,7 @@ dependencies: []
 documentation:
   - plans/002-tighten-body-limit.md
 priority: high
+ordinal: 8000
 ---
 
 ## Description
