@@ -66,6 +66,7 @@ npm run format       # Prettier format all files
 # Tests
 npm run test         # Run all tests with Vitest
 npx vitest run server/transaction.test.ts  # Run one test file
+npm run test:e2e     # Playwright smoke (requires `npx playwright install chromium` once)
 
 # Database
 npm run db:push      # Generate and apply Drizzle migrations

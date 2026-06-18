@@ -18,7 +18,7 @@ pure deletion; 005 unlocks safe UI refactors later.
 | 002  | Tighten Express JSON body limit                       | P1       | S      | —          | TODO   |
 | 003  | Remove dead `migrateTransactionStatus` migration code | P2       | S      | —          | DONE   |
 | 004  | Prune Manus-template scaffolding and unused deps      | P2       | M      | —          | DONE   |
-| 005  | Add Playwright smoke-test baseline                    | P2       | M      | —          | TODO   |
+| 005  | Add Playwright smoke-test baseline                    | P2       | M      | —          | DONE   |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale)
