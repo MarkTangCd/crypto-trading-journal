@@ -1,0 +1,1283 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CoinAnk K-Line Integration · Implementation Plan</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      :root {
+        --paper: oklch(0.985 0 0);
+        --paper-2: oklch(0.965 0 0);
+        --ink: oklch(0.18 0 0);
+        --ink-2: oklch(0.32 0 0);
+        --mist: oklch(0.9 0 0);
+        --hairline: oklch(0.82 0 0);
+        --muted: oklch(0.48 0 0);
+        --win: oklch(0.5 0.13 150);
+        --loss: oklch(0.48 0.18 25);
+        --accent: oklch(0.45 0.14 250);
+        --warn: oklch(0.62 0.16 70);
+        font-family:
+          "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
+          monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-size: 14px;
+        line-height: 1.55;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .page {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 64px 48px 96px;
+      }
+
+      /* Typography */
+      .eyebrow {
+        text-transform: lowercase;
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        color: var(--muted);
+        font-weight: 500;
+      }
+      h1.title {
+        font-size: 44px;
+        line-height: 1.05;
+        font-weight: 500;
+        letter-spacing: -0.01em;
+        margin: 8px 0 0;
+      }
+      .lede {
+        margin: 12px 0 0;
+        color: var(--ink-2);
+        max-width: 76ch;
+        font-size: 14px;
+      }
+      h2.section {
+        font-size: 11px;
+        letter-spacing: 0.18em;
+        text-transform: lowercase;
+        color: var(--muted);
+        margin: 64px 0 16px;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      h2.section::before {
+        content: "";
+        width: 18px;
+        height: 1px;
+        background: var(--ink);
+      }
+      h3.sub {
+        font-size: 18px;
+        font-weight: 500;
+        margin: 0 0 4px;
+        letter-spacing: -0.005em;
+      }
+      .label {
+        text-transform: lowercase;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        color: var(--muted);
+        font-weight: 500;
+      }
+      .num {
+        font-variant-numeric: tabular-nums;
+      }
+      p {
+        margin: 0 0 8px;
+      }
+      code,
+      kbd {
+        font-family: inherit;
+        background: var(--paper-2);
+        padding: 1px 6px;
+        border: 1px solid var(--hairline);
+      }
+      a {
+        color: var(--ink);
+        text-decoration-color: var(--hairline);
+        text-underline-offset: 3px;
+      }
+
+      hr.rule {
+        border: 0;
+        border-top: 1px solid var(--ink);
+        margin: 40px 0 0;
+      }
+
+      /* Meta strip */
+      .meta-strip {
+        margin-top: 48px;
+        padding-top: 20px;
+        border-top: 1px solid var(--ink);
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 32px;
+      }
+      .meta-cell .label {
+        display: block;
+        margin-bottom: 6px;
+      }
+      .meta-cell .v {
+        font-size: 28px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.01em;
+      }
+      .meta-cell .v.small {
+        font-size: 16px;
+        font-weight: 500;
+      }
+
+      /* Grid utilities */
+      .grid-2 {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 24px;
+      }
+      .grid-3 {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 24px;
+      }
+      .grid-4 {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 20px;
+      }
+
+      /* Pillars */
+      .pillar {
+        border-top: 1px solid var(--ink);
+        padding-top: 14px;
+      }
+      .pillar .label {
+        display: block;
+        margin-bottom: 6px;
+      }
+      .pillar p {
+        color: var(--ink-2);
+      }
+
+      /* Decision rows */
+      .decision {
+        border-top: 1px solid var(--hairline);
+        padding: 18px 0;
+        display: grid;
+        grid-template-columns: 200px 1fr 110px;
+        gap: 24px;
+        align-items: start;
+      }
+      .decision:last-child {
+        border-bottom: 1px solid var(--hairline);
+      }
+      .decision .q {
+        font-weight: 500;
+      }
+      .decision .why {
+        color: var(--ink-2);
+      }
+      .decision .why .em {
+        color: var(--ink);
+        font-weight: 500;
+      }
+      .pick {
+        justify-self: end;
+        font-size: 11px;
+        text-transform: lowercase;
+        letter-spacing: 0.12em;
+        color: var(--muted);
+        border: 1px solid var(--ink);
+        padding: 4px 10px;
+      }
+      .pick.win {
+        color: var(--win);
+        border-color: var(--win);
+      }
+
+      /* Flow */
+      .flow {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 0;
+        border-top: 1px solid var(--ink);
+        border-bottom: 1px solid var(--ink);
+      }
+      .flow-step {
+        padding: 18px 16px;
+        border-right: 1px solid var(--hairline);
+        min-width: 0;
+      }
+      .flow-step:last-child {
+        border-right: 0;
+      }
+      .flow-step .n {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        color: var(--muted);
+        margin-bottom: 8px;
+      }
+      .flow-step .t {
+        font-weight: 500;
+        margin-bottom: 6px;
+        min-height: 1.6em;
+      }
+      .flow-step .d {
+        font-size: 12px;
+        color: var(--ink-2);
+        line-height: 1.5;
+      }
+
+      /* Mock UI */
+      .mock {
+        border: 1px solid var(--ink);
+        background: var(--paper);
+        padding: 28px 28px 32px;
+        margin-top: 4px;
+      }
+      .mock-section {
+        margin-top: 28px;
+      }
+      .mock-section:first-of-type {
+        margin-top: 0;
+      }
+      .mock-section-head {
+        font-size: 11px;
+        letter-spacing: 0.18em;
+        text-transform: lowercase;
+        color: var(--muted);
+        margin: 0 0 12px;
+        font-weight: 500;
+      }
+      .field-row {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 24px;
+      }
+      .field .lbl {
+        font-size: 11px;
+        text-transform: lowercase;
+        letter-spacing: 0.12em;
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+      .field .inp {
+        border: 0;
+        border-bottom: 1px solid var(--ink);
+        padding: 6px 0;
+        font-family: inherit;
+        font-size: 15px;
+        font-variant-numeric: tabular-nums;
+        background: transparent;
+        color: var(--ink);
+        text-transform: lowercase;
+      }
+      .field .inp.placeholder {
+        color: var(--muted);
+      }
+
+      .chart-frame {
+        border: 1px solid var(--hairline);
+        height: 220px;
+        margin-top: 8px;
+        position: relative;
+        overflow: hidden;
+        background: var(--paper);
+      }
+      .chart-empty {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--muted);
+        font-size: 12px;
+        text-align: center;
+        padding: 24px;
+        line-height: 1.6;
+      }
+      .chart-empty .arrow {
+        display: inline-block;
+        margin-right: 6px;
+      }
+
+      /* SVG candle chart */
+      .svg-candles {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      .candle-wick {
+        stroke: var(--ink);
+        stroke-width: 0.7;
+      }
+      .candle-body.up {
+        fill: var(--win);
+        stroke: var(--ink);
+        stroke-width: 0.6;
+      }
+      .candle-body.dn {
+        fill: var(--loss);
+        stroke: var(--ink);
+        stroke-width: 0.6;
+      }
+      .candle-marker {
+        stroke: var(--ink);
+        stroke-width: 1;
+        stroke-dasharray: 3 3;
+      }
+
+      /* Modal mock */
+      .modal-mock {
+        margin-top: 12px;
+        border: 1px solid var(--ink);
+        background: var(--paper);
+        padding: 20px;
+        max-width: 360px;
+      }
+      .modal-mock .mh {
+        font-size: 11px;
+        letter-spacing: 0.18em;
+        text-transform: lowercase;
+        color: var(--muted);
+        margin: 0 0 4px;
+      }
+      .modal-mock .mt {
+        font-size: 13px;
+        margin: 0 0 14px;
+        color: var(--ink-2);
+      }
+      .ohlc-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0;
+        border-top: 1px solid var(--hairline);
+      }
+      .ohlc-pick {
+        border-bottom: 1px solid var(--hairline);
+        padding: 12px 14px;
+        cursor: default;
+        background: var(--paper);
+      }
+      .ohlc-pick:nth-child(odd) {
+        border-right: 1px solid var(--hairline);
+      }
+      .ohlc-pick .ohlc-l {
+        font-size: 11px;
+        text-transform: lowercase;
+        letter-spacing: 0.12em;
+        color: var(--muted);
+      }
+      .ohlc-pick .ohlc-v {
+        font-size: 17px;
+        font-variant-numeric: tabular-nums;
+        margin-top: 2px;
+        font-weight: 500;
+      }
+      .ohlc-pick.high .ohlc-v {
+        color: var(--win);
+      }
+      .ohlc-pick.low .ohlc-v {
+        color: var(--loss);
+      }
+      .modal-foot {
+        margin-top: 16px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .modal-foot .hint {
+        font-size: 11px;
+        color: var(--muted);
+        text-transform: lowercase;
+        letter-spacing: 0.08em;
+      }
+      .btn {
+        border: 1px solid var(--ink);
+        background: var(--paper);
+        padding: 6px 14px;
+        font-family: inherit;
+        font-size: 12px;
+        text-transform: lowercase;
+        letter-spacing: 0.1em;
+        cursor: default;
+      }
+
+      /* State table */
+      .state-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-variant-numeric: tabular-nums;
+      }
+      .state-table th {
+        font-size: 11px;
+        text-transform: lowercase;
+        letter-spacing: 0.14em;
+        color: var(--muted);
+        font-weight: 500;
+        text-align: left;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--ink);
+        background: transparent;
+      }
+      .state-table td {
+        padding: 14px;
+        border-bottom: 1px solid var(--hairline);
+        vertical-align: top;
+      }
+      .state-table tr:last-child td {
+        border-bottom: 1px solid var(--ink);
+      }
+      .pill {
+        display: inline-block;
+        padding: 2px 8px;
+        font-size: 11px;
+        text-transform: lowercase;
+        letter-spacing: 0.1em;
+        border: 1px solid var(--ink);
+      }
+      .pill.muted {
+        border-color: var(--hairline);
+        color: var(--muted);
+      }
+      .pill.win {
+        border-color: var(--win);
+        color: var(--win);
+      }
+      .pill.warn {
+        border-color: var(--warn);
+        color: var(--warn);
+      }
+
+      /* Mapping table */
+      .mapping {
+        display: grid;
+        grid-template-columns: 80px 60px 1fr;
+        gap: 0;
+        border-top: 1px solid var(--ink);
+      }
+      .mapping div {
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--hairline);
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+      }
+      .mapping div:nth-child(3n + 1) {
+        font-weight: 500;
+      }
+      .mapping div:nth-child(3n + 2) {
+        text-align: center;
+        color: var(--muted);
+      }
+      .mapping div:nth-child(3n) {
+        color: var(--ink-2);
+      }
+      .mapping .head {
+        font-size: 11px !important;
+        text-transform: lowercase;
+        letter-spacing: 0.14em;
+        color: var(--muted) !important;
+        font-weight: 500 !important;
+        border-bottom: 1px solid var(--ink) !important;
+      }
+      .mapping .head.h2 {
+        text-align: center;
+      }
+
+      /* File list */
+      .file-list {
+        border-top: 1px solid var(--ink);
+      }
+      .file-row {
+        display: grid;
+        grid-template-columns: 96px 1fr 1fr;
+        gap: 24px;
+        padding: 14px 0;
+        border-bottom: 1px solid var(--hairline);
+        align-items: start;
+      }
+      .file-row:last-child {
+        border-bottom: 1px solid var(--ink);
+      }
+      .file-row .op {
+        font-size: 11px;
+        text-transform: lowercase;
+        letter-spacing: 0.14em;
+        color: var(--muted);
+      }
+      .file-row .op .glyph {
+        display: inline-block;
+        width: 18px;
+        color: var(--ink);
+        font-weight: 500;
+      }
+      .file-row .path {
+        font-size: 13px;
+        word-break: break-all;
+      }
+      .file-row .note {
+        font-size: 13px;
+        color: var(--ink-2);
+      }
+
+      /* Code block */
+      pre.code {
+        margin: 12px 0 0;
+        padding: 16px 20px;
+        background: var(--paper-2);
+        border: 1px solid var(--hairline);
+        font-size: 12.5px;
+        line-height: 1.6;
+        overflow-x: auto;
+        white-space: pre;
+        font-variant-numeric: tabular-nums;
+      }
+      pre.code .c {
+        color: var(--muted);
+      }
+      pre.code .k {
+        color: var(--accent);
+        font-weight: 500;
+      }
+      pre.code .s {
+        color: var(--win);
+      }
+
+      /* Risk / open question rows */
+      .risk-row {
+        display: grid;
+        grid-template-columns: 28px 1fr;
+        gap: 12px;
+        padding: 14px 0;
+        border-bottom: 1px solid var(--hairline);
+      }
+      .risk-row:first-child {
+        border-top: 1px solid var(--ink);
+      }
+      .risk-row:last-child {
+        border-bottom: 1px solid var(--ink);
+      }
+      .risk-row .n {
+        font-variant-numeric: tabular-nums;
+        font-weight: 500;
+      }
+      .risk-row .title {
+        font-weight: 500;
+        margin-bottom: 2px;
+      }
+      .risk-row .body {
+        color: var(--ink-2);
+        font-size: 13px;
+      }
+
+      /* Footer */
+      .closer {
+        margin-top: 64px;
+        padding-top: 20px;
+        border-top: 1px solid var(--ink);
+        color: var(--muted);
+        font-size: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="page">
+      <!-- Header -->
+      <header>
+        <div class="eyebrow">implementation plan · 2026-06-24</div>
+        <h1 class="title">live k-lines for the entry chart</h1>
+        <p class="lede">
+          wire the <code>newtransaction</code> candlestick chart to coinank's
+          public <code>/api/kline/list/open</code>, gate render on
+          <span class="num">trading pair × timeframe</span>, debounce the pair
+          input, and let a candle click suggest the entry price without forcing
+          it.
+        </p>
+
+        <div class="meta-strip">
+          <div class="meta-cell">
+            <span class="label">candles per fetch</span>
+            <span class="v num">100</span>
+          </div>
+          <div class="meta-cell">
+            <span class="label">debounce on pair</span>
+            <span class="v num"
+              >500<span style="font-size: 14px">ms</span></span
+            >
+          </div>
+          <div class="meta-cell">
+            <span class="label">files touched</span>
+            <span class="v num">6</span>
+          </div>
+          <div class="meta-cell">
+            <span class="label">new procedure</span>
+            <span class="v small">market.getCandles</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Pillars -->
+      <h2 class="section">pillars</h2>
+      <div class="grid-4">
+        <div class="pillar">
+          <span class="label">gate the query</span>
+          <p>
+            chart fetches only when both <code>tradingPair</code> and
+            <code>timeFrame</code> exist. cleared pair → chart hidden again.
+          </p>
+        </div>
+        <div class="pillar">
+          <span class="label">debounce typing</span>
+          <p>
+            500ms debounce on the pair string before the query fires; the
+            timeframe select is non-debounced (single click).
+          </p>
+        </div>
+        <div class="pillar">
+          <span class="label">server proxy</span>
+          <p>
+            new tRPC <code>market.getCandles</code> calls coinank from node —
+            avoids CORS, hides the upstream, and keeps the client trpc-only.
+          </p>
+        </div>
+        <div class="pillar">
+          <span class="label">click → suggest</span>
+          <p>
+            clicking a candle opens a dialog with O · H · L · C; the picked
+            price fills the entry field, never overwrites a manually-typed value
+            silently.
+          </p>
+        </div>
+      </div>
+
+      <!-- Flow -->
+      <h2 class="section">data flow</h2>
+      <div class="flow">
+        <div class="flow-step">
+          <div class="n">01 / form</div>
+          <div class="t">pair + timeframe</div>
+          <div class="d">
+            user types <code>BTCUSDT</code> in the pair field and picks
+            <code>1H</code> from the select.
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="n">02 / hook</div>
+          <div class="t">useDebouncedKlines</div>
+          <div class="d">
+            debounces the pair, returns
+            <code>{ enabled, data, isLoading, error }</code> to the chart.
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="n">03 / trpc</div>
+          <div class="t">market.getCandles</div>
+          <div class="d">
+            server-side fetch to coinank with mapped <code>symbol</code>,
+            <code>interval</code>, <code>size=100</code>,
+            <code>exchange=Binance</code>.
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="n">04 / chart</div>
+          <div class="t">lightweight-charts</div>
+          <div class="d">
+            rows mapped to <code>{ time, open, high, low, close }</code> with
+            <code>UTCTimestamp</code> seconds — note coinank's column order is
+            o/c/h/l, not o/h/l/c.
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="n">05 / click</div>
+          <div class="t">ohlc dialog</div>
+          <div class="d">
+            click a candle → modal with four price chips; chosen value writes
+            <code>formData.entryPrice</code>.
+          </div>
+        </div>
+      </div>
+
+      <!-- Mock -->
+      <h2 class="section">target ui · gated render</h2>
+      <div class="grid-2" style="gap: 32px; align-items: start">
+        <div>
+          <span class="label">a · before both fields</span>
+          <div class="mock">
+            <div class="mock-section">
+              <div class="mock-section-head">instrument</div>
+              <div class="field-row">
+                <div class="field">
+                  <div class="lbl">trading pair</div>
+                  <div class="inp placeholder">btcus…</div>
+                </div>
+                <div class="field">
+                  <div class="lbl">timeframe</div>
+                  <div class="inp placeholder">—</div>
+                </div>
+                <div class="field">
+                  <div class="lbl">direction</div>
+                  <div class="inp placeholder">—</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="mock-section">
+              <div class="mock-section-head">chart</div>
+              <div class="chart-frame">
+                <div class="chart-empty">
+                  <span
+                    ><span class="arrow">→</span>fill trading pair and timeframe
+                    to load the chart</span
+                  >
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <span class="label">b · after both fields · candle clicked</span>
+          <div class="mock">
+            <div class="mock-section">
+              <div class="mock-section-head">instrument</div>
+              <div class="field-row">
+                <div class="field">
+                  <div class="lbl">trading pair</div>
+                  <div class="inp">btcusdt</div>
+                </div>
+                <div class="field">
+                  <div class="lbl">timeframe</div>
+                  <div class="inp">1h</div>
+                </div>
+                <div class="field">
+                  <div class="lbl">direction</div>
+                  <div class="inp">long</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="mock-section">
+              <div class="mock-section-head">
+                chart · btcusdt · 1h · 100 candles
+              </div>
+              <div class="chart-frame">
+                <svg
+                  class="svg-candles"
+                  viewBox="0 0 600 220"
+                  preserveAspectRatio="none"
+                  id="chart-svg"
+                ></svg>
+              </div>
+            </div>
+
+            <div class="modal-mock" role="dialog">
+              <p class="mh">candle · 2026-06-24 18:00 utc</p>
+              <p class="mt">pick the price to fill <code>entry price</code></p>
+              <div class="ohlc-grid">
+                <div class="ohlc-pick">
+                  <div class="ohlc-l">open</div>
+                  <div class="ohlc-v num">64,235.30</div>
+                </div>
+                <div class="ohlc-pick high">
+                  <div class="ohlc-l">high</div>
+                  <div class="ohlc-v num">64,310.30</div>
+                </div>
+                <div class="ohlc-pick low">
+                  <div class="ohlc-l">low</div>
+                  <div class="ohlc-v num">64,071.40</div>
+                </div>
+                <div class="ohlc-pick">
+                  <div class="ohlc-l">close</div>
+                  <div class="ohlc-v num">64,149.00</div>
+                </div>
+              </div>
+              <div class="modal-foot">
+                <span class="hint"
+                  >selection is optional · you can still type</span
+                >
+                <span class="btn">cancel</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Decisions -->
+      <h2 class="section">decisions worth flagging</h2>
+
+      <div class="decision">
+        <div class="q">where does the fetch live?</div>
+        <div class="why">
+          <span class="em">server proxy via trpc.</span> the project rule is
+          “all api calls go through tRPC.” a server proxy also sidesteps any
+          coinank cors header, lets us cache or rate-limit later, and keeps the
+          upstream domain out of the browser network tab.
+        </div>
+        <div class="pick win">trpc</div>
+      </div>
+
+      <div class="decision">
+        <div class="q">debounce length?</div>
+        <div class="why">
+          <span class="em">500 ms after last keystroke.</span> short enough to
+          feel responsive when the user pastes a pair, long enough to skip the
+          typing path through <code>btc</code> → <code>btcu</code> →
+          <code>btcus</code>. timeframe select fires immediately — it's a single
+          click.
+        </div>
+        <div class="pick win">500ms</div>
+      </div>
+
+      <div class="decision">
+        <div class="q">candle click flow?</div>
+        <div class="why">
+          <span class="em">modal, not silent fill.</span> a single click on a
+          candle today can land by accident; surfacing the four ohlc choices in
+          a dialog makes the intent explicit and keeps the chart's existing
+          marker behaviour intact.
+        </div>
+        <div class="pick win">modal</div>
+      </div>
+
+      <div class="decision">
+        <div class="q">overwrite a typed entry price?</div>
+        <div class="why">
+          <span class="em">no warning, no block.</span> the field stays freely
+          editable. selecting from the dialog writes the field. an existing
+          typed value gets replaced — same as if the user re-typed. matches the
+          simplicity-first rule; no extra confirmation step.
+        </div>
+        <div class="pick">replace</div>
+      </div>
+
+      <div class="decision">
+        <div class="q">exchange parameter?</div>
+        <div class="why">
+          <span class="em">hard-coded <code>Binance</code> for now.</span>
+          coinank requires an explicit exchange. binance covers virtually all
+          <code>*USDT</code> pairs the journal would use. surfacing an exchange
+          dropdown is out of scope here.
+        </div>
+        <div class="pick">binance</div>
+      </div>
+
+      <div class="decision">
+        <div class="q">cache + react-query?</div>
+        <div class="why">
+          <span class="em">default tanstack settings.</span> 100 candles is
+          cheap; we leave the default stale time but disable
+          <code>refetchOnWindowFocus</code> for this query so glancing at
+          another tab doesn't repaint the chart while the user is filling
+          fields.
+        </div>
+        <div class="pick">no-focus-refetch</div>
+      </div>
+
+      <div class="decision">
+        <div class="q">timeframe mapping?</div>
+        <div class="why">
+          <span class="em">map ui → api in one helper.</span> the form's select
+          already uses values like <code>1H</code>, the api expects
+          <code>1h</code>; a single lookup table beats parsing on either side.
+        </div>
+        <div class="pick">helper</div>
+      </div>
+
+      <!-- Mapping -->
+      <h2 class="section">timeframe + payload mapping</h2>
+      <div class="grid-2" style="gap: 32px; align-items: start">
+        <div>
+          <span class="label">ui timeframe → coinank interval</span>
+          <div class="mapping">
+            <div class="head">ui</div>
+            <div class="head h2">→</div>
+            <div class="head">api</div>
+
+            <div>1m</div>
+            <div>→</div>
+            <div>1m</div>
+            <div>5m</div>
+            <div>→</div>
+            <div>5m</div>
+            <div>15m</div>
+            <div>→</div>
+            <div>15m</div>
+            <div>30m</div>
+            <div>→</div>
+            <div>30m</div>
+            <div>1H</div>
+            <div>→</div>
+            <div>1h</div>
+            <div>4H</div>
+            <div>→</div>
+            <div>4h</div>
+            <div>1D</div>
+            <div>→</div>
+            <div>1d</div>
+            <div>1W</div>
+            <div>→</div>
+            <div>1w</div>
+            <div>1M</div>
+            <div>→</div>
+            <div>1M</div>
+          </div>
+        </div>
+
+        <div>
+          <span class="label">coinank row → candlestickdata</span>
+          <pre
+            class="code"
+          ><span class="c">// coinank tuple (note: open · close · high · low)</span>
+<span class="c">// [ openTime, closeTime, open, close, high, low,</span>
+<span class="c">//   baseVol, quoteVol, tradeCount, takerBuy ]</span>
+
+<span class="k">const</span> mapRow = ([openTime, _ct, o, c, h, l]) =&gt; ({
+  time:  <span class="k">Math</span>.floor(openTime / <span class="s">1000</span>) <span class="k">as</span> UTCTimestamp,
+  open:  o,
+  high:  h,
+  low:   l,
+  close: c,
+});
+
+<span class="c">// CandlestickChart switches from string &lt;Time&gt; to</span>
+<span class="c">// UTCTimestamp so intraday bars render correctly.</span></pre>
+        </div>
+      </div>
+
+      <!-- Chart states -->
+      <h2 class="section">chart state matrix</h2>
+      <table class="state-table">
+        <thead>
+          <tr>
+            <th>pair</th>
+            <th>timeframe</th>
+            <th>what renders</th>
+            <th>network</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="pill muted">empty</span></td>
+            <td><span class="pill muted">empty</span></td>
+            <td>
+              chart section hidden entirely · the “fill … to load” line stays
+              inside the form
+            </td>
+            <td><span class="pill">none</span></td>
+          </tr>
+          <tr>
+            <td><span class="pill">btcusdt</span></td>
+            <td><span class="pill muted">empty</span></td>
+            <td>still gated — message asks for timeframe; no query yet</td>
+            <td><span class="pill">none</span></td>
+          </tr>
+          <tr>
+            <td><span class="pill muted">empty</span></td>
+            <td><span class="pill">1h</span></td>
+            <td>
+              still gated — message asks for pair; no query yet (debounce
+              irrelevant)
+            </td>
+            <td><span class="pill">none</span></td>
+          </tr>
+          <tr>
+            <td><span class="pill warn">typing…</span></td>
+            <td><span class="pill">1h</span></td>
+            <td>
+              last keystroke &lt; 500ms ago → loading spinner held until
+              debounce flushes
+            </td>
+            <td><span class="pill warn">deferred</span></td>
+          </tr>
+          <tr>
+            <td><span class="pill">btcusdt</span></td>
+            <td><span class="pill">1h</span></td>
+            <td>chart renders 100 candles, click opens ohlc dialog</td>
+            <td><span class="pill win">1 fetch</span></td>
+          </tr>
+          <tr>
+            <td><span class="pill">xyzpair</span></td>
+            <td><span class="pill">1h</span></td>
+            <td>
+              empty / 4xx from upstream → inline “no data for btcxyz · 1h” line,
+              no toast spam
+            </td>
+            <td><span class="pill warn">1 fetch · empty</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Files -->
+      <h2 class="section">files to touch</h2>
+      <div class="file-list">
+        <div class="file-row">
+          <div class="op"><span class="glyph">+</span>add</div>
+          <div class="path">server/_core/coinank.ts</div>
+          <div class="note">
+            thin fetch wrapper · maps ui timeframe → api interval · validates
+            response shape · throws <code>TRPCError</code> on upstream failure.
+          </div>
+        </div>
+        <div class="file-row">
+          <div class="op"><span class="glyph">~</span>edit</div>
+          <div class="path">server/routers.ts</div>
+          <div class="note">
+            new <code>market</code> sub-router with
+            <code>getCandles({ tradingPair, timeFrame })</code> · zod-validates
+            pair (uppercase, <code>^[A-Z0-9]{4,20}$</code>) and timeframe (enum
+            of <code>TIME_FRAMES</code>).
+          </div>
+        </div>
+        <div class="file-row">
+          <div class="op"><span class="glyph">+</span>add</div>
+          <div class="path">client/src/hooks/useDebouncedKlines.ts</div>
+          <div class="note">
+            holds the debounce timer · returns
+            <code>{ shouldShow, isLoading, data, error }</code> · query
+            <code>enabled</code> only when both inputs are set and the debounce
+            has settled.
+          </div>
+        </div>
+        <div class="file-row">
+          <div class="op"><span class="glyph">~</span>edit</div>
+          <div class="path">client/src/components/CandlestickChart.tsx</div>
+          <div class="note">
+            switches type to <code>CandlestickData&lt;UTCTimestamp&gt;</code> ·
+            click handler now bubbles the full candle (<code
+              >{ open, high, low, close, time }</code
+            >) instead of just time · renders entry marker after a selection
+            lands.
+          </div>
+        </div>
+        <div class="file-row">
+          <div class="op"><span class="glyph">+</span>add</div>
+          <div class="path">
+            client/src/components/new-transaction/EntryFromCandleDialog.tsx
+          </div>
+          <div class="note">
+            shadcn <code>Dialog</code> · four ohlc chips · keyboard-accessible ·
+            returns the chosen price string back to the form.
+          </div>
+        </div>
+        <div class="file-row">
+          <div class="op"><span class="glyph">~</span>edit</div>
+          <div class="path">client/src/pages/NewTransaction.tsx</div>
+          <div class="note">
+            replaces <code>MOCK_CANDLE_DATA</code> with the hook · gates the
+            section render · wires the dialog's pick into
+            <code>updateField("entryPrice", …)</code> ·
+            <code>MOCK_CANDLE_DATA</code> kept for tests until references are
+            removed.
+          </div>
+        </div>
+      </div>
+
+      <!-- Server snippet -->
+      <h2 class="section">server snippet · coinank.ts</h2>
+      <pre class="code"><span class="c">// server/_core/coinank.ts</span>
+<span class="k">const</span> COINANK_URL = <span class="s">"https://api.coinank.com/api/kline/list/open"</span>;
+
+<span class="k">const</span> INTERVAL_MAP: <span class="k">Record</span>&lt;<span class="k">string</span>, <span class="k">string</span>&gt; = {
+  <span class="s">"1m"</span>: <span class="s">"1m"</span>,  <span class="s">"5m"</span>: <span class="s">"5m"</span>,  <span class="s">"15m"</span>: <span class="s">"15m"</span>, <span class="s">"30m"</span>: <span class="s">"30m"</span>,
+  <span class="s">"1H"</span>: <span class="s">"1h"</span>,  <span class="s">"4H"</span>: <span class="s">"4h"</span>,
+  <span class="s">"1D"</span>: <span class="s">"1d"</span>,  <span class="s">"1W"</span>: <span class="s">"1w"</span>,  <span class="s">"1M"</span>: <span class="s">"1M"</span>,
+};
+
+<span class="k">export async function</span> fetchCandles(input: {
+  tradingPair: <span class="k">string</span>;
+  timeFrame:   <span class="k">string</span>;
+}): <span class="k">Promise</span>&lt;Candle[]&gt; {
+  <span class="k">const</span> interval = INTERVAL_MAP[input.timeFrame];
+  <span class="k">if</span> (!interval) <span class="k">throw new</span> TRPCError({ code: <span class="s">"BAD_REQUEST"</span>, ... });
+
+  <span class="k">const</span> url = <span class="s">`${COINANK_URL}?exchange=Binance`</span>
+    + <span class="s">`&amp;symbol=${input.tradingPair.toUpperCase()}`</span>
+    + <span class="s">`&amp;interval=${interval}&amp;size=100&amp;side=to&amp;ts=${Date.now()}`</span>;
+
+  <span class="k">const</span> res = <span class="k">await</span> fetch(url, { headers: { accept: <span class="s">"application/json"</span> } });
+  <span class="k">if</span> (!res.ok) <span class="k">throw new</span> TRPCError({ code: <span class="s">"BAD_GATEWAY"</span>, ... });
+
+  <span class="k">const</span> body = <span class="k">await</span> res.json();
+  <span class="k">if</span> (!body?.success || !<span class="k">Array</span>.isArray(body.data)) <span class="k">return</span> [];
+
+  <span class="k">return</span> body.data.map(mapRow);
+}</pre>
+
+      <!-- Risks -->
+      <h2 class="section">risks &amp; open questions</h2>
+      <div>
+        <div class="risk-row">
+          <div class="n">01</div>
+          <div>
+            <div class="title">upstream is public &amp; unauthed</div>
+            <div class="body">
+              no api key, no documented rate limit, no sla. server proxy gives
+              us a single place to add a cache or back-off later without
+              re-touching the client.
+            </div>
+          </div>
+        </div>
+        <div class="risk-row">
+          <div class="n">02</div>
+          <div>
+            <div class="title">
+              column order is o · c · h · l, not o · h · l · c
+            </div>
+            <div class="body">
+              easy to flip by reflex — the mapping helper exists specifically to
+              make the order explicit. a unit test on the mapper would be the
+              cheapest insurance.
+            </div>
+          </div>
+        </div>
+        <div class="risk-row">
+          <div class="n">03</div>
+          <div>
+            <div class="title">pair validation is permissive</div>
+            <div class="body">
+              we'll accept anything matching <code>^[A-Z0-9]{4,20}$</code>
+              and forward to coinank; an unknown pair just yields an empty
+              <code>data</code> array. inline “no data” message handles it
+              without toast noise.
+            </div>
+          </div>
+        </div>
+        <div class="risk-row">
+          <div class="n">04</div>
+          <div>
+            <div class="title">exchange is hard-coded</div>
+            <div class="body">
+              if a future pair only trades on okx or bybit, the chart will show
+              empty for that pair. that's acceptable for v1 — a dropdown can be
+              added later if it actually bites.
+            </div>
+          </div>
+        </div>
+        <div class="risk-row">
+          <div class="n">05</div>
+          <div>
+            <div class="title">close-trade chart stays mocked</div>
+            <div class="body">
+              this task targets the <code>newtransaction</code> page only. the
+              close-trade modal and any review surface keep their current mock
+              data unless we agree to widen scope.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="closer">
+        <span>plan only · no code written yet · awaiting review</span>
+        <span class="num">100 candles · 6 files · 1 new procedure</span>
+      </div>
+    </div>
+
+    <script>
+      // Render a small, deterministic candle chart inside the mock so the
+      // hero artifact has a believable preview without depending on the
+      // lightweight-charts runtime.
+      (function renderMockCandles() {
+        const svg = document.getElementById("chart-svg");
+        if (!svg) return;
+
+        const w = 600;
+        const h = 220;
+        const padL = 8;
+        const padR = 36;
+        const padT = 14;
+        const padB = 18;
+        const count = 100;
+        const cw = (w - padL - padR) / count;
+
+        // Deterministic LCG so the chart never jitters between reloads.
+        let seed = 42;
+        const rnd = () => {
+          seed = (seed * 1664525 + 1013904223) % 4294967296;
+          return seed / 4294967296;
+        };
+
+        let price = 62000;
+        const candles = [];
+        for (let i = 0; i < count; i++) {
+          const drift = (rnd() - 0.5) * 240;
+          const open = price;
+          const close = Math.max(50000, open + drift);
+          const high = Math.max(open, close) + rnd() * 120;
+          const low = Math.min(open, close) - rnd() * 120;
+          candles.push({ open, high, low, close });
+          price = close;
+        }
+
+        let min = Infinity;
+        let max = -Infinity;
+        for (const c of candles) {
+          if (c.low < min) min = c.low;
+          if (c.high > max) max = c.high;
+        }
+        const range = max - min || 1;
+        const innerH = h - padT - padB;
+        const yFor = v => padT + ((max - v) / range) * innerH;
+
+        let svgStr = "";
+
+        // Light price-axis labels on the right.
+        const ticks = 4;
+        for (let t = 0; t <= ticks; t++) {
+          const v = max - (range * t) / ticks;
+          const y = padT + (innerH * t) / ticks;
+          svgStr += `<line x1="${padL}" y1="${y}" x2="${w - padR}" y2="${y}" stroke="oklch(0.92 0 0)" stroke-width="0.5"/>`;
+          svgStr += `<text x="${w - padR + 4}" y="${y + 3}" font-size="9" fill="oklch(0.48 0 0)" font-family="IBM Plex Mono">${v.toFixed(0)}</text>`;
+        }
+
+        for (let i = 0; i < candles.length; i++) {
+          const c = candles[i];
+          const x = padL + cw * i + cw / 2;
+          const up = c.close >= c.open;
+          const bodyTop = yFor(Math.max(c.open, c.close));
+          const bodyBottom = yFor(Math.min(c.open, c.close));
+          const bodyHeight = Math.max(1, bodyBottom - bodyTop);
+          svgStr += `<line class="candle-wick" x1="${x}" y1="${yFor(c.high)}" x2="${x}" y2="${yFor(c.low)}"/>`;
+          svgStr += `<rect class="candle-body ${up ? "up" : "dn"}" x="${x - cw * 0.35}" y="${bodyTop}" width="${cw * 0.7}" height="${bodyHeight}"/>`;
+        }
+
+        // Highlight one candle ~2/3 in to suggest the "clicked" entry marker.
+        const markIdx = 72;
+        const markC = candles[markIdx];
+        const markX = padL + cw * markIdx + cw / 2;
+        const markPrice = (markC.open + markC.close) / 2;
+        const markY = yFor(markPrice);
+        svgStr += `<line class="candle-marker" x1="${padL}" y1="${markY}" x2="${w - padR}" y2="${markY}"/>`;
+        svgStr += `<polygon points="${markX - 4},${yFor(markC.low) + 10} ${markX + 4},${yFor(markC.low) + 10} ${markX},${yFor(markC.low) + 3}" fill="oklch(0.18 0 0)"/>`;
+        svgStr += `<text x="${w - padR + 4}" y="${markY + 3}" font-size="9" font-weight="500" fill="oklch(0.18 0 0)" font-family="IBM Plex Mono">${markPrice.toFixed(1)}</text>`;
+
+        svg.innerHTML = svgStr;
+      })();
+    </script>
+  </body>
+</html>
