@@ -1,8 +1,7 @@
 import { Field, INPUT_CLASS, SectionHeader, SELECT_CLASS } from "@/lib/ledger";
 import type { Direction } from "@/lib/plannedRiskReward";
 import { cn } from "@/lib/utils";
-
-const TIME_FRAMES = ["1m", "5m", "15m", "30m", "1H", "4H", "1D", "1W", "1M"];
+import { TIME_FRAMES } from "@shared/const";
 
 type Props = {
   tradingPair: string;

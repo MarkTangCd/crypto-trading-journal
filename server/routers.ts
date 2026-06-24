@@ -36,8 +36,12 @@ import {
 import {
   ALLOWED_TRANSITIONS,
   MARKET_CYCLES,
+  TIME_FRAMES,
   TRANSACTION_TYPES,
 } from "@shared/const";
+import { fetchCandles } from "./_core/coinank";
+
+const TRADING_PAIR_RE = /^[A-Z0-9]{4,20}$/;
 
 /**
  * Run a tradeMath helper and surface its validation failures as BAD_REQUEST.
@@ -557,6 +561,25 @@ export const appRouter = router({
       .query(async ({ ctx, input }) => {
         const account = await requireOwnedAccount(ctx, input.accountId);
         return getStatistics(account.id, account.initialBalance);
+      }),
+  }),
+
+  // Market data (read-only proxy to CoinAnk's public kline endpoint).
+  market: router({
+    getCandles: publicProcedure
+      .input(
+        z.object({
+          tradingPair: z
+            .string()
+            .transform(s => s.toUpperCase())
+            .refine(s => TRADING_PAIR_RE.test(s), {
+              message: "Invalid trading pair",
+            }),
+          timeFrame: z.enum(TIME_FRAMES),
+        })
+      )
+      .query(async ({ input }) => {
+        return fetchCandles(input);
       }),
   }),
 

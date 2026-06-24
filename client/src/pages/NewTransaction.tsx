@@ -1,6 +1,7 @@
 import { AccountMetaStrip } from "@/components/new-transaction/AccountMetaStrip";
 import { ClassificationSection } from "@/components/new-transaction/ClassificationSection";
 import { ContextSection } from "@/components/new-transaction/ContextSection";
+import { EntryChartSection } from "@/components/new-transaction/EntryChartSection";
 import { EntryTimeSection } from "@/components/new-transaction/EntryTimeSection";
 import { InstrumentSection } from "@/components/new-transaction/InstrumentSection";
 import { PlanSection } from "@/components/new-transaction/PlanSection";
@@ -10,10 +11,7 @@ import {
   REQUIRED_FIELDS,
   type FormData,
 } from "@/components/new-transaction/formState";
-import CandlestickChart from "@/components/CandlestickChart";
 import { useAccount } from "@/contexts/AccountContext";
-import { SectionHeader } from "@/lib/ledger";
-import { MOCK_CANDLE_DATA } from "@/lib/mockCandleData";
 import { previewPlannedRiskReward } from "@/lib/plannedRiskReward";
 import { trpc } from "@/lib/trpc";
 import { type MarketCycle, type TransactionType } from "@shared/const";
@@ -152,11 +150,11 @@ export default function NewTransaction() {
           }
         />
 
-        <section className="space-y-4">
-          <SectionHeader>chart</SectionHeader>
-          <CandlestickChart data={MOCK_CANDLE_DATA} />
-          <p className="text-label">click a candle to mark the entry point.</p>
-        </section>
+        <EntryChartSection
+          tradingPair={formData.tradingPair}
+          timeFrame={formData.timeFrame}
+          onPickEntryPrice={price => updateField("entryPrice", price)}
+        />
 
         <EntryTimeSection
           startTime={formData.startTime}

@@ -21,6 +21,20 @@ export const TRANSACTION_TYPES = ["Trend", "Reversal"] as const;
 
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];
 
+export const TIME_FRAMES = [
+  "1m",
+  "5m",
+  "15m",
+  "30m",
+  "1H",
+  "4H",
+  "1D",
+  "1W",
+  "1M",
+] as const;
+
+export type TimeFrame = (typeof TIME_FRAMES)[number];
+
 export const ALLOWED_TRANSITIONS: Record<TradeStatus, TradeStatus | null> = {
   open: "closed",
   closed: "reviewed",
