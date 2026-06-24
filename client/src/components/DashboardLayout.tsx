@@ -80,10 +80,19 @@ function DashboardLayoutContent({
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const activeMenuItem = menuItems.find(item => {
-    if (item.path === "/") return location === "/";
-    return location.startsWith(item.path);
-  });
+  // Pick the menu item whose path is the longest prefix of the current
+  // location. Avoids `/transactions/new` activating both Transactions and
+  // New Trade, while still letting Transactions stay active on detail pages
+  // like `/transactions/:id`.
+  const activeMenuItem = menuItems
+    .filter(item =>
+      item.path === "/"
+        ? location === "/"
+        : location === item.path || location.startsWith(item.path + "/")
+    )
+    .reduce<
+      (typeof menuItems)[number] | null
+    >((best, item) => (best && best.path.length >= item.path.length ? best : item), null);
   const isMobile = useIsMobile();
 
   // Live width tracked during drag without triggering React re-renders.
@@ -173,10 +182,7 @@ function DashboardLayoutContent({
           <SidebarContent className="gap-0">
             <SidebarMenu className="px-2 py-1">
               {menuItems.map(item => {
-                const isActive =
-                  item.path === "/"
-                    ? location === "/"
-                    : location.startsWith(item.path);
+                const isActive = item === activeMenuItem;
                 return (
                   <SidebarMenuItem key={item.path}>
                     <SidebarMenuButton
