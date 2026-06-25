@@ -2,18 +2,18 @@ import {
   type ChatMessage,
   type ChatProvider,
   type ChatRequest,
+  type ChatStreamChunk,
+  type ProviderCallOptions,
   ProviderError,
 } from "./types";
+import { parseSseFrames } from "./sseParser";
 
 const DEFAULT_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_MODEL = "deepseek-chat";
 const REQUEST_TIMEOUT_MS = 60_000;
 
-interface DeepseekChoice {
-  message?: { role?: string; content?: string };
-}
-interface DeepseekResponse {
-  choices?: DeepseekChoice[];
+interface StreamDelta {
+  choices?: Array<{ delta?: { content?: string } }>;
 }
 
 function toOpenAIMessages(messages: ChatMessage[]) {
@@ -30,78 +30,159 @@ function toOpenAIMessages(messages: ChatMessage[]) {
   });
 }
 
+function buildBody(req: ChatRequest): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    model: req.model || DEFAULT_MODEL,
+    messages: toOpenAIMessages(req.messages),
+    stream: true,
+  };
+  if (typeof req.temperature === "number") {
+    body.temperature = req.temperature;
+  }
+  return body;
+}
+
+// Compose an AbortSignal that fires when either the per-request timeout
+// elapses OR the caller's signal aborts. AbortSignal.any keeps the upstream
+// fetch cancellable in both directions without leaking the timer.
+function composeSignal(external: AbortSignal | undefined): AbortSignal {
+  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  return external ? AbortSignal.any([timeout, external]) : timeout;
+}
+
+async function openStream(
+  req: ChatRequest,
+  { apiKey, baseUrl, signal }: ProviderCallOptions
+): Promise<Response> {
+  if (!apiKey) {
+    throw new ProviderError(
+      "AUTH",
+      "未配置 deepseek api key。请到 Settings 填写。"
+    );
+  }
+
+  const url = `${(baseUrl || DEFAULT_BASE_URL).replace(/\/$/, "")}/chat/completions`;
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+        Accept: "text/event-stream",
+      },
+      body: JSON.stringify(buildBody(req)),
+      signal: composeSignal(signal),
+    });
+  } catch (error) {
+    if ((error as { name?: string })?.name === "AbortError") {
+      throw new ProviderError("NETWORK", "请求已被中断。", error);
+    }
+    throw new ProviderError(
+      "NETWORK",
+      "无法连接 deepseek。请检查网络或代理配置。",
+      error
+    );
+  }
+
+  if (!response.ok) {
+    const upstreamText = await response.text().catch(() => "");
+    throw mapHttpStatus(response.status, upstreamText);
+  }
+
+  return response;
+}
+
+async function* iterateStream(
+  response: Response
+): AsyncGenerator<ChatStreamChunk> {
+  const body = response.body;
+  if (!body) {
+    throw new ProviderError(
+      "INVALID_RESPONSE",
+      "deepseek 流式响应为空，请稍后重试。"
+    );
+  }
+
+  const reader = body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const parsed = parseSseFrames(buffer);
+      buffer = parsed.remainder;
+
+      for (const frame of parsed.frames) {
+        let payload: StreamDelta;
+        try {
+          payload = JSON.parse(frame.data) as StreamDelta;
+        } catch {
+          // Skip malformed frames rather than aborting the whole stream —
+          // upstream occasionally interleaves diagnostic data.
+          continue;
+        }
+        const delta = payload.choices?.[0]?.delta?.content;
+        if (typeof delta === "string" && delta.length > 0) {
+          yield { delta };
+        }
+      }
+
+      if (parsed.done) return;
+    }
+
+    // Flush any tail bytes (defensive — providers always end with \n\n).
+    if (buffer.length > 0) {
+      const tail = parseSseFrames(buffer + "\n\n");
+      for (const frame of tail.frames) {
+        try {
+          const payload = JSON.parse(frame.data) as StreamDelta;
+          const delta = payload.choices?.[0]?.delta?.content;
+          if (typeof delta === "string" && delta.length > 0) {
+            yield { delta };
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+  } catch (error) {
+    if (error instanceof ProviderError) throw error;
+    if ((error as { name?: string })?.name === "AbortError") {
+      throw new ProviderError("NETWORK", "请求已被中断。", error);
+    }
+    throw new ProviderError("UPSTREAM", "deepseek 流式响应解析失败。", error);
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 export const deepseekProvider: ChatProvider = {
   id: "deepseek",
   defaultModel: DEFAULT_MODEL,
 
-  async chat(req, { apiKey, baseUrl }) {
-    if (!apiKey) {
-      throw new ProviderError(
-        "AUTH",
-        "未配置 deepseek api key。请到 Settings 填写。"
-      );
-    }
+  async *chatStream(req, options) {
+    const response = await openStream(req, options);
+    yield* iterateStream(response);
+  },
 
-    const url = `${(baseUrl || DEFAULT_BASE_URL).replace(/\/$/, "")}/chat/completions`;
-    const body: Record<string, unknown> = {
-      model: req.model || DEFAULT_MODEL,
-      messages: toOpenAIMessages(req.messages),
-      stream: false,
-    };
-    if (typeof req.temperature === "number") {
-      body.temperature = req.temperature;
+  async chat(req, options) {
+    let assembled = "";
+    for await (const chunk of this.chatStream(req, options)) {
+      assembled += chunk.delta;
     }
-
-    let response: Response;
-    try {
-      response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-      });
-    } catch (error) {
-      throw new ProviderError(
-        "NETWORK",
-        "无法连接 deepseek。请检查网络或代理配置。",
-        error
-      );
-    }
-
-    if (!response.ok) {
-      // Drain the body so the socket can close cleanly, then map to a typed
-      // ProviderError — never surface the upstream payload to the caller.
-      const upstreamText = await response.text().catch(() => "");
-      const mapped = mapHttpStatus(response.status, upstreamText);
-      throw mapped;
-    }
-
-    let parsed: DeepseekResponse;
-    try {
-      parsed = (await response.json()) as DeepseekResponse;
-    } catch (error) {
-      throw new ProviderError(
-        "INVALID_RESPONSE",
-        "deepseek 返回的响应不是合法的 JSON。",
-        error
-      );
-    }
-
-    const choice = parsed.choices?.[0]?.message;
-    if (!choice || typeof choice.content !== "string") {
+    if (assembled.length === 0) {
       throw new ProviderError(
         "INVALID_RESPONSE",
         "deepseek 返回为空，请稍后重试。"
       );
     }
-
-    return {
-      role: "assistant",
-      content: choice.content,
-    };
+    return { role: "assistant", content: assembled };
   },
 };
 

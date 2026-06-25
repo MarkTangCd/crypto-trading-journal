@@ -6,6 +6,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { assertClosedTradesHaveEndTime } from "../db";
+import { mountReviewAgentSseRoute } from "./reviewAgentSseRoute";
 import { serveStatic, setupVite } from "./vite";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -41,6 +42,9 @@ async function startServer() {
       createContext,
     })
   );
+  // Streaming SSE endpoint for the review agent (sits next to tRPC because
+  // httpBatchLink can't carry SSE).
+  app.use("/api/review-agent", mountReviewAgentSseRoute());
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);

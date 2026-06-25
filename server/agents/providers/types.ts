@@ -38,20 +38,39 @@ export interface ChatRequest {
   temperature?: number;
 }
 
+export interface ProviderCallOptions {
+  apiKey: string;
+  baseUrl?: string;
+  /** Aborts the upstream fetch (and any in-flight stream) when triggered. */
+  signal?: AbortSignal;
+}
+
+export interface ChatStreamChunk {
+  delta: string;
+}
+
 export interface ChatProvider {
   /** Stable provider id, e.g. "deepseek". */
   id: string;
   /** Default model id used when caller doesn't specify one. */
   defaultModel: string;
   /**
-   * One-shot non-streaming chat completion. Implementations MUST throw
-   * `ProviderError` (typed below) on upstream failures so the orchestrator
-   * can map them to safe TRPCError codes without leaking raw payloads.
+   * One-shot non-streaming chat completion. Implementations are expected to
+   * be a thin drain-and-concat of `chatStream` — keeping a single source of
+   * truth for the upstream call. MUST throw `ProviderError` (typed below) on
+   * upstream failures so the orchestrator can map them to safe TRPCError
+   * codes without leaking raw payloads.
    */
-  chat(
+  chat(req: ChatRequest, options: ProviderCallOptions): Promise<ChatMessage>;
+  /**
+   * Streaming chat completion. Yields incremental text deltas as they arrive
+   * from the upstream provider. Throws `ProviderError` (typed below) on any
+   * upstream failure, both before the stream opens and during iteration.
+   */
+  chatStream(
     req: ChatRequest,
-    options: { apiKey: string; baseUrl?: string }
-  ): Promise<ChatMessage>;
+    options: ProviderCallOptions
+  ): AsyncIterable<ChatStreamChunk>;
 }
 
 export type ProviderErrorCode =

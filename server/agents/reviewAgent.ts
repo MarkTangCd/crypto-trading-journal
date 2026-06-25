@@ -180,3 +180,77 @@ export async function listReviewMessages(params: {
 }): Promise<ReviewMessage[]> {
   return loadThread(params.conversationId, params.userId);
 }
+
+export type StreamEvent =
+  | { type: "delta"; text: string }
+  | { type: "done"; messageId: number }
+  | { type: "error"; message: string };
+
+/**
+ * Streaming counterpart to `sendUserMessage`. Persists the user turn BEFORE
+ * opening the upstream stream so a mid-stream client disconnect still
+ * preserves what the user typed. On stream-end success the assembled
+ * assistant turn is persisted and a final `done` event is yielded; on
+ * upstream failure no assistant turn is persisted and a single `error` event
+ * is yielded instead.
+ *
+ * The caller (Express SSE handler) is expected to pass an `AbortSignal`
+ * that fires when the client disconnects, so the upstream fetch is
+ * cancelled rather than billed to completion.
+ */
+export async function* streamUserMessage(params: {
+  userId: number;
+  conversationId: number;
+  userText: string;
+  signal?: AbortSignal;
+}): AsyncGenerator<StreamEvent> {
+  const handle = await resolveProvider(params.userId);
+
+  const existing = await loadThread(params.conversationId, params.userId);
+  if (existing.length === 0) {
+    throw new ProviderError("AUTH", "对话不存在或不属于当前用户。");
+  }
+
+  // Persist user turn FIRST so it survives a mid-stream disconnect.
+  await appendMessage({
+    conversationId: params.conversationId,
+    role: "user",
+    content: serialize(params.userText),
+  });
+
+  const history: ChatMessage[] = [
+    ...toChatHistory(existing),
+    { role: "user", content: params.userText },
+  ];
+
+  let assembled = "";
+  try {
+    for await (const chunk of handle.provider.chatStream(
+      { model: handle.provider.defaultModel, messages: history },
+      { apiKey: handle.apiKey, baseUrl: handle.baseUrl, signal: params.signal }
+    )) {
+      assembled += chunk.delta;
+      yield { type: "delta", text: chunk.delta };
+    }
+  } catch (error) {
+    const message =
+      error instanceof ProviderError
+        ? error.message
+        : "助手回复失败，请稍后再试。";
+    yield { type: "error", message };
+    return;
+  }
+
+  if (assembled.length === 0) {
+    yield { type: "error", message: "助手没有返回任何内容，请稍后再试。" };
+    return;
+  }
+
+  const persisted = await appendMessage({
+    conversationId: params.conversationId,
+    role: "assistant",
+    content: serialize(assembled),
+  });
+
+  yield { type: "done", messageId: persisted.id };
+}
