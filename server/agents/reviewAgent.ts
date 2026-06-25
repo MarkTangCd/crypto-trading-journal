@@ -1,10 +1,12 @@
 import {
   appendMessage,
   getAgentSettings,
+  getConversationById,
+  getConversationByTransaction,
   getOrCreateConversation,
   listMessages,
 } from "../db";
-import type { Message, Transaction } from "../../drizzle/schema";
+import type { Conversation, Message, Transaction } from "../../drizzle/schema";
 import { buildInitialMessages } from "./contextBuilder";
 import { getProvider } from "./providers/registry";
 import {
@@ -29,21 +31,18 @@ interface ResolvedProvider {
   baseUrl?: string;
 }
 
-async function resolveProvider(userId: number): Promise<ResolvedProvider> {
-  const settings = await getAgentSettings(userId);
-  const requestedId = settings?.defaultProvider ?? FALLBACK_PROVIDER_ID;
-
-  let provider = getProvider(requestedId);
-  if (!provider) {
-    console.warn(
-      `[ReviewAgent] unknown provider "${requestedId}" in agent_settings; falling back to ${FALLBACK_PROVIDER_ID}.`
-    );
-    provider = getProvider(FALLBACK_PROVIDER_ID);
-  }
+// Resolve a provider strictly by id. Throws ProviderError("AUTH", ...) when
+// the id is missing from the registry or the user has no key configured for
+// it; the router maps that to TRPCError("BAD_REQUEST", ...).
+async function resolveProviderById(
+  userId: number,
+  providerId: string
+): Promise<ResolvedProvider> {
+  const provider = getProvider(providerId);
   if (!provider) {
     throw new ProviderError(
       "AUTH",
-      "未注册任何可用的 provider，请联系维护者。"
+      `未知的 provider "${providerId}"，请在 Settings 页重新选择。`
     );
   }
 
@@ -59,6 +58,34 @@ async function resolveProvider(userId: number): Promise<ResolvedProvider> {
     apiKey,
     baseUrl: await getProviderBaseUrl(userId, provider.id),
   };
+}
+
+// Resolve the user's default provider from agent_settings, falling back to
+// FALLBACK_PROVIDER_ID. Used as the implicit choice when no explicit
+// providerId is supplied at conversation-open time.
+async function resolveDefaultProvider(
+  userId: number
+): Promise<ResolvedProvider> {
+  const settings = await getAgentSettings(userId);
+  const requestedId = settings?.defaultProvider ?? FALLBACK_PROVIDER_ID;
+
+  try {
+    return await resolveProviderById(userId, requestedId);
+  } catch (error) {
+    // Unknown id in agent_settings (e.g. a removed provider) → fall back.
+    if (
+      error instanceof ProviderError &&
+      error.code === "AUTH" &&
+      requestedId !== FALLBACK_PROVIDER_ID &&
+      !getProvider(requestedId)
+    ) {
+      console.warn(
+        `[ReviewAgent] unknown provider "${requestedId}" in agent_settings; falling back to ${FALLBACK_PROVIDER_ID}.`
+      );
+      return resolveProviderById(userId, FALLBACK_PROVIDER_ID);
+    }
+    throw error;
+  }
 }
 
 function serialize(text: string): string {
@@ -97,16 +124,54 @@ async function loadThread(
 }
 
 /**
+ * Look up an existing conversation for a trade without creating one. Returns
+ * `{ conversation, messages }` or null. Used by the client to render the
+ * provider picker before the first turn commits.
+ */
+export async function getActiveConversation(params: {
+  userId: number;
+  transactionId: number;
+}): Promise<{
+  conversation: Conversation;
+  messages: ReviewMessage[];
+} | null> {
+  const conversation = await getConversationByTransaction(
+    params.userId,
+    params.transactionId
+  );
+  if (!conversation) return null;
+  return {
+    conversation,
+    messages: await loadThread(conversation.id, params.userId),
+  };
+}
+
+/**
  * Open a per-trade conversation. The caller must have already verified that
  * `transaction` belongs to `userId`. Returns the existing thread on
  * subsequent opens; seeds a fresh thread (system + user context + initial
  * assistant reply) on the first call.
+ *
+ * Provider precedence:
+ *   1. existing conversation → `conversation.providerId` (locked per-trade)
+ *   2. caller-supplied `params.providerId` (explicit override on first open)
+ *   3. `agent_settings.defaultProvider` (implicit fallback)
  */
 export async function openConversation(params: {
   userId: number;
   transaction: Transaction;
+  providerId?: string;
 }): Promise<{ conversationId: number; messages: ReviewMessage[] }> {
-  const handle = await resolveProvider(params.userId);
+  const existingConversation = await getConversationByTransaction(
+    params.userId,
+    params.transaction.id
+  );
+
+  const handle = existingConversation
+    ? await resolveProviderById(params.userId, existingConversation.providerId)
+    : params.providerId
+      ? await resolveProviderById(params.userId, params.providerId)
+      : await resolveDefaultProvider(params.userId);
 
   const conversation = await getOrCreateConversation({
     userId: params.userId,
@@ -153,17 +218,38 @@ export async function openConversation(params: {
   };
 }
 
+async function resolveConversationProvider(
+  userId: number,
+  conversationId: number
+): Promise<{ handle: ResolvedProvider; conversation: Conversation }> {
+  const conversation = await getConversationById(conversationId, userId);
+  if (!conversation) {
+    throw new ProviderError("AUTH", "对话不存在或不属于当前用户。");
+  }
+  return {
+    handle: await resolveProviderById(userId, conversation.providerId),
+    conversation,
+  };
+}
+
 /**
  * Append a user turn, ask the provider for a reply, append it, return the
  * full thread. Caller must have already verified that `conversationId`
  * belongs to `userId` (e.g. via the router's ownership guard).
+ *
+ * Provider is resolved from `conversation.providerId` so an old conversation
+ * keeps streaming via its original provider even if the user later changed
+ * their default in Settings.
  */
 export async function sendUserMessage(params: {
   userId: number;
   conversationId: number;
   userText: string;
 }): Promise<{ messages: ReviewMessage[] }> {
-  const handle = await resolveProvider(params.userId);
+  const { handle } = await resolveConversationProvider(
+    params.userId,
+    params.conversationId
+  );
 
   const existing = await loadThread(params.conversationId, params.userId);
   if (existing.length === 0) {
@@ -225,7 +311,10 @@ export async function* streamUserMessage(params: {
   userText: string;
   signal?: AbortSignal;
 }): AsyncGenerator<StreamEvent> {
-  const handle = await resolveProvider(params.userId);
+  const { handle } = await resolveConversationProvider(
+    params.userId,
+    params.conversationId
+  );
 
   const existing = await loadThread(params.conversationId, params.userId);
   if (existing.length === 0) {

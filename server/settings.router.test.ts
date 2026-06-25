@@ -79,6 +79,7 @@ vi.mock("./agents/providers/gemini", () => ({
 
 const { appRouter } = await import("./routers");
 const secrets = await import("./agents/secrets");
+const db = await import("./db");
 
 const fakeUser = {
   id: 1,
@@ -245,6 +246,57 @@ describe("settings router", () => {
         // @ts-expect-error intentional invalid input
         caller.settings.setProviderConfig({ providerId: "gpt-9", apiKey: "x" })
       ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    });
+  });
+
+  describe("getDefaultProvider", () => {
+    it("returns the stored default provider", async () => {
+      vi.mocked(db.getAgentSettings).mockResolvedValueOnce({
+        userId: 1,
+        defaultProvider: "kimi",
+        providerConfigs: "",
+        enabledSkillIds: [],
+        updatedAt: new Date(),
+      });
+      const caller = appRouter.createCaller(makeCtx());
+
+      const result = await caller.settings.getDefaultProvider();
+
+      expect(result).toEqual({ defaultProvider: "kimi" });
+    });
+
+    it("falls back to deepseek when no settings row exists yet", async () => {
+      vi.mocked(db.getAgentSettings).mockResolvedValueOnce(undefined);
+      const caller = appRouter.createCaller(makeCtx());
+
+      const result = await caller.settings.getDefaultProvider();
+
+      expect(result).toEqual({ defaultProvider: "deepseek" });
+    });
+  });
+
+  describe("setDefaultProvider", () => {
+    it("upserts the chosen provider scoped to ctx.user.id", async () => {
+      const caller = appRouter.createCaller(makeCtx());
+
+      const result = await caller.settings.setDefaultProvider({
+        providerId: "glm",
+      });
+
+      expect(result).toEqual({ success: true });
+      expect(db.upsertAgentSettings).toHaveBeenCalledWith(1, {
+        defaultProvider: "glm",
+      });
+    });
+
+    it("rejects unknown providerId via zod enum guard", async () => {
+      const caller = appRouter.createCaller(makeCtx());
+
+      await expect(
+        // @ts-expect-error intentional invalid input
+        caller.settings.setDefaultProvider({ providerId: "gpt-9" })
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      expect(db.upsertAgentSettings).not.toHaveBeenCalled();
     });
   });
 });

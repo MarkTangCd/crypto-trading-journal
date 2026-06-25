@@ -25,6 +25,15 @@ const fakeUser = {
 
 vi.mock("./db", () => ({
   getOrCreateAnonymousUser: vi.fn().mockResolvedValue(fakeUser),
+  getConversationById: vi.fn().mockResolvedValue({
+    id: 99,
+    userId: 1,
+    transactionId: 42,
+    providerId: "deepseek",
+    model: "deepseek-chat",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
   listMessages: vi.fn().mockResolvedValue([
     {
       id: 1,

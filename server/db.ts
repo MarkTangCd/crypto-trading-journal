@@ -964,6 +964,43 @@ export async function getAccountCount(userId: number): Promise<number> {
 
 // ============ Review Agent: conversations / messages / settings ============
 
+export async function getConversationById(
+  id: number,
+  userId: number
+): Promise<Conversation | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const rows = await db
+    .select()
+    .from(conversations)
+    .where(and(eq(conversations.id, id), eq(conversations.userId, userId)))
+    .limit(1);
+
+  return rows[0];
+}
+
+export async function getConversationByTransaction(
+  userId: number,
+  transactionId: number
+): Promise<Conversation | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const rows = await db
+    .select()
+    .from(conversations)
+    .where(
+      and(
+        eq(conversations.userId, userId),
+        eq(conversations.transactionId, transactionId)
+      )
+    )
+    .limit(1);
+
+  return rows[0];
+}
+
 export async function getOrCreateConversation(params: {
   userId: number;
   transactionId: number;

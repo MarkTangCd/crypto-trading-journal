@@ -3,6 +3,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { trpc } from "@/lib/trpc";
+import { DefaultProviderSection } from "./DefaultProviderSection";
 import { ProviderRow } from "./ProviderRow";
 
 interface Draft {
@@ -94,6 +95,8 @@ export function AgentProviderSection() {
           复盘对话。密钥本地 AES-GCM 加密，永远不会通过 api 回传。
         </p>
       </div>
+
+      <DefaultProviderSection />
 
       <div className="space-y-5">
         {providers.map(meta => {

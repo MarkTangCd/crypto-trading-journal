@@ -20,9 +20,12 @@ vi.mock("./db", () => ({
     .mockResolvedValue({ currentBalance: "1100.00", consecutiveLosses: 1 }),
   getTransactionsByUserId: vi.fn().mockResolvedValue([]),
   getOrCreateConversation: vi.fn(),
+  getConversationById: vi.fn(),
+  getConversationByTransaction: vi.fn().mockResolvedValue(undefined),
   appendMessage: vi.fn().mockResolvedValue(undefined),
   listMessages: vi.fn(),
   getAgentSettings: vi.fn().mockResolvedValue(undefined),
+  upsertAgentSettings: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("./agents/secrets", () => ({
@@ -46,6 +49,44 @@ vi.mock("./agents/providers/deepseek", async () => {
   };
 });
 
+vi.mock("./agents/providers/kimi", () => ({
+  kimiProvider: {
+    id: "kimi",
+    defaultModel: "moonshot-v1-128k",
+    chat: vi
+      .fn()
+      .mockResolvedValue({ role: "assistant", content: "initial kimi reply" }),
+    chatStream: vi.fn(),
+  },
+}));
+
+vi.mock("./agents/providers/glm", () => ({
+  glmProvider: {
+    id: "glm",
+    defaultModel: "glm-4.5",
+    chat: vi.fn(),
+    chatStream: vi.fn(),
+  },
+}));
+
+vi.mock("./agents/providers/openai", () => ({
+  openaiProvider: {
+    id: "openai",
+    defaultModel: "gpt-5",
+    chat: vi.fn(),
+    chatStream: vi.fn(),
+  },
+}));
+
+vi.mock("./agents/providers/gemini", () => ({
+  geminiProvider: {
+    id: "gemini",
+    defaultModel: "gemini-2.5-flash",
+    chat: vi.fn(),
+    chatStream: vi.fn(),
+  },
+}));
+
 // Stub the K-line window so router tests don't hit the real CoinAnk endpoint
 // when buildInitialMessages runs.
 vi.mock("./_core/coinank", () => ({
@@ -59,6 +100,7 @@ vi.mock("./_core/coinank", () => ({
 const { appRouter } = await import("./routers");
 const db = await import("./db");
 const { deepseekProvider } = await import("./agents/providers/deepseek");
+const { kimiProvider } = await import("./agents/providers/kimi");
 const secrets = await import("./agents/secrets");
 const { ProviderError } = await import("./agents/providers/types");
 
@@ -143,9 +185,25 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(secrets.getProviderApiKey).mockResolvedValue("test-key");
   vi.mocked(secrets.getProviderBaseUrl).mockResolvedValue(undefined);
+  vi.mocked(db.getConversationByTransaction).mockResolvedValue(undefined);
+  // Default: send/stream paths look up the conversation row and find a
+  // deepseek-locked one. Individual tests override when they need otherwise.
+  vi.mocked(db.getConversationById).mockResolvedValue({
+    id: 99,
+    userId: 1,
+    transactionId: 42,
+    providerId: "deepseek",
+    model: "deepseek-chat",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
   vi.mocked(deepseekProvider.chat).mockResolvedValue({
     role: "assistant",
     content: "initial reply",
+  });
+  vi.mocked(kimiProvider.chat).mockResolvedValue({
+    role: "assistant",
+    content: "initial kimi reply",
   });
 });
 
@@ -227,6 +285,104 @@ describe("reviewAgent router", () => {
         code: "BAD_REQUEST",
         message: expect.stringContaining("api key"),
       });
+    });
+
+    it("respects an explicit providerId override on first open", async () => {
+      vi.mocked(db.getTransactionById).mockResolvedValue(fakeTransaction);
+      vi.mocked(db.getConversationByTransaction).mockResolvedValue(undefined);
+      vi.mocked(db.getOrCreateConversation).mockResolvedValue({
+        id: 99,
+        userId: 1,
+        transactionId: 42,
+        providerId: "kimi",
+        model: "moonshot-v1-128k",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      vi.mocked(db.listMessages)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([sysRow, userCtxRow, assistantReply]);
+
+      const caller = appRouter.createCaller(makeCtx());
+      const result = await caller.reviewAgent.open({
+        transactionId: 42,
+        providerId: "kimi",
+      });
+
+      expect(result.conversationId).toBe(99);
+      // kimi handled the seed reply; deepseek must NOT have been called.
+      expect(kimiProvider.chat).toHaveBeenCalledOnce();
+      expect(deepseekProvider.chat).not.toHaveBeenCalled();
+      // getOrCreateConversation persisted kimi as the conversation provider.
+      expect(db.getOrCreateConversation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          providerId: "kimi",
+          model: "moonshot-v1-128k",
+        })
+      );
+    });
+
+    it("returns BAD_REQUEST mentioning the provider id when its key is missing", async () => {
+      vi.mocked(db.getTransactionById).mockResolvedValue(fakeTransaction);
+      vi.mocked(db.getConversationByTransaction).mockResolvedValue(undefined);
+      vi.mocked(secrets.getProviderApiKey).mockImplementation(
+        async (_userId, providerId) =>
+          providerId === "kimi" ? undefined : "test-key"
+      );
+
+      const caller = appRouter.createCaller(makeCtx());
+
+      await expect(
+        caller.reviewAgent.open({ transactionId: 42, providerId: "kimi" })
+      ).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+        message: expect.stringContaining("kimi"),
+      });
+    });
+
+    it("locks to the existing conversation's providerId and ignores the override", async () => {
+      vi.mocked(db.getTransactionById).mockResolvedValue(fakeTransaction);
+      // Existing conversation was opened on deepseek; caller now passes kimi.
+      vi.mocked(db.getConversationByTransaction).mockResolvedValue({
+        id: 99,
+        userId: 1,
+        transactionId: 42,
+        providerId: "deepseek",
+        model: "deepseek-chat",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      vi.mocked(db.getOrCreateConversation).mockResolvedValue({
+        id: 99,
+        userId: 1,
+        transactionId: 42,
+        providerId: "deepseek",
+        model: "deepseek-chat",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      vi.mocked(db.listMessages).mockResolvedValue([
+        sysRow,
+        userCtxRow,
+        assistantReply,
+      ]);
+
+      const caller = appRouter.createCaller(makeCtx());
+      await caller.reviewAgent.open({
+        transactionId: 42,
+        providerId: "kimi",
+      });
+
+      // Neither provider was called (existing thread short-circuit), but the
+      // important check is that the override didn't flip the lock to kimi.
+      expect(kimiProvider.chat).not.toHaveBeenCalled();
+      expect(deepseekProvider.chat).not.toHaveBeenCalled();
+      // getOrCreateConversation, when called, was called with deepseek — not
+      // kimi from the override.
+      const calls = vi.mocked(db.getOrCreateConversation).mock.calls;
+      for (const call of calls) {
+        expect(call[0].providerId).toBe("deepseek");
+      }
     });
 
     it("maps a provider UPSTREAM failure to INTERNAL_SERVER_ERROR", async () => {

@@ -41,6 +41,7 @@ import {
 } from "@shared/const";
 import { fetchCandles } from "./_core/coinank";
 import {
+  getActiveConversation,
   listReviewMessages,
   openConversation,
   sendUserMessage,
@@ -48,6 +49,7 @@ import {
 import { ProviderError } from "./agents/providers/types";
 import { listProviders } from "./agents/providers/registry";
 import { getProviderConfig, setProviderConfig } from "./agents/secrets";
+import { getAgentSettings, upsertAgentSettings } from "./db";
 
 // Derived from the static registry at module load. z.enum needs a non-empty
 // tuple, so cast after asserting at least one provider exists.
@@ -741,12 +743,65 @@ export const appRouter = router({
         });
         return { success: true };
       }),
+
+    // Returns the user's stored default provider id. Falls back to "deepseek"
+    // (matches `agentSettings.defaultProvider` column default) when no row
+    // exists yet, so the client always gets a non-null id to render against.
+    getDefaultProvider: publicProcedure.query(async ({ ctx }) => {
+      const settings = await getAgentSettings(ctx.user.id);
+      return { defaultProvider: settings?.defaultProvider ?? "deepseek" };
+    }),
+
+    // Writes the user's default provider. NO hasKey check on purpose — the
+    // user may be about to fill in that provider's key. The UI surfaces a
+    // friendly hint instead.
+    setDefaultProvider: publicProcedure
+      .input(z.object({ providerId: providerIdSchema }))
+      .mutation(async ({ ctx, input }) => {
+        await upsertAgentSettings(ctx.user.id, {
+          defaultProvider: input.providerId,
+        });
+        return { success: true };
+      }),
   }),
 
   // AI review agent — per-trade conversation backed by a ChatProvider.
   reviewAgent: router({
-    open: publicProcedure
+    // Lightweight lookup used by the client to decide whether to render the
+    // provider picker (no conversation yet) or the locked label (already
+    // open). Never creates a conversation row.
+    getActive: publicProcedure
       .input(z.object({ transactionId: z.number().int().positive() }))
+      .query(async ({ ctx, input }) => {
+        const transaction = await getTransactionById(
+          input.transactionId,
+          ctx.user.id
+        );
+        if (!transaction) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Transaction not found or not owned by user",
+          });
+        }
+        const active = await getActiveConversation({
+          userId: ctx.user.id,
+          transactionId: input.transactionId,
+        });
+        if (!active) return null;
+        return {
+          conversationId: active.conversation.id,
+          providerId: active.conversation.providerId,
+          messages: active.messages,
+        };
+      }),
+
+    open: publicProcedure
+      .input(
+        z.object({
+          transactionId: z.number().int().positive(),
+          providerId: providerIdSchema.optional(),
+        })
+      )
       .mutation(async ({ ctx, input }) => {
         const transaction = await getTransactionById(
           input.transactionId,
@@ -759,7 +814,11 @@ export const appRouter = router({
           });
         }
         return runAgent(() =>
-          openConversation({ userId: ctx.user.id, transaction })
+          openConversation({
+            userId: ctx.user.id,
+            transaction,
+            providerId: input.providerId,
+          })
         );
       }),
 
