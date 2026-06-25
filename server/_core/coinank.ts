@@ -26,11 +26,20 @@ export interface Candle {
   high: number;
   low: number;
   close: number;
+  volume?: number;
 }
 
 interface FetchCandlesInput {
   tradingPair: string;
   timeFrame: string;
+  // ms timestamp; defaults to Date.now(). Combined with `side` decides which
+  // side of `anchor` the returned window sits on.
+  anchor?: number;
+  // "to"   → candles ending at / before anchor (default; matches the live
+  //          chart's "latest 100" behaviour when anchor = Date.now()).
+  // "from" → candles starting at / after anchor.
+  side?: "to" | "from";
+  size?: number;
 }
 
 // CoinAnk row tuple shape — column order is openTime, closeTime, open,
@@ -38,7 +47,7 @@ interface FetchCandlesInput {
 // comes before high/low, not after, so we map by index rather than spread.
 function mapRow(row: unknown[]): Candle | null {
   if (!Array.isArray(row) || row.length < 6) return null;
-  const [openTime, , open, close, high, low] = row;
+  const [openTime, , open, close, high, low, baseVol] = row;
   if (
     typeof openTime !== "number" ||
     typeof open !== "number" ||
@@ -54,6 +63,7 @@ function mapRow(row: unknown[]): Candle | null {
     high,
     low,
     close,
+    ...(typeof baseVol === "number" ? { volume: baseVol } : {}),
   };
 }
 
@@ -69,13 +79,16 @@ export async function fetchCandles(
   }
 
   const symbol = input.tradingPair.toUpperCase();
+  const size = input.size ?? DEFAULT_SIZE;
+  const side = input.side ?? "to";
+  const anchor = input.anchor ?? Date.now();
   const url =
     `${COINANK_KLINE_URL}?exchange=${DEFAULT_EXCHANGE}` +
     `&symbol=${encodeURIComponent(symbol)}` +
     `&interval=${interval}` +
-    `&size=${DEFAULT_SIZE}` +
-    `&side=to` +
-    `&ts=${Date.now()}`;
+    `&size=${size}` +
+    `&side=${side}` +
+    `&ts=${anchor}`;
 
   let res: Response;
   try {
@@ -113,6 +126,66 @@ export async function fetchCandles(
   // consume the array directly without an extra .reverse() at the seam.
   candles.sort((a, b) => a.time - b.time);
   return candles;
+}
+
+export interface CandleWindow {
+  candles: Candle[];
+  // Index of the first candle whose openTime >= anchor (i.e. the candle the
+  // trade was opened in, or the next one if anchor falls inside a closed
+  // candle). null when no after-candle exists yet.
+  entryIndex: number | null;
+  before: number;
+  after: number;
+}
+
+/**
+ * Fetches up to `halfSize` candles on each side of `anchorMs` at `timeFrame`,
+ * merges + dedupes them, and tags the entry index. When fewer than `halfSize`
+ * after-candles exist (recent trade), `after` reflects the actual count and
+ * the rest of the message still ships.
+ */
+export async function fetchCandleWindowAround(input: {
+  tradingPair: string;
+  timeFrame: string;
+  anchorMs: number;
+  halfSize?: number;
+}): Promise<CandleWindow> {
+  const halfSize = input.halfSize ?? DEFAULT_SIZE;
+  const [before, after] = await Promise.all([
+    fetchCandles({
+      tradingPair: input.tradingPair,
+      timeFrame: input.timeFrame,
+      anchor: input.anchorMs,
+      side: "to",
+      size: halfSize,
+    }),
+    fetchCandles({
+      tradingPair: input.tradingPair,
+      timeFrame: input.timeFrame,
+      anchor: input.anchorMs,
+      side: "from",
+      size: halfSize,
+    }),
+  ]);
+
+  const byTime = new Map<number, Candle>();
+  for (const c of before) byTime.set(c.time, c);
+  for (const c of after) byTime.set(c.time, c);
+  const candles = [...byTime.values()].sort((a, b) => a.time - b.time);
+
+  const anchorSec = Math.floor(input.anchorMs / 1000);
+  let entryIndex: number | null = candles.findIndex(c => c.time >= anchorSec);
+  if (entryIndex === -1) entryIndex = null;
+
+  const beforeCount = entryIndex ?? candles.length;
+  const afterCount = entryIndex === null ? 0 : candles.length - entryIndex;
+
+  return {
+    candles,
+    entryIndex,
+    before: beforeCount,
+    after: afterCount,
+  };
 }
 
 export const __testing__ = { INTERVAL_MAP, mapRow };

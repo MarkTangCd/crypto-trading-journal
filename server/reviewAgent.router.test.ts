@@ -45,6 +45,15 @@ vi.mock("./agents/providers/deepseek", async () => {
   };
 });
 
+// Stub the K-line window so router tests don't hit the real CoinAnk endpoint
+// when buildInitialMessages runs.
+vi.mock("./_core/coinank", () => ({
+  fetchCandles: vi.fn().mockResolvedValue([]),
+  fetchCandleWindowAround: vi
+    .fn()
+    .mockResolvedValue({ candles: [], entryIndex: null, before: 0, after: 0 }),
+}));
+
 // Import after mocks so the router resolves them.
 const { appRouter } = await import("./routers");
 const db = await import("./db");

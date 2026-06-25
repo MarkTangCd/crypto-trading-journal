@@ -5,8 +5,8 @@ title: >-
   deepseek)
 status: Done
 assignee: []
-created_date: '2026-06-24 14:20'
-updated_date: '2026-06-24 14:43'
+created_date: "2026-06-24 14:20"
+updated_date: "2026-06-24 14:43"
 labels:
   - ai-agent
   - phase-1
@@ -30,6 +30,7 @@ ordinal: 16000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
+
 ## Why
 
 Bring the agent into the TransactionDetail page as a right-side drawer. v1 is non-streaming, deepseek only, no tools — the goal is to prove end-to-end: open trade → open drawer → see initial AI analysis → chat → close.
@@ -57,7 +58,9 @@ Bring the agent into the TransactionDetail page as a right-side drawer. v1 is no
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
+
 <!-- AC:BEGIN -->
+
 - [x] #1 TransactionDetail page renders an AgentDrawerToggle that opens AgentDrawer; closing the drawer keeps conversation persisted
 - [x] #2 Opening the drawer for the first time triggers reviewAgent.open, which seeds the conversation and returns the initial assistant message
 - [x] #3 Sending a user message disables the composer until the assistant reply arrives and renders both messages in order
@@ -71,6 +74,7 @@ Bring the agent into the TransactionDetail page as a right-side drawer. v1 is no
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
+
 ## Summary
 
 Wired the AI review drawer into TransactionDetail. Three new client components (all sub-200 LOC) split between toggle, drawer shell + composer, and message list. The drawer reads `settings.getProviderConfig` to gate its content: missing key → friendly empty state linking to Settings; configured → lazy-fire `reviewAgent.open` on first show (idempotent server-side), then `reviewAgent.list` for the thread + `reviewAgent.send` for new turns.
