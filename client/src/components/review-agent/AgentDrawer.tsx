@@ -12,12 +12,33 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Link } from "wouter";
-import { AgentMessageList } from "./AgentMessageList";
+import { AgentMessageList, type ReviewMessage } from "./AgentMessageList";
+import { useReviewStream, type StreamPending } from "./useReviewStream";
 
 interface Props {
   transactionId: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+}
+
+function withPending(
+  canonical: ReviewMessage[],
+  pending: StreamPending | null
+): ReviewMessage[] {
+  if (!pending) return canonical;
+  const list: ReviewMessage[] = [
+    ...canonical,
+    { id: -1, role: "user", text: pending.userText, createdAt: 0 },
+  ];
+  if (pending.assistantText) {
+    list.push({
+      id: -2,
+      role: "assistant",
+      text: pending.assistantText,
+      createdAt: 0,
+    });
+  }
+  return list;
 }
 
 export function AgentDrawer({ transactionId, open, onOpenChange }: Props) {
@@ -41,31 +62,41 @@ export function AgentDrawer({ transactionId, open, onOpenChange }: Props) {
     { enabled: conversationId !== null }
   );
 
-  const sendMutation = trpc.reviewAgent.send.useMutation({
-    onSuccess: () => {
+  const invalidateThread = () => {
+    if (conversationId !== null) {
+      utils.reviewAgent.list.invalidate({ conversationId });
+    }
+  };
+
+  const stream = useReviewStream({
+    conversationId,
+    onDone: () => {
       setDraft("");
-      if (conversationId !== null) {
-        utils.reviewAgent.list.invalidate({ conversationId });
-      }
+      invalidateThread();
     },
-    onError: error => toast.error(error.message || "发送失败"),
+    onError: message => {
+      toast.error(message || "助手回复失败");
+      invalidateThread();
+    },
   });
 
   const seededRef = useRef(false);
   useEffect(() => {
     if (!open) {
       seededRef.current = false;
+      if (stream.isStreaming) stream.stop();
       return;
     }
     if (!hasKey || seededRef.current || openMutation.isPending) return;
     seededRef.current = true;
     openMutation.mutate({ transactionId });
-  }, [open, hasKey, transactionId, openMutation]);
+  }, [open, hasKey, transactionId, openMutation, stream]);
 
   const handleSend = () => {
     const text = draft.trim();
-    if (!text || conversationId === null) return;
-    sendMutation.mutate({ conversationId, userText: text });
+    if (!text || conversationId === null || stream.isStreaming) return;
+    setDraft("");
+    stream.start(text);
   };
 
   const handleKey = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -75,13 +106,21 @@ export function AgentDrawer({ transactionId, open, onOpenChange }: Props) {
     }
   };
 
-  const messages =
+  const handleStop = () => {
+    stream.stop();
+    invalidateThread();
+  };
+
+  const canonical: ReviewMessage[] =
     listQuery.data ??
-    (openMutation.data?.messages as typeof listQuery.data) ??
+    (openMutation.data?.messages as ReviewMessage[] | undefined) ??
     [];
+  const messages = withPending(canonical, stream.pending);
   const isLoadingMessages =
     openMutation.isPending || (listQuery.isLoading && conversationId !== null);
-  const isWaiting = isLoadingMessages || sendMutation.isPending;
+  // "thinking" stays on until the first delta — avoids an empty assistant bubble.
+  const isWaiting =
+    isLoadingMessages || (stream.isStreaming && !stream.pending?.assistantText);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -119,23 +158,21 @@ export function AgentDrawer({ transactionId, open, onOpenChange }: Props) {
               onKeyDown={handleKey}
               placeholder="问 agent…（⌘+Enter 发送）"
               rows={3}
-              disabled={conversationId === null || sendMutation.isPending}
+              disabled={conversationId === null || stream.isStreaming}
             />
             <div className="flex justify-end">
-              <Button
-                onClick={handleSend}
-                disabled={
-                  !draft.trim() ||
-                  conversationId === null ||
-                  sendMutation.isPending
-                }
-              >
-                {sendMutation.isPending ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  "发送"
-                )}
-              </Button>
+              {stream.isStreaming ? (
+                <Button variant="outline" onClick={handleStop}>
+                  停止
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleSend}
+                  disabled={!draft.trim() || conversationId === null}
+                >
+                  发送
+                </Button>
+              )}
             </div>
           </div>
         )}
