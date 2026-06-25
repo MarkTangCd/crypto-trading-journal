@@ -172,3 +172,101 @@ export const accounts = sqliteTable("accounts", {
 
 export type Account = typeof accounts.$inferSelect;
 export type InsertAccount = typeof accounts.$inferInsert;
+
+/**
+ * Per-trade AI review conversation. One row per (userId, transactionId).
+ */
+export const conversations = sqliteTable(
+  "conversations",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** Foreign key to users table */
+    userId: integer("userId").notNull(),
+    /** Foreign key to transactions table */
+    transactionId: integer("transactionId").notNull(),
+    /** Provider id, e.g. "deepseek" */
+    providerId: text("providerId").notNull(),
+    /** Model name passed to the provider, e.g. "deepseek-chat" */
+    model: text("model").notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" })
+      .default(sql`(unixepoch() * 1000)`)
+      .notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" })
+      .default(sql`(unixepoch() * 1000)`)
+      .notNull(),
+  },
+  table => [
+    // Lookup: open/get-or-create scans by (userId, transactionId).
+    index("conversations_user_transaction_idx").on(
+      table.userId,
+      table.transactionId
+    ),
+  ]
+);
+
+export type Conversation = typeof conversations.$inferSelect;
+export type InsertConversation = typeof conversations.$inferInsert;
+
+/**
+ * Single message within a review conversation.
+ * Content holds a JSON payload (text, tool calls, tool results).
+ */
+export const messages = sqliteTable(
+  "messages",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** Foreign key to conversations table */
+    conversationId: integer("conversationId").notNull(),
+    /** Speaker role */
+    role: text("role")
+      .$type<"system" | "user" | "assistant" | "tool">()
+      .notNull(),
+    /** JSON-encoded payload */
+    content: text("content").notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" })
+      .default(sql`(unixepoch() * 1000)`)
+      .notNull(),
+  },
+  table => [
+    check(
+      "messages_role_check",
+      sql`${table.role} in ('system', 'user', 'assistant', 'tool')`
+    ),
+    // Hot path: list a conversation's transcript ordered by createdAt.
+    index("messages_conversation_created_idx").on(
+      table.conversationId,
+      table.createdAt
+    ),
+  ]
+);
+
+export type Message = typeof messages.$inferSelect;
+export type InsertMessage = typeof messages.$inferInsert;
+
+/**
+ * Single-tenant agent configuration: default provider, per-provider configs
+ * (ciphertext blob keyed by providerId), and enabled skill ids.
+ */
+export const agentSettings = sqliteTable("agent_settings", {
+  /** Primary key — one row per user (single-tenant). */
+  userId: integer("userId").primaryKey(),
+  /** Default provider id, e.g. "deepseek". */
+  defaultProvider: text("defaultProvider").notNull().default("deepseek"),
+  /**
+   * Encrypted per-provider configs. Plaintext shape (post-decrypt):
+   * { [providerId]: { apiKey: string; baseUrl?: string } }
+   * Stored as ciphertext text; encryption owned by server/agents/secrets.ts.
+   */
+  providerConfigs: text("providerConfigs").notNull().default(""),
+  /** JSON array of enabled skill ids. */
+  enabledSkillIds: text("enabledSkillIds", { mode: "json" })
+    .$type<string[]>()
+    .notNull()
+    .default(sql`'[]'`),
+  updatedAt: integer("updatedAt", { mode: "timestamp_ms" })
+    .default(sql`(unixepoch() * 1000)`)
+    .notNull(),
+});
+
+export type AgentSettings = typeof agentSettings.$inferSelect;
+export type InsertAgentSettings = typeof agentSettings.$inferInsert;

@@ -109,3 +109,6 @@ temp/
 # Playwright outputs
 playwright-report/
 test-results/
+
+# Local-only state (agent master key, etc.)
+.local/

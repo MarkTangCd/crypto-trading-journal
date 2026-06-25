@@ -1,3 +1,4 @@
+import { AgentProviderSection } from "@/components/settings/AgentProviderSection";
 import { Link } from "wouter";
 
 export default function Settings() {
@@ -26,6 +27,8 @@ export default function Settings() {
           </Link>
         </div>
       </section>
+
+      <AgentProviderSection />
 
       <section>
         <p className="text-label">about</p>

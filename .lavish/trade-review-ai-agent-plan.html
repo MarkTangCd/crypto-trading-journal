@@ -1,0 +1,1547 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Trade Review AI Agent · 设计提案</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+
+    <style>
+      :root {
+        --paper: oklch(0.985 0 0);
+        --paper-2: oklch(0.965 0 0);
+        --ink: oklch(0.18 0 0);
+        --ink-2: oklch(0.32 0 0);
+        --mist: oklch(0.9 0 0);
+        --hairline: oklch(0.82 0 0);
+        --muted: oklch(0.48 0 0);
+        --win: oklch(0.5 0.13 150);
+        --loss: oklch(0.48 0.18 25);
+        --accent: oklch(0.45 0.14 250);
+        --warn: oklch(0.62 0.16 70);
+        font-family:
+          "IBM Plex Mono", "Noto Sans SC", ui-monospace, SFMono-Regular, Menlo,
+          Consolas, monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-size: 14px;
+        line-height: 1.7;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .page {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 64px 48px 96px;
+      }
+
+      .eyebrow {
+        text-transform: lowercase;
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        color: var(--muted);
+        font-weight: 500;
+      }
+      h1.title {
+        font-size: 44px;
+        line-height: 1.15;
+        font-weight: 500;
+        letter-spacing: -0.01em;
+        margin: 8px 0 0;
+      }
+      .lede {
+        margin: 14px 0 0;
+        color: var(--ink-2);
+        max-width: 78ch;
+        font-size: 14px;
+        line-height: 1.8;
+      }
+      h2.section {
+        font-size: 11px;
+        letter-spacing: 0.18em;
+        text-transform: lowercase;
+        color: var(--muted);
+        margin: 72px 0 18px;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      h2.section::before {
+        content: "";
+        width: 18px;
+        height: 1px;
+        background: var(--ink);
+      }
+      h3.sub {
+        font-size: 18px;
+        font-weight: 500;
+        margin: 0 0 6px;
+        letter-spacing: -0.005em;
+      }
+      .label {
+        text-transform: lowercase;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        color: var(--muted);
+        font-weight: 500;
+      }
+      .num {
+        font-variant-numeric: tabular-nums;
+      }
+      p {
+        margin: 0 0 10px;
+      }
+      code,
+      kbd {
+        font-family: inherit;
+        background: var(--paper-2);
+        padding: 1px 6px;
+        border: 1px solid var(--hairline);
+        font-size: 12.5px;
+      }
+      a {
+        color: var(--ink);
+        text-decoration-color: var(--hairline);
+        text-underline-offset: 3px;
+      }
+      hr.rule {
+        border: 0;
+        border-top: 1px solid var(--ink);
+        margin: 40px 0 0;
+      }
+
+      .meta-strip {
+        margin-top: 48px;
+        padding-top: 20px;
+        border-top: 1px solid var(--ink);
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 32px;
+      }
+      .meta-cell .label {
+        display: block;
+        margin-bottom: 6px;
+      }
+      .meta-cell .v {
+        font-size: 24px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.01em;
+        line-height: 1.2;
+      }
+
+      .grid-2 {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 28px;
+      }
+      .grid-3 {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 24px;
+      }
+
+      .pillar {
+        border-top: 1px solid var(--ink);
+        padding-top: 14px;
+      }
+      .pillar .label {
+        display: block;
+        margin-bottom: 8px;
+      }
+      .pillar p {
+        color: var(--ink-2);
+      }
+
+      /* current vs target */
+      .vs {
+        display: grid;
+        grid-template-columns: 1fr 32px 1fr;
+        gap: 0;
+        border-top: 1px solid var(--ink);
+        border-bottom: 1px solid var(--ink);
+      }
+      .vs > .col {
+        padding: 22px 24px;
+        min-width: 0;
+      }
+      .vs > .col:first-child {
+        border-right: 1px solid var(--hairline);
+      }
+      .vs > .col:last-child {
+        border-left: 1px solid var(--hairline);
+      }
+      .vs > .arrow {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        color: var(--muted);
+      }
+      .vs h4 {
+        margin: 0 0 14px;
+        font-size: 13px;
+        font-weight: 500;
+      }
+      .vs ul {
+        margin: 0;
+        padding-left: 18px;
+        color: var(--ink-2);
+      }
+      .vs ul li {
+        margin-bottom: 6px;
+      }
+
+      /* Mock UI */
+      .mock {
+        border: 1px solid var(--ink);
+        background: var(--paper);
+        padding: 0;
+        margin-top: 6px;
+        overflow: hidden;
+      }
+      .mock-window-bar {
+        padding: 10px 18px;
+        border-bottom: 1px solid var(--ink);
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: lowercase;
+        color: var(--muted);
+        background: var(--paper-2);
+      }
+      .mock-split {
+        display: grid;
+        grid-template-columns: 1.05fr 1fr;
+        min-height: 540px;
+      }
+      .mock-side {
+        padding: 22px 24px;
+        min-width: 0;
+      }
+      .mock-side.left {
+        border-right: 1px solid var(--hairline);
+      }
+
+      /* left: trade detail mock */
+      .pair-line {
+        display: flex;
+        align-items: baseline;
+        gap: 14px;
+        padding-bottom: 14px;
+        border-bottom: 1px solid var(--ink);
+      }
+      .pair-line .pair {
+        font-size: 22px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .pair-line .dir {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: lowercase;
+        padding: 2px 8px;
+        border: 1px solid var(--win);
+        color: var(--win);
+      }
+      .pair-line .time {
+        margin-left: auto;
+        color: var(--muted);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+      .number-row {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0;
+        border-bottom: 1px solid var(--hairline);
+      }
+      .number-cell {
+        padding: 14px 16px 14px 0;
+        min-width: 0;
+      }
+      .number-cell .lbl {
+        font-size: 10.5px;
+        text-transform: lowercase;
+        letter-spacing: 0.14em;
+        color: var(--muted);
+        margin-bottom: 4px;
+      }
+      .number-cell .val {
+        font-size: 20px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.01em;
+      }
+      .number-cell .val.win {
+        color: var(--win);
+      }
+      .number-cell .val.loss {
+        color: var(--loss);
+      }
+      .mock-section-h {
+        font-size: 10.5px;
+        text-transform: lowercase;
+        letter-spacing: 0.18em;
+        color: var(--muted);
+        margin: 18px 0 6px;
+      }
+      .mock-body {
+        color: var(--ink-2);
+        font-size: 13px;
+      }
+      .review-input {
+        margin-top: 6px;
+        border: 1px solid var(--hairline);
+        padding: 10px 12px;
+        min-height: 64px;
+        color: var(--muted);
+        font-size: 12.5px;
+      }
+
+      /* right: chat panel mock */
+      .chat-head {
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--ink);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .chat-head .ttl {
+        font-size: 13px;
+        font-weight: 500;
+      }
+      .chat-head .sub {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .provider-pill {
+        margin-left: auto;
+        font-size: 10.5px;
+        text-transform: lowercase;
+        letter-spacing: 0.14em;
+        padding: 3px 9px;
+        border: 1px solid var(--ink);
+        cursor: default;
+      }
+      .ctx-strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 12px 0 4px;
+      }
+      .ctx-pill {
+        font-size: 10.5px;
+        text-transform: lowercase;
+        letter-spacing: 0.12em;
+        padding: 3px 8px;
+        border: 1px solid var(--hairline);
+        color: var(--ink-2);
+      }
+      .ctx-pill.on {
+        border-color: var(--ink);
+        color: var(--ink);
+      }
+      .chat-thread {
+        margin-top: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .msg {
+        display: grid;
+        grid-template-columns: 60px 1fr;
+        gap: 14px;
+      }
+      .msg .who {
+        font-size: 10.5px;
+        text-transform: lowercase;
+        letter-spacing: 0.14em;
+        color: var(--muted);
+        padding-top: 2px;
+      }
+      .msg .body {
+        font-size: 13px;
+        color: var(--ink);
+        line-height: 1.7;
+      }
+      .msg .body .tool {
+        display: inline-block;
+        font-size: 11px;
+        text-transform: lowercase;
+        letter-spacing: 0.12em;
+        border: 1px solid var(--hairline);
+        padding: 1px 6px;
+        margin-right: 6px;
+        color: var(--muted);
+      }
+      .msg.user .body {
+        color: var(--ink-2);
+      }
+      .composer {
+        margin-top: 18px;
+        padding-top: 14px;
+        border-top: 1px solid var(--ink);
+        display: flex;
+        gap: 12px;
+        align-items: flex-end;
+      }
+      .composer .field-fake {
+        flex: 1;
+        border: 1px solid var(--hairline);
+        padding: 8px 10px;
+        font-size: 12.5px;
+        color: var(--muted);
+        min-height: 40px;
+      }
+      .composer .send {
+        font-size: 11px;
+        text-transform: lowercase;
+        letter-spacing: 0.14em;
+        padding: 8px 14px;
+        border: 1px solid var(--ink);
+        background: var(--ink);
+        color: var(--paper);
+      }
+
+      /* Diagram (mermaid) wrapper */
+      .diagram {
+        border: 1px solid var(--hairline);
+        padding: 16px 18px 8px;
+        margin-top: 6px;
+        background: var(--paper);
+        overflow-x: auto;
+      }
+      .diagram svg {
+        max-width: 100%;
+        height: auto !important;
+      }
+      .diagram .caption {
+        font-size: 11px;
+        color: var(--muted);
+        margin-bottom: 8px;
+        text-transform: lowercase;
+        letter-spacing: 0.14em;
+      }
+
+      /* provider table */
+      .provider-tbl {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 6px;
+        font-size: 13px;
+      }
+      .provider-tbl th,
+      .provider-tbl td {
+        text-align: left;
+        padding: 12px 14px 12px 0;
+        border-bottom: 1px solid var(--hairline);
+        vertical-align: top;
+      }
+      .provider-tbl th {
+        font-size: 10.5px;
+        text-transform: lowercase;
+        letter-spacing: 0.14em;
+        color: var(--muted);
+        font-weight: 500;
+        border-bottom-color: var(--ink);
+      }
+      .provider-tbl td.brand {
+        font-weight: 500;
+      }
+      .provider-tbl td.tool {
+        color: var(--muted);
+      }
+      .provider-tbl td.tool.yes {
+        color: var(--win);
+      }
+      .provider-tbl td.tool.partial {
+        color: var(--warn);
+      }
+      .provider-tbl td.tool.no {
+        color: var(--loss);
+      }
+
+      /* tools list */
+      .tools-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0;
+        border-top: 1px solid var(--ink);
+        border-bottom: 1px solid var(--ink);
+      }
+      .tool-row {
+        padding: 18px 18px 16px 0;
+        border-bottom: 1px solid var(--hairline);
+      }
+      .tool-row:nth-child(2n) {
+        padding-left: 24px;
+        border-left: 1px solid var(--hairline);
+        padding-right: 0;
+      }
+      .tool-row:nth-last-child(-n + 2) {
+        border-bottom: 0;
+      }
+      .tool-row .nm {
+        font-weight: 500;
+        font-size: 14px;
+      }
+      .tool-row .nm code {
+        font-size: 13px;
+      }
+      .tool-row .dsc {
+        font-size: 12.5px;
+        color: var(--ink-2);
+        margin-top: 4px;
+      }
+      .tool-row .meta {
+        margin-top: 6px;
+        font-size: 11px;
+        color: var(--muted);
+        text-transform: lowercase;
+        letter-spacing: 0.1em;
+      }
+
+      /* skill cards */
+      .skill-row {
+        border-top: 1px solid var(--hairline);
+        padding: 16px 0;
+        display: grid;
+        grid-template-columns: 220px 1fr;
+        gap: 24px;
+        align-items: start;
+      }
+      .skill-row:last-child {
+        border-bottom: 1px solid var(--hairline);
+      }
+      .skill-row .nm {
+        font-weight: 500;
+      }
+      .skill-row .nm .sub {
+        display: block;
+        font-size: 11px;
+        color: var(--muted);
+        text-transform: lowercase;
+        letter-spacing: 0.12em;
+        margin-top: 2px;
+      }
+      .skill-row .dsc {
+        color: var(--ink-2);
+        font-size: 13px;
+      }
+
+      /* schema mock */
+      .schema {
+        border-top: 1px solid var(--ink);
+        padding-top: 14px;
+      }
+      .schema-tbl {
+        font-size: 13px;
+        margin-top: 4px;
+      }
+      .schema-tbl .row {
+        display: grid;
+        grid-template-columns: 200px 200px 1fr;
+        gap: 18px;
+        padding: 8px 0;
+        border-bottom: 1px solid var(--hairline);
+      }
+      .schema-tbl .row:last-child {
+        border-bottom: 0;
+      }
+      .schema-tbl .row .col-1 {
+        font-weight: 500;
+      }
+      .schema-tbl .row .col-2 {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .schema-tbl .row .col-3 {
+        color: var(--ink-2);
+      }
+
+      /* phases */
+      .phase {
+        display: grid;
+        grid-template-columns: 60px 200px 1fr 110px;
+        gap: 24px;
+        border-top: 1px solid var(--hairline);
+        padding: 18px 0;
+        align-items: start;
+      }
+      .phase:last-child {
+        border-bottom: 1px solid var(--hairline);
+      }
+      .phase .ph-n {
+        font-size: 22px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+      }
+      .phase .ph-t {
+        font-weight: 500;
+      }
+      .phase .ph-d {
+        color: var(--ink-2);
+        font-size: 13px;
+      }
+      .phase .ph-eta {
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: lowercase;
+        color: var(--muted);
+        justify-self: end;
+        border: 1px solid var(--hairline);
+        padding: 3px 9px;
+      }
+
+      /* risks */
+      .risk-row {
+        display: grid;
+        grid-template-columns: 24px 220px 1fr;
+        gap: 14px;
+        padding: 14px 0;
+        border-top: 1px solid var(--hairline);
+        align-items: start;
+      }
+      .risk-row:last-child {
+        border-bottom: 1px solid var(--hairline);
+      }
+      .risk-row .sev {
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        color: var(--muted);
+        text-transform: lowercase;
+        padding-top: 2px;
+      }
+      .risk-row .sev.hi {
+        color: var(--loss);
+      }
+      .risk-row .sev.md {
+        color: var(--warn);
+      }
+      .risk-row .sev.lo {
+        color: var(--ink-2);
+      }
+      .risk-row .ti {
+        font-weight: 500;
+      }
+      .risk-row .ds {
+        color: var(--ink-2);
+        font-size: 13px;
+      }
+
+      /* decided */
+      .decided-grid {
+        border-top: 1px solid var(--ink);
+        margin-top: 6px;
+      }
+      .decided-row {
+        display: grid;
+        grid-template-columns: 180px 200px 1fr;
+        gap: 24px;
+        padding: 16px 0;
+        border-bottom: 1px solid var(--hairline);
+        align-items: start;
+      }
+      .decided-row:last-child {
+        border-bottom: 1px solid var(--ink);
+      }
+      .decided-row .dl {
+        font-size: 11px;
+        text-transform: lowercase;
+        letter-spacing: 0.14em;
+        color: var(--muted);
+        padding-top: 4px;
+      }
+      .decided-row .dv {
+        font-size: 15px;
+      }
+      .decided-row .dn {
+        color: var(--ink-2);
+        font-size: 13px;
+      }
+
+      /* decisions */
+      .decision-block {
+        border-top: 1px solid var(--ink);
+        padding-top: 22px;
+        margin-top: 6px;
+      }
+      .q-card {
+        padding: 22px 0;
+        border-bottom: 1px solid var(--hairline);
+      }
+      .q-card:last-of-type {
+        border-bottom: 1px solid var(--ink);
+      }
+      .q-card .q {
+        font-size: 15px;
+        font-weight: 500;
+        margin-bottom: 4px;
+      }
+      .q-card .qsub {
+        color: var(--ink-2);
+        font-size: 13px;
+        margin-bottom: 14px;
+      }
+      .q-options {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+      .q-options.three {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+      .q-options label {
+        border: 1px solid var(--hairline);
+        padding: 12px 14px;
+        cursor: pointer;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        font-size: 13px;
+        line-height: 1.55;
+        color: var(--ink);
+        background: var(--paper);
+      }
+      .q-options label:hover {
+        border-color: var(--ink);
+      }
+      .q-options label input {
+        margin-top: 3px;
+        accent-color: var(--ink);
+      }
+      .q-options label .ti {
+        font-weight: 500;
+      }
+      .q-options label .ds {
+        color: var(--ink-2);
+        display: block;
+        font-size: 12px;
+      }
+      .q-card .actions {
+        margin-top: 14px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      .q-card .actions button {
+        font-family: inherit;
+        font-size: 11px;
+        text-transform: lowercase;
+        letter-spacing: 0.14em;
+        padding: 8px 14px;
+        border: 1px solid var(--ink);
+        background: var(--ink);
+        color: var(--paper);
+        cursor: pointer;
+      }
+      .q-card .actions button.ghost {
+        background: var(--paper);
+        color: var(--ink);
+      }
+      .q-card .hint {
+        font-size: 11px;
+        color: var(--muted);
+        margin-left: auto;
+      }
+      .q-card .free {
+        margin-top: 12px;
+        width: 100%;
+        border: 1px solid var(--hairline);
+        padding: 8px 10px;
+        font-family: inherit;
+        font-size: 13px;
+        color: var(--ink);
+        background: var(--paper);
+        min-height: 42px;
+      }
+
+      /* footnote */
+      .foot {
+        margin-top: 80px;
+        padding-top: 22px;
+        border-top: 1px solid var(--ink);
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+        color: var(--muted);
+        font-size: 11px;
+        text-transform: lowercase;
+        letter-spacing: 0.14em;
+      }
+
+      @media (max-width: 920px) {
+        .page {
+          padding: 40px 24px 64px;
+        }
+        .mock-split {
+          grid-template-columns: 1fr;
+        }
+        .mock-side.left {
+          border-right: 0;
+          border-bottom: 1px solid var(--hairline);
+        }
+        .vs {
+          grid-template-columns: 1fr;
+        }
+        .vs > .col:first-child,
+        .vs > .col:last-child {
+          border: 0;
+          border-bottom: 1px solid var(--hairline);
+        }
+        .vs > .arrow {
+          display: none;
+        }
+        .grid-2,
+        .grid-3 {
+          grid-template-columns: 1fr;
+        }
+        .schema-tbl .row {
+          grid-template-columns: 1fr;
+          gap: 4px;
+        }
+        .phase {
+          grid-template-columns: 1fr;
+          gap: 6px;
+        }
+        .phase .ph-eta {
+          justify-self: start;
+        }
+        .q-options,
+        .q-options.three {
+          grid-template-columns: 1fr;
+        }
+        .decided-row {
+          grid-template-columns: 1fr;
+          gap: 4px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <!-- HEADER -->
+      <header>
+        <div class="eyebrow">design proposal · trading journal</div>
+        <h1 class="title">Trade Review · AI 复盘助手</h1>
+        <p class="lede">
+          在 Transactions 详情页打开一笔已完成的交易时，并列一位永远在线的复盘
+          agent。它先于你开口， 基于完整的交易上下文与开仓前后 100 根 K
+          线生成结构化分析；它可以接入互联网，主动查询当时的资讯与盘面成因；
+          它的能力随时间用 skill
+          扩展。它服务于一件事：把一笔已发生的交易，变成下一笔更好的交易。
+        </p>
+
+        <div class="meta-strip">
+          <div class="meta-cell">
+            <span class="label">surface</span>
+            <div class="v">TransactionDetail</div>
+          </div>
+          <div class="meta-cell">
+            <span class="label">context window</span>
+            <div class="v num">200 根 K线</div>
+          </div>
+          <div class="meta-cell">
+            <span class="label">providers</span>
+            <div class="v">5 家</div>
+          </div>
+          <div class="meta-cell">
+            <span class="label">tools</span>
+            <div class="v">web_search · web_fetch · skills</div>
+          </div>
+        </div>
+      </header>
+
+      <!-- GOAL -->
+      <h2 class="section">目标</h2>
+      <div class="grid-3">
+        <div class="pillar">
+          <span class="label">为什么要做</span>
+          <p>
+            交易日志记录了 What，但很少回答 Why。
+            一位会读盘、能上网、记得你过往交易习惯的复盘搭子，
+            能让每一次「review」从填字变成对话。
+            <br /><br />
+            <strong>已决议：</strong>v1 走 deepseek，对话 per-trade， web_search
+            后端选 tavily，Phase 5 4 个 skill 全做。
+          </p>
+        </div>
+        <div class="pillar">
+          <span class="label">谁来用</span>
+          <p>
+            一名独自交易、只服务自己的 trader。 不需要团队协作、不需要导出报告，
+            只需要在每天结束时被认真地、有据有理地追问几句。
+          </p>
+        </div>
+        <div class="pillar">
+          <span class="label">什么算成功</span>
+          <p>
+            打开一笔交易 → 自动得到一段有依据的初评 → 至少进行一轮反问， 然后在
+            Review Feedback 里写下被自己说服的句子。
+          </p>
+        </div>
+      </div>
+
+      <!-- CURRENT vs TARGET -->
+      <h2 class="section">现状 vs 目标</h2>
+      <div class="vs">
+        <div class="col">
+          <h4>现状 · today</h4>
+          <ul>
+            <li>TransactionDetail 只有 Review Feedback 文本框 + Chart URL</li>
+            <li>复盘完全靠脑补，缺少结构化提示</li>
+            <li>没有 K 线对照、没有当时的新闻或链上信号</li>
+            <li>历史交易记忆不可访问，无法做习惯总结</li>
+            <li>没有任何 AI 入口</li>
+          </ul>
+        </div>
+        <div class="arrow">→</div>
+        <div class="col">
+          <h4>目标 · target</h4>
+          <ul>
+            <li>右侧抽屉式 Agent 面板，默认折叠，一键展开</li>
+            <li>打开即自动注入交易上下文，给出初始分析</li>
+            <li>K线窗口随提问扩展（before/after, finer TF）</li>
+            <li>Agent 可调用 web_search / web_fetch 检索盘面成因</li>
+            <li>可在 Settings 切换 provider，新增 skill 即得新能力</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- MOCK -->
+      <h2 class="section">
+        界面提案 · 在 TransactionDetail 增加右侧 Agent 面板
+      </h2>
+      <div class="mock">
+        <div class="mock-window-bar">
+          /transactions/142 · btcusdt · long · review mode
+        </div>
+        <div class="mock-split">
+          <!-- LEFT: existing trade detail -->
+          <div class="mock-side left">
+            <div class="pair-line">
+              <span class="pair">BTCUSDT</span>
+              <span class="dir">long · 1h</span>
+              <span class="time">2026-06-12 14:30 → 16:20</span>
+            </div>
+
+            <div class="number-row">
+              <div class="number-cell">
+                <div class="lbl">entry</div>
+                <div class="val num">68,420.0</div>
+              </div>
+              <div class="number-cell">
+                <div class="lbl">exit</div>
+                <div class="val num">69,310.0</div>
+              </div>
+              <div class="number-cell">
+                <div class="lbl">r:r planned</div>
+                <div class="val num">1 : 2.1</div>
+              </div>
+              <div class="number-cell">
+                <div class="lbl">pnl</div>
+                <div class="val win num">+412.50</div>
+              </div>
+            </div>
+
+            <div class="mock-section-h">trading logic</div>
+            <div class="mock-body">
+              4h 级别突破回踩，等 1h 收上前高，止损在前低下方 60u， tp
+              看上方流动性区。
+            </div>
+
+            <div class="mock-section-h">context</div>
+            <div class="mock-body">
+              BTC 在 cpi 公布后回踩 0.382，市场情绪偏多， eth/btc
+              同步走强，无明显反向资金流。
+            </div>
+
+            <div class="mock-section-h">review feedback</div>
+            <div class="review-input">
+              <em>（agent 对话结束后，可一键写回）</em>
+            </div>
+          </div>
+
+          <!-- RIGHT: agent panel -->
+          <div class="mock-side">
+            <div class="chat-head">
+              <span class="ttl">复盘对话</span>
+              <span class="sub">streaming</span>
+              <span class="provider-pill">deepseek · v3</span>
+            </div>
+
+            <div class="ctx-strip">
+              <span class="ctx-pill on">trade fields</span>
+              <span class="ctx-pill on">100 ← entry → 100 candles</span>
+              <span class="ctx-pill on">account state</span>
+              <span class="ctx-pill on">recent trades</span>
+              <span class="ctx-pill">news (on demand)</span>
+              <span class="ctx-pill">on-chain (on demand)</span>
+            </div>
+
+            <div class="chat-thread">
+              <div class="msg">
+                <div class="who">agent</div>
+                <div class="body">
+                  我注意到这笔单的实际进场比计划进场晚 14
+                  分钟，但你仍按原计划止损位执行， 风险敞口被动从 1R 收缩到
+                  0.78R。这是有意而为吗？
+                </div>
+              </div>
+              <div class="msg user">
+                <div class="who">you</div>
+                <div class="body">
+                  应该是没注意。回看当时的 1h
+                  和前后的成交量给我看，再查一下当时有没有什么数据公布。
+                </div>
+              </div>
+              <div class="msg">
+                <div class="who">agent</div>
+                <div class="body">
+                  <span class="tool">tool · get_klines</span>展开 1h 时段 ±50
+                  根，volume 在进场前 1 根突增 1.6×，<br /><span class="tool"
+                    >tool · web_search</span
+                  >当日 14:00 utc 公布 us cpi 0.3%，与你 context
+                  里的判断一致。延迟进场恰好压在数据公布后的二次回踩。
+                </div>
+              </div>
+            </div>
+
+            <div class="composer">
+              <div class="field-fake">
+                问 agent…（比如"对比上一笔同方向交易的入场质量"）
+              </div>
+              <button class="send" type="button">send</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ARCHITECTURE -->
+      <h2 class="section">架构 · 数据流</h2>
+      <div class="diagram">
+        <div class="caption">从面板按钮到 LLM 响应</div>
+        <div class="mermaid">
+          flowchart LR classDef ui fill:#f7f6f3,stroke:#2a2a2a,color:#1a1a1a;
+          classDef api fill:#fff,stroke:#2a2a2a,color:#1a1a1a; classDef ext
+          fill:#fff,stroke:#888,color:#3a3a3a,stroke-dasharray:4 3; classDef
+          store fill:#efefe9,stroke:#2a2a2a,color:#1a1a1a; UI["TransactionDetail
+          Agent 面板"]:::ui TRPC["tRPC reviewAgent.*"]:::api
+          CTX["上下文装配器<br />trade + klines + history"]:::api
+          CK["server/_core/coinank.ts<br />fetchCandles"]:::api DB[("SQLite ·
+          conversations<br />messages · trade_review_jobs")]:::store ORCH["Agent
+          编排器<br />(tool-calling loop)"]:::api PROV{"Provider 路由<br />deepseek
+          / kimi / glm /<br />gemini / openai"}:::api TOOL["Tools<br />web_search
+          · web_fetch<br />get_klines · skills.*"]:::api WEB[(Web)]:::ext
+          LLM[("LLM 提供商 API")]:::ext UI -->|open / send| TRPC TRPC --> CTX
+          CTX --> CK CTX --> DB TRPC --> ORCH ORCH --> PROV PROV --> LLM ORCH
+          --> TOOL TOOL --> WEB ORCH -->|stream chunks| UI ORCH -->|persist| DB
+        </div>
+      </div>
+
+      <!-- CONTEXT -->
+      <h2 class="section">
+        Agent 上下文 · 自动注入到 system / first user message
+      </h2>
+      <div class="grid-2">
+        <div class="pillar">
+          <span class="label">trade 字段</span>
+          <p>
+            tradingPair / direction / timeFrame / startTime / endTime /
+            entryPrice / exitPrice / plannedStopLossPrice /
+            plannedTakeProfitPrice / plannedRiskRewardRatio / positionSizeUsdt /
+            outcome / returnAmount / tradingLogic / context / tradeItems /
+            reviewFeedback。 全部直接从 <code>transactions</code> 表读出。
+          </p>
+        </div>
+        <div class="pillar">
+          <span class="label">K 线窗口</span>
+          <p>
+            复用 <code>server/_core/coinank.ts · fetchCandles</code>。 默认以
+            trade timeFrame 拉 <strong>entry 前 100 + 后 100 根</strong>，
+            序列化为 OHLCV JSON 注入。 <strong>边界规则：</strong>当 entry
+            时点距今不足 100 根（trade 刚发生）时，向后只取到最新一根即可，
+            不阻塞复盘；agent 上下文里附带实际命中根数让它知情。 额外提供
+            <code>get_klines</code> 工具，agent 可按需调更细 TF 或拉更宽窗口。
+          </p>
+        </div>
+        <div class="pillar">
+          <span class="label">账户状态</span>
+          <p>
+            initialBalance / currentBalance / consecutiveLosses /
+            confidenceLevel（来自 <code>server/db.ts</code> 的计算字段）。 让
+            agent
+            知道这笔单子是处于「连亏后该谨慎」还是「连胜后该克制」的语境里。
+          </p>
+        </div>
+        <div class="pillar">
+          <span class="label">历史样本</span>
+          <p>
+            最近 N 笔同 pair / 同 direction 的交易摘要（精简到一行），
+            用于回答"和我之前的入场比起来怎么样"这类问题， 而不让上下文爆炸。
+          </p>
+        </div>
+      </div>
+
+      <!-- PROVIDERS -->
+      <h2 class="section">模型 · 多 provider 抽象</h2>
+      <p class="lede" style="margin-top: 0">
+        所有 provider 走统一的
+        <code>chat({ messages, tools, stream })</code> 接口；
+        差异在适配器内部消化，UI 永远不感知。
+      </p>
+      <table class="provider-tbl">
+        <thead>
+          <tr>
+            <th>provider</th>
+            <th>建议模型</th>
+            <th>协议</th>
+            <th>tool calling</th>
+            <th>streaming</th>
+            <th>endpoint 备注</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="brand">deepseek</td>
+            <td>deepseek-chat / reasoner</td>
+            <td>openai-compatible</td>
+            <td class="tool yes">原生</td>
+            <td class="tool yes">SSE</td>
+            <td>api.deepseek.com</td>
+          </tr>
+          <tr>
+            <td class="brand">kimi · moonshot</td>
+            <td>moonshot-v1-128k</td>
+            <td>openai-compatible</td>
+            <td class="tool yes">原生</td>
+            <td class="tool yes">SSE</td>
+            <td>api.moonshot.cn</td>
+          </tr>
+          <tr>
+            <td class="brand">glm · 智谱</td>
+            <td>glm-4.5 / glm-4-air</td>
+            <td>openai-compatible</td>
+            <td class="tool yes">原生</td>
+            <td class="tool yes">SSE</td>
+            <td>open.bigmodel.cn/api/paas/v4</td>
+          </tr>
+          <tr>
+            <td class="brand">gemini</td>
+            <td>gemini-2.5-pro / flash</td>
+            <td>google genai</td>
+            <td class="tool partial">需 schema 翻译</td>
+            <td class="tool yes">SSE</td>
+            <td>generativelanguage.googleapis.com</td>
+          </tr>
+          <tr>
+            <td class="brand">openai</td>
+            <td>gpt-5 / 4o</td>
+            <td>openai 原生</td>
+            <td class="tool yes">原生</td>
+            <td class="tool yes">SSE</td>
+            <td>api.openai.com</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="diagram" style="margin-top: 18px">
+        <div class="caption">Provider 适配器形状</div>
+        <div class="mermaid">
+          flowchart TB classDef api fill:#fff,stroke:#2a2a2a,color:#1a1a1a;
+          classDef adapter fill:#f7f6f3,stroke:#2a2a2a,color:#1a1a1a;
+          IFACE["ChatProvider<br />chat(req) =&gt;
+          AsyncIterable&lt;Chunk&gt;"]:::api A1["DeepseekAdapter"]:::adapter
+          A2["KimiAdapter"]:::adapter A3["GLMAdapter"]:::adapter
+          A4["GeminiAdapter<br />(tool schema 翻译)"]:::adapter
+          A5["OpenAIAdapter"]:::adapter IFACE --- A1 IFACE --- A2 IFACE --- A3
+          IFACE --- A4 IFACE --- A5
+        </div>
+      </div>
+
+      <!-- TOOLS -->
+      <h2 class="section">工具能力 · agent 主动调用</h2>
+      <div class="tools-grid">
+        <div class="tool-row">
+          <div class="nm"><code>web_search</code></div>
+          <div class="dsc">
+            后端可替换 (Tavily / Serper / Brave Search)。 默认返回 top 5 摘要，
+            agent 决定是否进一步 fetch。
+          </div>
+          <div class="meta">network · token-light · cacheable</div>
+        </div>
+        <div class="tool-row">
+          <div class="nm"><code>web_fetch</code></div>
+          <div class="dsc">
+            按 URL 抓取 → readability 抽正文 → markdown。 给 agent
+            看新闻原文、报告 PDF、Glassnode 帖子等。
+          </div>
+          <div class="meta">network · 30s timeout · 200KB cap</div>
+        </div>
+        <div class="tool-row">
+          <div class="nm"><code>get_klines</code></div>
+          <div class="dsc">
+            参数 (pair, timeFrame, anchor, before, after)， 复用 coinank，让
+            agent 自己缩放视野。
+          </div>
+          <div class="meta">internal · already battle-tested</div>
+        </div>
+        <div class="tool-row">
+          <div class="nm"><code>get_recent_trades</code></div>
+          <div class="dsc">
+            按 pair / direction / outcome 过滤的最近 N 笔历史交易，
+            用来回答习惯性问题。
+          </div>
+          <div class="meta">internal · scoped to anonymous user</div>
+        </div>
+      </div>
+
+      <!-- SKILLS -->
+      <h2 class="section">Skill 扩展机制 · 未来能力的入口</h2>
+      <p class="lede" style="margin-top: 0">
+        Skill = 一个本地 JS 模块，导出
+        <code>{ name, description, parameters, run }</code>。 启动时扫描
+        <code>server/agents/skills/*</code>，注册为 agent 可见的工具集。
+        新增分析能力时，写一个文件即可，不动核心循环。
+      </p>
+      <div class="skill-row">
+        <div class="nm">
+          analyze_market_structure
+          <span class="sub">future skill · v0</span>
+        </div>
+        <div class="dsc">
+          输入一段 K 线，输出 swing high/low、趋势段、支撑阻力， 让 agent
+          用结构化语言代替"我觉得是个突破"。
+        </div>
+      </div>
+      <div class="skill-row">
+        <div class="nm">
+          fetch_funding_rates
+          <span class="sub">future skill · v0</span>
+        </div>
+        <div class="dsc">
+          拉 coinank funding rates，对照进出场时段， 判断是否在极端 funding
+          时段做反向。
+        </div>
+      </div>
+      <div class="skill-row">
+        <div class="nm">
+          compare_with_my_baseline
+          <span class="sub">future skill · v0</span>
+        </div>
+        <div class="dsc">
+          统计该用户最近 50 笔交易的 r:r 分布与胜率， 告诉 agent
+          "这笔单子在你自己的样本里属于什么档次"。
+        </div>
+      </div>
+      <div class="skill-row">
+        <div class="nm">
+          on_chain_snapshot
+          <span class="sub">future skill · v0 (optional)</span>
+        </div>
+        <div class="dsc">
+          可选 skill，调用 glassnode / nansen 公开 endpoint， 仅在 pair =
+          BTC/ETH 且时段命中时启用。
+        </div>
+      </div>
+
+      <div class="diagram" style="margin-top: 22px">
+        <div class="caption">Skill 加载与发现</div>
+        <div class="mermaid">
+          flowchart LR classDef api fill:#fff,stroke:#2a2a2a,color:#1a1a1a;
+          classDef skill fill:#f7f6f3,stroke:#2a2a2a,color:#1a1a1a; classDef
+          store fill:#efefe9,stroke:#2a2a2a,color:#1a1a1a;
+          DIR["server/agents/skills/"]:::store REG["SkillRegistry<br />boot-time
+          scan"]:::api S1["market_structure.ts"]:::skill
+          S2["funding.ts"]:::skill S3["compare_baseline.ts"]:::skill
+          CFG[("Settings · enabled skills")]:::store AG["Agent 编排器"]:::api
+          DIR --> REG S1 --> REG S2 --> REG S3 --> REG CFG --> AG REG --> AG
+        </div>
+      </div>
+
+      <!-- SCHEMA -->
+      <h2 class="section">数据库改动 · drizzle/schema.ts 新增</h2>
+      <div class="schema">
+        <div class="schema-tbl">
+          <div class="row">
+            <div class="col-1">conversations</div>
+            <div class="col-2">每笔 trade 一条会话</div>
+            <div class="col-3">
+              id, userId, transactionId, providerId, model, createdAt, updatedAt
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-1">messages</div>
+            <div class="col-2">完整对话记录（含 tool 调用）</div>
+            <div class="col-3">
+              id, conversationId, role(<code>system|user|assistant|tool</code>),
+              content(JSON), toolCalls(JSON), createdAt
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-1">agent_settings</div>
+            <div class="col-2">单租户全局配置</div>
+            <div class="col-3">
+              userId, defaultProvider, providerConfigs(JSON · 加密 api key),
+              enabledSkillIds(JSON), updatedAt
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-1">trade_review_jobs</div>
+            <div class="col-2">可选 · 后台批量复盘</div>
+            <div class="col-3">
+              id, transactionId, status, startedAt, finishedAt, errorMessage
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PHASES -->
+      <h2 class="section">实施分阶段</h2>
+      <div class="phase">
+        <div class="ph-n num">01</div>
+        <div>
+          <div class="ph-t">骨架 · 单 provider 对话</div>
+        </div>
+        <div class="ph-d">
+          TransactionDetail 右侧抽屉；trade 字段注入；非 streaming； 先跑通
+          deepseek（成本最低、协议最简）；conversations / messages 表落地。
+        </div>
+        <div class="ph-eta">~3 day</div>
+      </div>
+      <div class="phase">
+        <div class="ph-n num">02</div>
+        <div>
+          <div class="ph-t">K 线上下文 + streaming</div>
+        </div>
+        <div class="ph-d">
+          复用 coinank，自动拉 ±100 K 线；SSE streaming 渲染； 初始消息由 agent
+          自动生成（不需用户先开口）。
+        </div>
+        <div class="ph-eta">~2 day</div>
+      </div>
+      <div class="phase">
+        <div class="ph-n num">03</div>
+        <div>
+          <div class="ph-t">多 provider + 设置页</div>
+        </div>
+        <div class="ph-d">
+          ProviderAdapter 抽象；Settings 增 API key 输入 + 默认选择；
+          per-conversation 可临时覆盖；密钥用本地 master key + node:crypto
+          加密。
+        </div>
+        <div class="ph-eta">~3 day</div>
+      </div>
+      <div class="phase">
+        <div class="ph-n num">04</div>
+        <div>
+          <div class="ph-t">工具循环 · web_search / web_fetch / get_klines</div>
+        </div>
+        <div class="ph-d">
+          实现 tool-calling 循环，最多 N 步保护；UI 渲染工具调用气泡；
+          搜索后端可热替换。
+        </div>
+        <div class="ph-eta">~4 day</div>
+      </div>
+      <div class="phase">
+        <div class="ph-n num">05</div>
+        <div>
+          <div class="ph-t">Skill 注册中心</div>
+        </div>
+        <div class="ph-d">
+          SkillRegistry boot-time 扫描；Settings 勾选启用； 先迁移现有内部工具到
+          skill 形态；为后续 analyze_market_structure 等留口。
+        </div>
+        <div class="ph-eta">~3 day</div>
+      </div>
+
+      <!-- RISKS -->
+      <h2 class="section">风险与失败模式</h2>
+      <div class="risk-row">
+        <div class="sev hi">high</div>
+        <div class="ti">API key 安全</div>
+        <div class="ds">
+          5 家 provider 的 key 都进 SQLite。即便单机，明文存储仍不可接受。
+          方案：node:crypto AES-GCM + 一份本地 master key 文件（os 权限 0600），
+          首次启动自动生成；在 git ignore 中加入 master key 路径。
+        </div>
+      </div>
+      <div class="risk-row">
+        <div class="sev md">medium</div>
+        <div class="ti">上下文成本</div>
+        <div class="ds">
+          200 根 K 线 + trade fields + history ≈ 6–12k tokens。 强制对 candles
+          进行 OHLCV 缩写、降精度；超过阈值时改用"摘要 + 工具拉细"模式。
+        </div>
+      </div>
+      <div class="risk-row">
+        <div class="sev md">medium</div>
+        <div class="ti">国内网络访问</div>
+        <div class="ds">
+          gemini / openai 在国内不可直连。Provider 配置允许填 base URL 和 自定义
+          headers，方便用户走自己的反代；提供商错误友好降级到下一个可用
+          provider。
+        </div>
+      </div>
+      <div class="risk-row">
+        <div class="sev md">medium</div>
+        <div class="ti">工具调用死循环</div>
+        <div class="ds">
+          硬上限：每次会话 max 12 步、单工具 max 5 次；时间预算 60s； 超出后强制
+          final answer，并在 UI 提示用户。
+        </div>
+      </div>
+      <div class="risk-row">
+        <div class="sev lo">low</div>
+        <div class="ti">tool schema 跨 provider 差异</div>
+        <div class="ds">
+          openai 系生态都吃 JSON Schema；gemini 走它自家的 FunctionDeclaration。
+          GeminiAdapter 内部做一次单向翻译即可，无需对外暴露差异。
+        </div>
+      </div>
+      <div class="risk-row">
+        <div class="sev lo">low</div>
+        <div class="ti">单租户假设</div>
+        <div class="ds">
+          tRPC context 仍走匿名用户。 agent_settings 全局；conversations 仍带
+          userId 字段以保留未来扩展余地。
+        </div>
+      </div>
+
+      <!-- DECIDED -->
+      <h2 class="section">已决议</h2>
+      <div class="decided-grid">
+        <div class="decided-row">
+          <div class="dl">default provider</div>
+          <div class="dv"><strong>deepseek</strong></div>
+          <div class="dn">协议最简、国内可直连；Phase 1 即用它跑通端到端。</div>
+        </div>
+        <div class="decided-row">
+          <div class="dl">conversation scope</div>
+          <div class="dv"><strong>per-trade</strong></div>
+          <div class="dn">
+            一笔交易一段会话，关闭抽屉即归档，可重开；不引入"全局对话"概念。
+          </div>
+        </div>
+        <div class="decided-row">
+          <div class="dl">web_search backend</div>
+          <div class="dv"><strong>tavily</strong></div>
+          <div class="dn">
+            v1 默认；适配器化保留切换 Serper / Brave 的能力。
+          </div>
+        </div>
+        <div class="decided-row">
+          <div class="dl">phase 5 skills</div>
+          <div class="dv">
+            <strong>4 个全做</strong>
+          </div>
+          <div class="dn">
+            analyze_market_structure · fetch_funding_rates ·
+            compare_with_my_baseline · on_chain_snapshot；
+            按依赖关系顺序实现，on_chain 仅 BTC/ETH 启用。
+          </div>
+        </div>
+        <div class="decided-row">
+          <div class="dl">candle window 边界</div>
+          <div class="dv"><strong>后向自适应</strong></div>
+          <div class="dn">
+            entry 前 100 根硬要求；后向不足 100 根（trade
+            刚发生）取到最新一根即可， 实际命中根数同时告知 agent。
+          </div>
+        </div>
+      </div>
+
+      <!-- REMAINING OPEN -->
+      <h2 class="section">仍待澄清</h2>
+      <div class="decision-block">
+        <form
+          class="q-card"
+          data-lavish-question="extra-notes"
+          onsubmit="
+            event.preventDefault();
+            const v = event.currentTarget
+              .querySelector('textarea')
+              .value.trim();
+            if (v)
+              window.lavish.queuePrompt('补充约束：' + v, {
+                tag: 'note',
+                text: v,
+                element: event.currentTarget,
+                data: { question: 'extra-notes', answer: v },
+              });
+          "
+        >
+          <div class="q">还有什么必须在 v1 就考虑进去的约束？</div>
+          <div class="qsub">空着也行；任何一句"千万别…"或"我希望…"。</div>
+          <textarea
+            class="free"
+            placeholder="例：streaming 必须支持中断 / 不希望往 cloud 发任何 trade 数据 / 需要导出对话为 markdown ..."
+          ></textarea>
+          <div class="actions">
+            <button type="submit">queue</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- FOOTER -->
+      <div class="foot">
+        <div>
+          <div class="label" style="display: block; margin-bottom: 6px">
+            scope
+          </div>
+          <div>
+            仅 TransactionDetail 复盘场景；
+            不在本提案中：实时入场建议、自动下单、广播到 telegram。
+          </div>
+        </div>
+        <div>
+          <div class="label" style="display: block; margin-bottom: 6px">
+            next step
+          </div>
+          <div>
+            4 项决议已固化；接下来把 Phase 1（deepseek 适配器 + 右侧抽屉骨架 +
+            conversations / messages 表）拆成 backlog tasks 开干。 如有 v1
+            必须考虑的额外约束，请在上方文本框留言。
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      mermaid.initialize({
+        startOnLoad: true,
+        theme: "base",
+        themeVariables: {
+          background: "#fafafa",
+          primaryColor: "#fafafa",
+          primaryTextColor: "#1a1a1a",
+          primaryBorderColor: "#2a2a2a",
+          lineColor: "#2a2a2a",
+          fontFamily: "IBM Plex Mono, monospace",
+          fontSize: "13px",
+        },
+        flowchart: { useMaxWidth: true, htmlLabels: true, curve: "basis" },
+      });
+    </script>
+  </body>
+</html>

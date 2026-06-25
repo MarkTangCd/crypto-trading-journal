@@ -40,6 +40,16 @@ import {
   TRANSACTION_TYPES,
 } from "@shared/const";
 import { fetchCandles } from "./_core/coinank";
+import {
+  listReviewMessages,
+  openConversation,
+  sendUserMessage,
+} from "./agents/reviewAgent";
+import { ProviderError } from "./agents/providers/types";
+import { getProviderConfig, setProviderConfig } from "./agents/secrets";
+
+const SUPPORTED_PROVIDER_IDS = ["deepseek"] as const;
+const providerIdSchema = z.enum(SUPPORTED_PROVIDER_IDS);
 
 const TRADING_PAIR_RE = /^[A-Z0-9]{4,20}$/;
 
@@ -668,6 +678,112 @@ export const appRouter = router({
         return { success: true };
       }),
   }),
+
+  // Agent / provider settings. API keys are encrypted at rest; this router
+  // never returns plaintext keys to the client — only a hasKey boolean.
+  settings: router({
+    getProviderConfig: publicProcedure
+      .input(z.object({ providerId: providerIdSchema }))
+      .query(async ({ ctx, input }) => {
+        const config = await getProviderConfig(ctx.user.id, input.providerId);
+        return {
+          providerId: input.providerId,
+          hasKey: Boolean(config?.apiKey),
+          baseUrl: config?.baseUrl ?? null,
+        };
+      }),
+
+    setProviderConfig: publicProcedure
+      .input(
+        z.object({
+          providerId: providerIdSchema,
+          apiKey: z.string().trim().min(1).max(200).optional(),
+          baseUrl: z
+            .string()
+            .trim()
+            .max(500)
+            .optional()
+            .transform(value =>
+              value && value.length > 0 ? value : undefined
+            ),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        await setProviderConfig(ctx.user.id, input.providerId, {
+          apiKey: input.apiKey,
+          baseUrl: input.baseUrl ?? null,
+        });
+        return { success: true };
+      }),
+  }),
+
+  // AI review agent — per-trade conversation backed by a ChatProvider.
+  reviewAgent: router({
+    open: publicProcedure
+      .input(z.object({ transactionId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        const transaction = await getTransactionById(
+          input.transactionId,
+          ctx.user.id
+        );
+        if (!transaction) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Transaction not found or not owned by user",
+          });
+        }
+        return runAgent(() =>
+          openConversation({ userId: ctx.user.id, transaction })
+        );
+      }),
+
+    send: publicProcedure
+      .input(
+        z.object({
+          conversationId: z.number().int().positive(),
+          userText: z.string().trim().min(1).max(4000),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        return runAgent(() =>
+          sendUserMessage({
+            userId: ctx.user.id,
+            conversationId: input.conversationId,
+            userText: input.userText,
+          })
+        );
+      }),
+
+    list: publicProcedure
+      .input(z.object({ conversationId: z.number().int().positive() }))
+      .query(async ({ ctx, input }) =>
+        listReviewMessages({
+          userId: ctx.user.id,
+          conversationId: input.conversationId,
+        })
+      ),
+  }),
 });
+
+/**
+ * Map ProviderError (typed, user-safe) to TRPCError. AUTH and RATE_LIMIT
+ * are user-actionable → BAD_REQUEST. NETWORK / UPSTREAM / INVALID_RESPONSE
+ * are upstream issues → INTERNAL_SERVER_ERROR. All messages are pre-translated
+ * to Chinese inside the provider, so we surface them as-is.
+ */
+async function runAgent<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error instanceof ProviderError) {
+      const code =
+        error.code === "AUTH" || error.code === "RATE_LIMIT"
+          ? "BAD_REQUEST"
+          : "INTERNAL_SERVER_ERROR";
+      throw new TRPCError({ code, message: error.message });
+    }
+    throw error;
+  }
+}
 
 export type AppRouter = typeof appRouter;
