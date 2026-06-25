@@ -45,6 +45,38 @@ vi.mock("./agents/providers/deepseek", () => ({
   },
 }));
 
+vi.mock("./agents/providers/kimi", () => ({
+  kimiProvider: {
+    id: "kimi",
+    defaultModel: "moonshot-v1-128k",
+    chat: vi.fn(),
+  },
+}));
+
+vi.mock("./agents/providers/glm", () => ({
+  glmProvider: {
+    id: "glm",
+    defaultModel: "glm-4.5",
+    chat: vi.fn(),
+  },
+}));
+
+vi.mock("./agents/providers/openai", () => ({
+  openaiProvider: {
+    id: "openai",
+    defaultModel: "gpt-5",
+    chat: vi.fn(),
+  },
+}));
+
+vi.mock("./agents/providers/gemini", () => ({
+  geminiProvider: {
+    id: "gemini",
+    defaultModel: "gemini-2.5-flash",
+    chat: vi.fn(),
+  },
+}));
+
 const { appRouter } = await import("./routers");
 const secrets = await import("./agents/secrets");
 
@@ -73,6 +105,77 @@ beforeEach(() => {
 });
 
 describe("settings router", () => {
+  describe("listProviders", () => {
+    it("returns one entry per registered provider in stable order", async () => {
+      vi.mocked(secrets.getProviderConfig).mockResolvedValue(undefined);
+      const caller = appRouter.createCaller(makeCtx());
+
+      const result = await caller.settings.listProviders();
+
+      expect(result.map(r => r.id)).toEqual([
+        "deepseek",
+        "kimi",
+        "glm",
+        "openai",
+        "gemini",
+      ]);
+      expect(result.find(r => r.id === "kimi")).toMatchObject({
+        label: "kimi · moonshot",
+        defaultBaseUrl: "https://api.moonshot.cn/v1",
+        defaultModel: "moonshot-v1-128k",
+      });
+      expect(result.find(r => r.id === "gemini")).toMatchObject({
+        label: "gemini",
+        defaultBaseUrl: "https://generativelanguage.googleapis.com/v1beta",
+        defaultModel: "gemini-2.5-flash",
+      });
+    });
+
+    it("reflects hasKey + configuredBaseUrl from the secrets layer", async () => {
+      vi.mocked(secrets.getProviderConfig).mockImplementation(
+        async (_userId, providerId) => {
+          if (providerId === "kimi") {
+            return { apiKey: "sk-kimi", baseUrl: "https://proxy.test" };
+          }
+          return undefined;
+        }
+      );
+      const caller = appRouter.createCaller(makeCtx());
+
+      const result = await caller.settings.listProviders();
+      const kimi = result.find(r => r.id === "kimi");
+      const openai = result.find(r => r.id === "openai");
+
+      expect(kimi).toMatchObject({
+        hasKey: true,
+        configuredBaseUrl: "https://proxy.test",
+      });
+      expect(openai).toMatchObject({
+        hasKey: false,
+        configuredBaseUrl: null,
+      });
+    });
+
+    it("NEVER returns plaintext apiKey for any provider", async () => {
+      vi.mocked(secrets.getProviderConfig).mockImplementation(
+        async (_userId, providerId) => ({
+          apiKey: `sk-very-secret-${providerId}`,
+          baseUrl: undefined,
+        })
+      );
+      const caller = appRouter.createCaller(makeCtx());
+
+      const result = await caller.settings.listProviders();
+      const serialized = JSON.stringify(result);
+
+      expect(serialized).not.toContain("sk-very-secret");
+      for (const row of result) {
+        expect(row.hasKey).toBe(true);
+        expect(Object.keys(row)).not.toContain("apiKey");
+      }
+    });
+  });
+
   describe("getProviderConfig", () => {
     it("returns hasKey=false when nothing is configured", async () => {
       vi.mocked(secrets.getProviderConfig).mockResolvedValueOnce(undefined);

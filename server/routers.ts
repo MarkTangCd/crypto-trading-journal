@@ -46,9 +46,15 @@ import {
   sendUserMessage,
 } from "./agents/reviewAgent";
 import { ProviderError } from "./agents/providers/types";
+import { listProviders } from "./agents/providers/registry";
 import { getProviderConfig, setProviderConfig } from "./agents/secrets";
 
-const SUPPORTED_PROVIDER_IDS = ["deepseek"] as const;
+// Derived from the static registry at module load. z.enum needs a non-empty
+// tuple, so cast after asserting at least one provider exists.
+const SUPPORTED_PROVIDER_IDS = listProviders().map(p => p.id) as [
+  string,
+  ...string[],
+];
 const providerIdSchema = z.enum(SUPPORTED_PROVIDER_IDS);
 
 const TRADING_PAIR_RE = /^[A-Z0-9]{4,20}$/;
@@ -682,6 +688,26 @@ export const appRouter = router({
   // Agent / provider settings. API keys are encrypted at rest; this router
   // never returns plaintext keys to the client — only a hasKey boolean.
   settings: router({
+    // Catalogue of every registered provider, joined with per-user config
+    // status. Plaintext apiKey is intentionally NEVER part of the payload —
+    // only the boolean `hasKey` and the user's optional baseUrl override.
+    listProviders: publicProcedure.query(async ({ ctx }) => {
+      const providers = listProviders();
+      return Promise.all(
+        providers.map(async meta => {
+          const config = await getProviderConfig(ctx.user.id, meta.id);
+          return {
+            id: meta.id,
+            label: meta.label,
+            defaultBaseUrl: meta.defaultBaseUrl,
+            defaultModel: meta.defaultModel,
+            hasKey: Boolean(config?.apiKey),
+            configuredBaseUrl: config?.baseUrl ?? null,
+          };
+        })
+      );
+    }),
+
     getProviderConfig: publicProcedure
       .input(z.object({ providerId: providerIdSchema }))
       .query(async ({ ctx, input }) => {

@@ -2,6 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { getAgentSettings, upsertAgentSettings } from "../db";
+import { listProviders } from "./providers/registry";
 
 const MASTER_KEY_PATH = resolve(process.cwd(), ".local", "agent-master.key");
 const ALGORITHM = "aes-256-gcm";
@@ -166,10 +167,10 @@ export async function getProviderBaseUrl(
   return raw && raw.trim().length > 0 ? raw.trim() : undefined;
 }
 
-const ENV_KEY_BY_PROVIDER: Record<string, string> = {
-  deepseek: "DEEPSEEK_API_KEY",
-};
+const ENV_KEY_BY_PROVIDER: Record<string, string> = Object.fromEntries(
+  listProviders().map(p => [p.id, p.envApiKey])
+);
 
-const ENV_BASE_URL_BY_PROVIDER: Record<string, string> = {
-  deepseek: "DEEPSEEK_BASE_URL",
-};
+const ENV_BASE_URL_BY_PROVIDER: Record<string, string> = Object.fromEntries(
+  listProviders().map(p => [p.id, p.envBaseUrl])
+);

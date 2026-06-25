@@ -1,9 +1,11 @@
 ---
 id: TASK-24
 title: 多家 openai 兼容 provider（kimi · glm · openai）+ Settings 列表化（Phase 3 · providers）
-status: To Do
-assignee: []
+status: Done
+assignee:
+  - '@myself'
 created_date: '2026-06-25 04:00'
+updated_date: '2026-06-25 08:02'
 labels:
   - ai-agent
   - phase-3
@@ -15,6 +17,16 @@ dependencies:
   - TASK-23
 documentation:
   - .lavish/trade-review-ai-agent-plan.html
+modified_files:
+  - server/agents/providers/registry.ts
+  - server/agents/providers/registry.test.ts
+  - server/agents/providers/kimi.ts
+  - server/agents/providers/glm.ts
+  - server/agents/providers/openai.ts
+  - server/routers.ts
+  - server/settings.router.test.ts
+  - client/src/components/settings/AgentProviderSection.tsx
+  - client/src/components/settings/ProviderRow.tsx
 priority: high
 ordinal: 24000
 ---
@@ -52,12 +64,57 @@ Plan 的 provider 表格里 4 家是 openai 兼容（含 deepseek）：kimi · m
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
+
 <!-- AC:BEGIN -->
-- [ ] #1 #1 registry 中注册 kimi / glm / openai 三家，均走 `createOpenAICompatibleProvider` 基底，品牌错误文案独立
-- [ ] #2 #2 三家 metadata（defaultBaseUrl / defaultModel / envApiKey / envBaseUrl）与 plan 表格一致，`SUPPORTED_PROVIDER_IDS` 自动含三个新 id
-- [ ] #3 #3 新增 `settings.listProviders` tRPC procedure，返回所有 provider 的 metadata + hasKey + configuredBaseUrl；plaintext key 从不回传
-- [ ] #4 #4 `AgentProviderSection.tsx` 从 `listProviders` 拉清单渲染，为每家 provider 独立渲染 [api key + base url + 状态徽章 + 保存 按钮]；单家保存不影响其他
+
+- [x] #1 #1 registry 中注册 kimi / glm / openai 三家，均走 `createOpenAICompatibleProvider` 基底，品牌错误文案独立
+- [x] #2 #2 三家 metadata（defaultBaseUrl / defaultModel / envApiKey / envBaseUrl）与 plan 表格一致，`SUPPORTED_PROVIDER_IDS` 自动含三个新 id
+- [x] #3 #3 新增 `settings.listProviders` tRPC procedure，返回所有 provider 的 metadata + hasKey + configuredBaseUrl；plaintext key 从不回传
+- [x] #4 #4 `AgentProviderSection.tsx` 从 `listProviders` 拉清单渲染，为每家 provider 独立渲染 [api key + base url + 状态徽章 + 保存 按钮]；单家保存不影响其他
 - [ ] #5 #5 验证烟测：Settings 页上填入 kimi/glm/openai 其中任一家 key 后，能在 reviewAgent.open 时通过临时切 default【允许手动改 `agent_settings.defaultProvider` 评测】走通对话（stream + done 事件出现）
-- [ ] #6 #6 新增轻量单测：kimi/glm/openai 适配器的 baseUrl 混入正确、model 默认值正确；Settings router 的 `listProviders` 不回传明文 key
-- [ ] #7 #7 `npm run check` + `npm run format` 通过；现有测试全绿
+- [x] #6 #6 新增轻量单测：kimi/glm/openai 适配器的 baseUrl 混入正确、model 默认值正确；Settings router 的 `listProviders` 不回传明文 key
+- [x] #7 #7 `npm run check` + `npm run format` 通过；现有测试全绿
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+由 sub-agent 在 worktree `agent-a050452df7e5c0ef1` 起草实现；主 agent 验证后把核心增量（kimi/glm/openai providers、`settings.listProviders` procedure、Settings UI 列表化 + ProviderRow、registry / listProviders 测试）逐项合并到 main，并适配 TASK-23 已落地的 registry shape。
+<!-- SECTION:PLAN:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+## 多家 openai 兼容 provider + Settings 列表化
+
+把 kimi · moonshot、glm · 智谱、openai 三家挂上 TASK-23 抽出的 `createOpenAICompatibleProvider` 基底，并把 Settings 页改成由 registry 驱动的列表，每家 provider 独立卡片。
+
+### 关键改动
+
+- 三个薄包装：`server/agents/providers/kimi.ts` / `glm.ts` / `openai.ts`，各 8 行，仅 metadata 不同（errorBrand 独立 → 错误文案自动品牌化）。
+- `server/agents/providers/registry.ts` 增加 3 个 `register({...})` 调用；deepseek label 改为 lowercase `deepseek`（统一 Bench Notebook 风格）。
+- `server/routers.ts` 新增 `settings.listProviders` procedure：以 ctx.user.id 为粒度返回 `{ id, label, defaultBaseUrl, defaultModel, hasKey, configuredBaseUrl }[]`，**绝不回传 plaintext apiKey**。`SUPPORTED_PROVIDER_IDS` / `providerIdSchema` 已在 TASK-23 改为 registry 派生，本次自动捎带新 id。
+- `server/agents/secrets.ts` 的 env map 同样自动派生，未做手改。
+- `client/src/components/settings/AgentProviderSection.tsx` 完全重写（~130 LOC）：`trpc.settings.listProviders.useQuery()` 拉清单，per-provider 独立 draft（保存一家不影响其它），保存成功 invalidate `listProviders`。
+- 新文件 `client/src/components/settings/ProviderRow.tsx`（~100 LOC）：表单 form 元素，label + 已配置/未配置 徽章 + api key (password) + base url + 保存按钮。lowercase 标签、tabular-nums、`--radius: 0` 已通过现有 primitives 继承。
+
+### 测试
+
+- 新增 `server/agents/providers/registry.test.ts`（7 用例）：deepseek + 4 新家的 metadata 与 plan 表格一致，`getProvider` 未知 id 返回 undefined。
+- `server/settings.router.test.ts` 新增 listProviders 用例 3 个：返回顺序与全集一致、`hasKey/configuredBaseUrl` 反映 secrets 层、**任何 provider 都不回传 plaintext apiKey**。
+- 测试总数：137 baseline → **180 全绿**（含 TASK-23 + TASK-24 + TASK-25 合并产物）。
+
+### 与子 agent 草稿的偏离
+
+子 agent 在 worktree 自行重做了 TASK-23（含 simpler `resolveProvider`），AC #3 未达成（仍写死 `DEFAULT_PROVIDER = deepseekProvider`）。主 agent 已先期完成 TASK-23 正确实现，因此本任务**采用主 agent 的 registry shape**（`Map<id, {metadata, provider}>` + `getProvider→ChatProvider`），舍弃子 agent 的 `PROVIDERS[]` 数组方案；三家薄包装、Settings UI、listProviders procedure 等纯增量产物原样保留。
+
+### AC
+
+- [x] #1 三家走 createOpenAICompatibleProvider，errorBrand 独立
+- [x] #2 metadata 与 plan 一致，SUPPORTED_PROVIDER_IDS 自动含三个新 id
+- [x] #3 settings.listProviders 新增，plaintext key 从不回传
+- [x] #4 AgentProviderSection 列表化 + 独立 draft / 状态徽章 / 保存
+- [ ] #5 真实 key 烟测留给用户（需手动 `UPDATE agent_settings SET defaultProvider = 'kimi'` 切默认）
+- [x] #6 轻量单测覆盖 baseUrl/model 默认值 + listProviders 不回传明文
+- [x] #7 check + format 通过，180 测试全绿
+<!-- SECTION:FINAL_SUMMARY:END -->

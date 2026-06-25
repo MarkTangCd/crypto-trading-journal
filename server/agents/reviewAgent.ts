@@ -1,7 +1,12 @@
-import { appendMessage, getOrCreateConversation, listMessages } from "../db";
+import {
+  appendMessage,
+  getAgentSettings,
+  getOrCreateConversation,
+  listMessages,
+} from "../db";
 import type { Message, Transaction } from "../../drizzle/schema";
 import { buildInitialMessages } from "./contextBuilder";
-import { deepseekProvider } from "./providers/deepseek";
+import { getProvider } from "./providers/registry";
 import {
   type ChatMessage,
   type ChatProvider,
@@ -9,7 +14,7 @@ import {
 } from "./providers/types";
 import { getProviderApiKey, getProviderBaseUrl } from "./secrets";
 
-const DEFAULT_PROVIDER: ChatProvider = deepseekProvider;
+const FALLBACK_PROVIDER_ID = "deepseek";
 
 export interface ReviewMessage {
   id: number;
@@ -25,7 +30,23 @@ interface ResolvedProvider {
 }
 
 async function resolveProvider(userId: number): Promise<ResolvedProvider> {
-  const provider = DEFAULT_PROVIDER;
+  const settings = await getAgentSettings(userId);
+  const requestedId = settings?.defaultProvider ?? FALLBACK_PROVIDER_ID;
+
+  let provider = getProvider(requestedId);
+  if (!provider) {
+    console.warn(
+      `[ReviewAgent] unknown provider "${requestedId}" in agent_settings; falling back to ${FALLBACK_PROVIDER_ID}.`
+    );
+    provider = getProvider(FALLBACK_PROVIDER_ID);
+  }
+  if (!provider) {
+    throw new ProviderError(
+      "AUTH",
+      "未注册任何可用的 provider，请联系维护者。"
+    );
+  }
+
   const apiKey = await getProviderApiKey(userId, provider.id);
   if (!apiKey) {
     throw new ProviderError(

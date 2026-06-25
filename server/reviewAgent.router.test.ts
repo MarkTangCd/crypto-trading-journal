@@ -22,6 +22,7 @@ vi.mock("./db", () => ({
   getOrCreateConversation: vi.fn(),
   appendMessage: vi.fn().mockResolvedValue(undefined),
   listMessages: vi.fn(),
+  getAgentSettings: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("./agents/secrets", () => ({

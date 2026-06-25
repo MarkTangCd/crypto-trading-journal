@@ -57,6 +57,7 @@ vi.mock("./db", () => ({
       content: "",
       createdAt: new Date(),
     })),
+  getAgentSettings: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("./agents/secrets", () => ({

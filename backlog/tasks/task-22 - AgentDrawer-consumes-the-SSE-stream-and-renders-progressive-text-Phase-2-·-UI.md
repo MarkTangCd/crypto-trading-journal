@@ -5,9 +5,9 @@ title: >-
   UI)
 status: Done
 assignee:
-  - '@myself'
-created_date: '2026-06-24 23:59'
-updated_date: '2026-06-25 02:48'
+  - "@myself"
+created_date: "2026-06-24 23:59"
+updated_date: "2026-06-25 02:48"
 labels:
   - ai-agent
   - phase-2
@@ -30,6 +30,7 @@ ordinal: 19000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
+
 ## Why
 
 With the SSE endpoint live, the drawer can swap its `reviewAgent.send` mutation for a fetch-based stream consumer. The user sees the agent's reply appear token by token, with a stop button that actually severs the upstream call.
@@ -59,7 +60,9 @@ With the SSE endpoint live, the drawer can swap its `reviewAgent.send` mutation 
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
+
 <!-- AC:BEGIN -->
+
 - [x] #1 AgentDrawer composer triggers the SSE endpoint instead of reviewAgent.send.useMutation when sending a user turn; placeholder assistant message renders deltas as they arrive
 - [x] #2 After the done event, the placeholder is dropped and the canonical thread (from the invalidated reviewAgent.list query) takes over — no duplicate messages
 - [x] #3 During streaming the 发送 button becomes a 停止 button; clicking it aborts the in-flight fetch and (per TASK-21) tears down the upstream call
@@ -72,6 +75,7 @@ With the SSE endpoint live, the drawer can swap its `reviewAgent.send` mutation 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
+
 ## 实施计划
 
 ### 1. 新建 `client/src/components/review-agent/useReviewStream.ts`
@@ -116,6 +120,7 @@ With the SSE endpoint live, the drawer can swap its `reviewAgent.send` mutation 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
+
 ## Summary
 
 Wired the AgentDrawer composer to the SSE endpoint shipped by TASK-21. The drawer now renders deltas as they arrive, and the 发送 button becomes 停止 mid-stream.
@@ -157,4 +162,5 @@ Wired the AgentDrawer composer to the SSE endpoint shipped by TASK-21. The drawe
 ### Smoke verification (2026-06-25)
 
 User verified AC #6 manually: token-by-token streaming visible, 停止 halts text growth, partial reply absent from persisted thread after refresh.
+
 <!-- SECTION:FINAL_SUMMARY:END -->
