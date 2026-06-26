@@ -4,3 +4,5 @@
 // or retiring a tool stays a one-line edit here.
 import "./getKlines";
 import "./getRecentTrades";
+import "./webSearch";
+import "./webFetch";

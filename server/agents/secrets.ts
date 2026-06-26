@@ -174,3 +174,54 @@ const ENV_KEY_BY_PROVIDER: Record<string, string> = Object.fromEntries(
 const ENV_BASE_URL_BY_PROVIDER: Record<string, string> = Object.fromEntries(
   listProviders().map(p => [p.id, p.envBaseUrl])
 );
+
+/**
+ * Tool keys (web_search backends etc.) reuse the same encrypted
+ * `providerConfigs` blob but live under a separate id namespace so they don't
+ * collide with ChatProvider ids and so `setProviderConfig` can stay enum-bound
+ * to real providers.
+ */
+export type ToolId = "tavily";
+
+const TOOL_KEY_PREFIX = "tool:";
+const ENV_KEY_BY_TOOL: Record<ToolId, string> = {
+  tavily: "TAVILY_API_KEY",
+};
+
+function toolStorageKey(toolId: ToolId): string {
+  return `${TOOL_KEY_PREFIX}${toolId}`;
+}
+
+export async function getToolApiKey(
+  userId: number,
+  toolId: ToolId
+): Promise<string | undefined> {
+  const configs = await loadProviderConfigs(userId);
+  const stored = configs[toolStorageKey(toolId)]?.apiKey;
+  if (stored) return stored;
+
+  const envKey = ENV_KEY_BY_TOOL[toolId];
+  const raw = envKey ? process.env[envKey] : undefined;
+  return raw && raw.trim().length > 0 ? raw.trim() : undefined;
+}
+
+export async function setToolApiKey(
+  userId: number,
+  toolId: ToolId,
+  apiKey: string
+): Promise<void> {
+  const trimmed = apiKey.trim();
+  if (trimmed.length === 0) {
+    throw new Error("[Secrets] tool api key must be non-empty");
+  }
+  const configs = await loadProviderConfigs(userId);
+  configs[toolStorageKey(toolId)] = { apiKey: trimmed };
+  await saveProviderConfigs(userId, configs);
+}
+
+export async function hasToolApiKey(
+  userId: number,
+  toolId: ToolId
+): Promise<boolean> {
+  return Boolean(await getToolApiKey(userId, toolId));
+}

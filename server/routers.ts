@@ -48,7 +48,13 @@ import {
 } from "./agents/reviewAgent";
 import { ProviderError } from "./agents/providers/types";
 import { listProviders } from "./agents/providers/registry";
-import { getProviderConfig, setProviderConfig } from "./agents/secrets";
+import {
+  getProviderConfig,
+  hasToolApiKey,
+  setProviderConfig,
+  setToolApiKey,
+  type ToolId,
+} from "./agents/secrets";
 import { getAgentSettings, upsertAgentSettings } from "./db";
 
 // Derived from the static registry at module load. z.enum needs a non-empty
@@ -741,6 +747,32 @@ export const appRouter = router({
           apiKey: input.apiKey,
           baseUrl: input.baseUrl ?? null,
         });
+        return { success: true };
+      }),
+
+    // External tool keys (web_search backends etc.) live outside the
+    // ChatProvider enum on purpose — they're not selectable as the agent
+    // brain, just optional capability switches.
+    getToolKeyStatus: publicProcedure.query(async ({ ctx }) => {
+      const tools: ToolId[] = ["tavily"];
+      const entries = await Promise.all(
+        tools.map(
+          async tool =>
+            [tool, { hasKey: await hasToolApiKey(ctx.user.id, tool) }] as const
+        )
+      );
+      return Object.fromEntries(entries) as Record<ToolId, { hasKey: boolean }>;
+    }),
+
+    setToolKey: publicProcedure
+      .input(
+        z.object({
+          tool: z.enum(["tavily"]),
+          apiKey: z.string().trim().min(1).max(200),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        await setToolApiKey(ctx.user.id, input.tool, input.apiKey);
         return { success: true };
       }),
 

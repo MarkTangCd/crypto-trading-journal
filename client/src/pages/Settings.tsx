@@ -1,4 +1,5 @@
 import { AgentProviderSection } from "@/components/settings/AgentProviderSection";
+import { ToolKeysSection } from "@/components/settings/ToolKeysSection";
 import { Link } from "wouter";
 
 export default function Settings() {
@@ -29,6 +30,8 @@ export default function Settings() {
       </section>
 
       <AgentProviderSection />
+
+      <ToolKeysSection />
 
       <section>
         <p className="text-label">about</p>
