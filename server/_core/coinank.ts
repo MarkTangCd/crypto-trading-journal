@@ -6,6 +6,13 @@ const DEFAULT_EXCHANGE = "Binance";
 
 const DEFAULT_SIZE = 100;
 
+// undici's default connect timeout is 10 s, which coinank's upstream
+// intermittently blows past (cold-path TCP handshakes seen up to 52 s in the
+// wild). Cover the slow tail with a 30 s end-to-end ceiling and a single
+// retry — most transient stalls clear on the second attempt.
+const REQUEST_TIMEOUT_MS = 30_000;
+const RETRY_BACKOFF_MS = 1_000;
+
 // Maps the form-side timeframe values (see InstrumentSection.TIME_FRAMES) to
 // the interval string CoinAnk's API expects. Keep these in sync with the UI.
 const INTERVAL_MAP: Record<string, string> = {
@@ -67,6 +74,32 @@ function mapRow(row: unknown[]): Candle | null {
   };
 }
 
+// One-shot retry around fetch: undici sometimes stalls a cold TCP handshake
+// and then succeeds immediately on a fresh socket. The 30 s ceiling caps the
+// happy path; the 1 s backoff before retry lets the slow IP drop out of the
+// happy-eyeballs pool. Two consecutive failures bubble up.
+async function fetchWithRetry(url: string): Promise<Response> {
+  try {
+    return await fetch(url, {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch (err) {
+    const cause = err instanceof Error ? err.cause : undefined;
+    console.warn(
+      "[CoinAnk] first attempt failed, retrying",
+      err,
+      "cause:",
+      cause
+    );
+    await new Promise(resolve => setTimeout(resolve, RETRY_BACKOFF_MS));
+    return await fetch(url, {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  }
+}
+
 export async function fetchCandles(
   input: FetchCandlesInput
 ): Promise<Candle[]> {
@@ -92,11 +125,10 @@ export async function fetchCandles(
 
   let res: Response;
   try {
-    res = await fetch(url, {
-      headers: { accept: "application/json" },
-    });
+    res = await fetchWithRetry(url);
   } catch (err) {
-    console.error("[CoinAnk] fetch failed", err);
+    const cause = err instanceof Error ? err.cause : undefined;
+    console.error("[CoinAnk] fetch failed", err, "cause:", cause);
     throw new TRPCError({
       code: "BAD_GATEWAY",
       message: "Failed to reach market data provider",
