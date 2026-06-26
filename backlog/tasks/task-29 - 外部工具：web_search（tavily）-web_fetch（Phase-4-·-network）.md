@@ -1,11 +1,11 @@
 ---
 id: TASK-29
 title: 外部工具：web_search（tavily）+ web_fetch（Phase 4 · network）
-status: In Progress
+status: Done
 assignee:
   - '@myself'
 created_date: '2026-06-25 12:50'
-updated_date: '2026-06-26 08:42'
+updated_date: '2026-06-26 08:59'
 labels:
   - ai-agent
   - phase-4
@@ -64,10 +64,12 @@ ordinal: 29000
 - [x] #3 tavily api key 存储走加密层，不入 ChatProvider registry；Settings 页增一条 'tavily search · api key' 输入，都是 Bench Notebook 风格
 - [x] #4 tavily 缺 key 时 web_search.run 友好返 ok=false（不抛），guard rails 正常退出；web_fetch 无需 key
 - [x] #5 两个工具注册进 toolRegistry；agent 可在同一会话内连着调两者（search 然后 fetch 顶部 url）
-- [ ] #6 烟测：在 BTCUSDT trade-1 问 'btc 近期 funding 事件背景'，agent 会依次调 web_search → web_fetch → 引用原文
+- [x] #6 烟测：在 BTCUSDT trade-1 问 'btc 近期 funding 事件背景'，agent 会依次调 web_search → web_fetch → 引用原文
 - [x] #7 为两个工具各加 1-2 个单测：parameters 校验、happy path mocked、超时 / 超额路径
 - [x] #8 npm run check + npm run format + npm run test 全绿
 <!-- AC:END -->
+
+
 
 ## Implementation Plan
 
