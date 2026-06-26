@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { register } from "../toolRegistry";
+import { register, type Skill } from "../skillRegistry";
 import { getTransactionsByUserId } from "../../db";
 
 const DEFAULT_LIMIT = 10;
@@ -30,8 +30,9 @@ const parameters = z.object({
     .describe(`Row cap. Hard ceiling ${MAX_LIMIT}.`),
 });
 
-register({
+export const getRecentTradesSkill: Skill<typeof parameters> = {
   name: "get_recent_trades",
+  category: "internal",
   description:
     "Fetch the user's recent trades, newest-first by start time. Use this to ground review with comparable historical setups (same pair, same direction, similar outcome). Returns a compact field set scoped to the current user.",
   parameters,
@@ -72,4 +73,6 @@ register({
       trades,
     };
   },
-});
+};
+
+register(getRecentTradesSkill);

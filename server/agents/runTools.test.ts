@@ -7,7 +7,7 @@ import {
   type RunToolsEvent,
   runTools,
 } from "./runTools";
-import { register, unregisterForTest } from "./toolRegistry";
+import { register, unregisterForTest } from "./skillRegistry";
 import type {
   ChatProvider,
   ChatRequest,
@@ -314,6 +314,69 @@ describe("runTools", () => {
     expect(deltas.some(d => "text" in d && /时间预算/.test(d.text))).toBe(true);
     expect(deltas.at(-1)).toMatchObject({
       text: "fallback after timeout",
+    });
+  });
+});
+
+describe("runTools enabledSkillIds", () => {
+  it("non-empty enabledSkillIds advertises only the listed skills to the provider", async () => {
+    const observed: Array<ChatRequest["tools"]> = [];
+    const provider: ChatProvider = {
+      id: "observer",
+      defaultModel: "observer-model",
+      async *chatStream(req: ChatRequest) {
+        observed.push(req.tools);
+        yield { delta: "done" };
+      },
+      async chat() {
+        throw new Error("not used in tests");
+      },
+    };
+
+    await drain(
+      runTools({
+        provider,
+        model: "observer-model",
+        apiKey: "k",
+        messages: [{ role: "user", content: "go" }],
+        enabledSkillIds: [TOOL_FOO],
+      })
+    );
+
+    expect(observed).toHaveLength(1);
+    const names = (observed[0] ?? []).map(t => t.name).sort();
+    expect(names).toEqual([TOOL_FOO]);
+  });
+
+  it("blocks execution of a skill the provider names outside enabledSkillIds", async () => {
+    const call: ToolCall = {
+      id: "call-bar",
+      name: TOOL_BAR,
+      arguments: "{}",
+    };
+    const provider = buildScriptedProvider([
+      { toolCalls: [call] },
+      { deltas: ["done"] },
+    ]);
+
+    const { events } = await drain(
+      runTools({
+        provider,
+        model: "scripted-model",
+        apiKey: "k",
+        messages: [{ role: "user", content: "go" }],
+        enabledSkillIds: [TOOL_FOO],
+      })
+    );
+
+    expect(barRun).not.toHaveBeenCalled();
+    const result = events.find(
+      e => e.type === "tool_result" && e.id === "call-bar"
+    );
+    expect(result).toMatchObject({
+      type: "tool_result",
+      ok: false,
+      summary: expect.stringContaining("skill not enabled"),
     });
   });
 });

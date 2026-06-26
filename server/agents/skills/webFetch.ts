@@ -2,7 +2,7 @@ import { z } from "zod";
 import { Readability } from "@mozilla/readability";
 import { parseHTML } from "linkedom";
 import TurndownService from "turndown";
-import { register } from "../toolRegistry";
+import { register, type Skill } from "../skillRegistry";
 
 const PER_REQUEST_TIMEOUT_MS = 30_000;
 const MAX_BODY_BYTES = 200 * 1024; // 200KB
@@ -97,8 +97,9 @@ function htmlToMarkdown(
   return { title: article?.title ?? null, markdown };
 }
 
-register({
+export const webFetchSkill: Skill<typeof parameters> = {
   name: "web_fetch",
+  category: "network",
   description:
     "Fetch a single HTML URL and return its readable article body as markdown. Use this after `web_search` to read a result in detail. Caps at 200KB / 30s; non-HTML responses fail soft.",
   parameters,
@@ -164,4 +165,6 @@ register({
       markdown: truncate(extracted.markdown, MAX_MARKDOWN_CHARS),
     };
   },
-});
+};
+
+register(webFetchSkill);

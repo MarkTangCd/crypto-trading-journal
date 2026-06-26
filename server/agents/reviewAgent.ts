@@ -17,9 +17,10 @@ import {
 } from "./providers/types";
 import { getProviderApiKey, getProviderBaseUrl } from "./secrets";
 import { runTools } from "./runTools";
-// Side-effect import: triggers boot-time tool registration so the agent can
-// surface get_klines / get_recent_trades to the model on first request.
-import "./tools";
+// Side-effect import: triggers boot-time skill registration so the agent can
+// surface get_klines / get_recent_trades / web_search / web_fetch to the
+// model on first request.
+import "./skills";
 
 const FALLBACK_PROVIDER_ID = "deepseek";
 
@@ -389,6 +390,12 @@ export async function* streamUserMessage(params: {
     { role: "user", content: params.userText },
   ];
 
+  // enabledSkillIds is the user's per-account skill whitelist. Empty / missing
+  // row → runTools treats it as "no filter, all skills enabled" (Phase 4
+  // behavior); a non-empty array gates both declaration and execution.
+  const settings = await getAgentSettings(params.userId);
+  const enabledSkillIds = settings?.enabledSkillIds ?? [];
+
   const generator = runTools({
     provider: handle.provider,
     model: handle.provider.defaultModel,
@@ -397,6 +404,7 @@ export async function* streamUserMessage(params: {
     messages: history,
     signal: params.signal,
     userId: params.userId,
+    enabledSkillIds,
   });
 
   let appended: ChatMessage[] = [];

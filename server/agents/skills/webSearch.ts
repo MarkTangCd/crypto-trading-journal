@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { register } from "../toolRegistry";
+import { register, type Skill } from "../skillRegistry";
 import { getActiveSearchBackend } from "./searchBackends";
 
 // Cross-backend cap. Tavily limits to 10; Serper / Brave land in the same
@@ -24,8 +24,9 @@ const parameters = z.object({
     ),
 });
 
-register({
+export const webSearchSkill: Skill<typeof parameters> = {
   name: "web_search",
+  category: "network",
   description:
     "Search the web for recent news, market commentary, or background context that isn't already in the conversation. Returns a compact list of top results with title, url, and snippet.",
   parameters,
@@ -50,4 +51,6 @@ register({
     }
     return { ok: true, query: args.query, results: outcome.results };
   },
-});
+};
+
+register(webSearchSkill);

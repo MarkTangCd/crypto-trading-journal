@@ -5,7 +5,7 @@ vi.mock("../../db", () => ({
 }));
 
 import { getTransactionsByUserId } from "../../db";
-import { getTool, runTool, unregisterForTest } from "../toolRegistry";
+import { getTool, runTool, unregisterForTest } from "../skillRegistry";
 
 import "./getRecentTrades";
 

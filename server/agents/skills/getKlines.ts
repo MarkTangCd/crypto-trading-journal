@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { register } from "../toolRegistry";
+import { register, type Skill } from "../skillRegistry";
 import { fetchCandleWindowAround, type Candle } from "../../_core/coinank";
 
 // Mirrors INTERVAL_MAP keys in server/_core/coinank.ts — keep in sync.
@@ -63,8 +63,9 @@ function shorten(candle: Candle) {
     : base;
 }
 
-register({
+export const getKlinesSkill: Skill<typeof parameters> = {
   name: "get_klines",
+  category: "internal",
   description:
     "Fetch a window of OHLCV candles around an anchor timestamp from CoinAnk. Use this to inspect price action before and after a trade entry, scope a setup, or check follow-through after exit.",
   parameters,
@@ -86,4 +87,6 @@ register({
       candles: window.candles.map(shorten),
     };
   },
-});
+};
+
+register(getKlinesSkill);

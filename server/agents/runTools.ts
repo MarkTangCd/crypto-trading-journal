@@ -5,7 +5,7 @@ import {
   ProviderError,
   type ToolCall,
 } from "./providers/types";
-import { getTool, listToolDeclarations } from "./toolRegistry";
+import { getSkill, listEnabledSkillDeclarations } from "./skillRegistry";
 
 /**
  * Max chat→tool→chat steps before forcing a tool-free final answer.
@@ -56,6 +56,14 @@ export interface RunToolsParams {
   signal?: AbortSignal;
   /** Forwarded into tool.run() so tools can scope reads to the user. */
   userId?: number;
+  /**
+   * Skill ids (== skill.name) the agent is allowed to invoke this turn.
+   * Empty / undefined → every registered skill is exposed (the zero-config
+   * default that preserves Phase 4 behavior). Non-empty → only skills whose
+   * id is in the set get advertised in the provider `tools[]` payload AND
+   * are accepted in the post-validation execution gate.
+   */
+  enabledSkillIds?: string[];
 }
 
 function truncate(value: string, max: number): string {
@@ -97,7 +105,9 @@ async function* runOneChatStep(
     {
       model: params.model,
       messages,
-      tools: withTools ? listToolDeclarations() : undefined,
+      tools: withTools
+        ? listEnabledSkillDeclarations(params.enabledSkillIds ?? [])
+        : undefined,
     },
     options
   );
@@ -121,9 +131,20 @@ interface ToolRunOutcome {
 async function executeToolCall(
   call: ToolCall,
   userId: number | undefined,
-  signal: AbortSignal
+  signal: AbortSignal,
+  enabledSkillIds: string[]
 ): Promise<ToolRunOutcome> {
-  const tool = getTool(call.name);
+  // Defense-in-depth: declarations are already filtered upstream, but if a
+  // provider hallucinates a skill name outside the advertised set we still
+  // refuse to execute it rather than silently widen the surface.
+  if (enabledSkillIds.length > 0 && !enabledSkillIds.includes(call.name)) {
+    return {
+      call,
+      ok: false,
+      content: JSON.stringify({ error: `skill not enabled: ${call.name}` }),
+    };
+  }
+  const tool = getSkill(call.name);
   if (!tool) {
     return {
       call,
@@ -244,9 +265,10 @@ export async function* runTools(
         };
       }
 
+      const enabledSkillIds = params.enabledSkillIds ?? [];
       const outcomes = await Promise.all(
         allowed.map(call =>
-          executeToolCall(call, params.userId, combinedSignal)
+          executeToolCall(call, params.userId, combinedSignal, enabledSkillIds)
         )
       );
 

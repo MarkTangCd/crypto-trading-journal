@@ -2,27 +2,26 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Stub the backend dispatcher BEFORE importing the tool — the register() call
 // inside webSearch.ts captures the mocked resolver at module load.
-const backendSearchMock =
-  vi.fn<
-    (args: {
-      query: string;
-      topK: number;
-      userId: number;
-      signal?: AbortSignal;
-    }) => Promise<
-      | {
-          ok: true;
-          results: Array<{ title: string; url: string; snippet: string }>;
-        }
-      | { ok: false; error: string }
-    >
-  >();
+const backendSearchMock = vi.fn<
+  (args: {
+    query: string;
+    topK: number;
+    userId: number;
+    signal?: AbortSignal;
+  }) => Promise<
+    | {
+        ok: true;
+        results: Array<{ title: string; url: string; snippet: string }>;
+      }
+    | { ok: false; error: string }
+  >
+>();
 
 vi.mock("./searchBackends", () => ({
   getActiveSearchBackend: () => ({ id: "mock", search: backendSearchMock }),
 }));
 
-import { getTool, runTool, unregisterForTest } from "../toolRegistry";
+import { getTool, runTool, unregisterForTest } from "../skillRegistry";
 
 // Importing the module triggers register().
 import "./webSearch";

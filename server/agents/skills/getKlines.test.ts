@@ -7,7 +7,7 @@ vi.mock("../../_core/coinank", () => ({
 }));
 
 import { fetchCandleWindowAround } from "../../_core/coinank";
-import { getTool, runTool, unregisterForTest } from "../toolRegistry";
+import { getTool, runTool, unregisterForTest } from "../skillRegistry";
 
 // Importing the module triggers register().
 import "./getKlines";

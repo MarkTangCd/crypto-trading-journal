@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { getTool, runTool, unregisterForTest } from "../toolRegistry";
+import { getTool, runTool, unregisterForTest } from "../skillRegistry";
 
 // Importing the module triggers register().
 import "./webFetch";
