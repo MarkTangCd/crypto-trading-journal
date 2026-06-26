@@ -3,9 +3,9 @@ id: TASK-30
 title: Gemini FunctionDeclaration schema 翻译（Phase 4 · gemini）
 status: Done
 assignee:
-  - '@myself'
-created_date: '2026-06-25 12:50'
-updated_date: '2026-06-26 09:29'
+  - "@myself"
+created_date: "2026-06-25 12:50"
+updated_date: "2026-06-26 09:29"
 labels:
   - ai-agent
   - phase-4
@@ -28,6 +28,7 @@ ordinal: 30000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
+
 ## Why
 
 TASK-27 收尾时 gemini 是"先 console.warn 略过 tools"的妥协，让 Phase 4 主干能先跑通。这一步把 gemini 拉齐：openai 系吃 JSON Schema，gemini 走 FunctionDeclaration，差异在适配器内做一次单向翻译即可，对外保持 ChatProvider 接口不变。
@@ -50,7 +51,9 @@ TASK-27 收尾时 gemini 是"先 console.warn 略过 tools"的妥协，让 Phase
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
+
 <!-- AC:BEGIN -->
+
 - [x] #1 server/agents/providers/geminiToolSchema.ts 实现 translateToGeminiTools(tools: ToolDeclaration[]) 和 parseGeminiFunctionCalls(response)
 - [x] #2 translate 函数处理 JSON Schema · Gemini OpenAPI 子集 的转换：properties / required / items / enum / description 保留；不认的关键字剔除
 - [x] #3 gemini.chat / chatStream 透传翻译后的 tools；functionCall 解析回 ChatMessage.toolCalls；function 回咵时 role/name 必填
@@ -60,11 +63,10 @@ TASK-27 收尾时 gemini 是"先 console.warn 略过 tools"的妥协，让 Phase
 - [x] #7 npm run check + npm run format + npm run test 全绿
 <!-- AC:END -->
 
-
-
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
+
 ## 实现计划
 
 ### 1. 新建 `server/agents/providers/geminiToolSchema.ts`
@@ -104,6 +106,7 @@ TASK-27 收尾时 gemini 是"先 console.warn 略过 tools"的妥协，让 Phase
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
+
 ## 摘要
 
 把 TASK-27 在 gemini provider 上"console.warn 略过 tools"的妥协补齐：openai 系吃 JSON Schema、gemini 走 FunctionDeclaration 的差异封装在一个独立的 `geminiToolSchema.ts` 里做单向翻译，对外 ChatProvider 接口不变。
