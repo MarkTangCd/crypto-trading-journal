@@ -3,9 +3,9 @@ id: TASK-24
 title: 多家 openai 兼容 provider（kimi · glm · openai）+ Settings 列表化（Phase 3 · providers）
 status: Done
 assignee:
-  - '@myself'
-created_date: '2026-06-25 04:00'
-updated_date: '2026-06-25 08:02'
+  - "@myself"
+created_date: "2026-06-25 04:00"
+updated_date: "2026-06-25 08:02"
 labels:
   - ai-agent
   - phase-3
@@ -34,6 +34,7 @@ ordinal: 24000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
+
 ## Why
 
 Plan 的 provider 表格里 4 家是 openai 兼容（含 deepseek）：kimi · moonshot，glm · 智谱，openai。基底已在 TASK-23 抽出，本任务把三家挂上 registry，并让 Settings 页根据 registry 列表自动渲染，所有 provider 一字排开。
@@ -79,12 +80,15 @@ Plan 的 provider 表格里 4 家是 openai 兼容（含 deepseek）：kimi · m
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
+
 由 sub-agent 在 worktree `agent-a050452df7e5c0ef1` 起草实现；主 agent 验证后把核心增量（kimi/glm/openai providers、`settings.listProviders` procedure、Settings UI 列表化 + ProviderRow、registry / listProviders 测试）逐项合并到 main，并适配 TASK-23 已落地的 registry shape。
+
 <!-- SECTION:PLAN:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
+
 ## 多家 openai 兼容 provider + Settings 列表化
 
 把 kimi · moonshot、glm · 智谱、openai 三家挂上 TASK-23 抽出的 `createOpenAICompatibleProvider` 基底，并把 Settings 页改成由 registry 驱动的列表，每家 provider 独立卡片。
