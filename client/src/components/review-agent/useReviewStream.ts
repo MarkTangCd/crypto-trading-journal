@@ -2,9 +2,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const STREAM_URL = "/api/review-agent/stream";
 
+export type ToolBubbleStatus = "running" | "ok" | "failed";
+
+export interface ToolBubble {
+  id: string;
+  name: string;
+  argsSummary: string;
+  status: ToolBubbleStatus;
+  summary?: string;
+}
+
 export interface StreamPending {
   userText: string;
   assistantText: string;
+  toolBubbles: ToolBubble[];
 }
 
 interface UseReviewStreamOptions {
@@ -22,14 +33,28 @@ interface UseReviewStreamResult {
 
 type StreamEvent =
   | { type: "delta"; text: string }
+  | {
+      type: "tool_call";
+      id: string;
+      name: string;
+      argsSummary: string;
+    }
+  | {
+      type: "tool_result";
+      id: string;
+      name: string;
+      ok: boolean;
+      summary: string;
+    }
   | { type: "done"; messageId: number }
   | { type: "error"; message: string };
 
 /**
  * Drives the SSE consumer for `/api/review-agent/stream`. Owns the
- * placeholder state so the drawer can render the user turn and the growing
- * assistant turn without touching AgentMessageList. Callbacks (`onDone`,
- * `onError`) are stashed in refs so callers don't have to memoise them.
+ * placeholder state so the drawer can render the user turn, in-flight tool
+ * bubbles, and the growing assistant turn without touching AgentMessageList.
+ * Callbacks (`onDone`, `onError`) are stashed in refs so callers don't have
+ * to memoise them.
  */
 export function useReviewStream(
   opts: UseReviewStreamOptions
@@ -58,7 +83,7 @@ export function useReviewStream(
 
       const abort = new AbortController();
       abortRef.current = abort;
-      setPending({ userText, assistantText: "" });
+      setPending({ userText, assistantText: "", toolBubbles: [] });
 
       let assembled = "";
 
@@ -104,6 +129,36 @@ export function useReviewStream(
                 assembled += parsed.text;
                 setPending(prev =>
                   prev ? { ...prev, assistantText: assembled } : prev
+                );
+              } else if (parsed.type === "tool_call") {
+                const bubble: ToolBubble = {
+                  id: parsed.id,
+                  name: parsed.name,
+                  argsSummary: parsed.argsSummary,
+                  status: "running",
+                };
+                setPending(prev =>
+                  prev
+                    ? { ...prev, toolBubbles: [...prev.toolBubbles, bubble] }
+                    : prev
+                );
+              } else if (parsed.type === "tool_result") {
+                const { id, ok, summary } = parsed;
+                setPending(prev =>
+                  prev
+                    ? {
+                        ...prev,
+                        toolBubbles: prev.toolBubbles.map(b =>
+                          b.id === id
+                            ? {
+                                ...b,
+                                status: ok ? "ok" : "failed",
+                                summary,
+                              }
+                            : b
+                        ),
+                      }
+                    : prev
                 );
               } else if (parsed.type === "done") {
                 finished = true;

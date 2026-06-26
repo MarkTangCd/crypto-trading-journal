@@ -14,7 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Link } from "wouter";
 import { AgentMessageList, type ReviewMessage } from "./AgentMessageList";
-import { useReviewStream, type StreamPending } from "./useReviewStream";
+import { useReviewStream } from "./useReviewStream";
 
 type ProviderId = "deepseek" | "kimi" | "glm" | "openai" | "gemini";
 
@@ -22,26 +22,6 @@ interface Props {
   transactionId: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-function withPending(
-  canonical: ReviewMessage[],
-  pending: StreamPending | null
-): ReviewMessage[] {
-  if (!pending) return canonical;
-  const list: ReviewMessage[] = [
-    ...canonical,
-    { id: -1, role: "user", text: pending.userText, createdAt: 0 },
-  ];
-  if (pending.assistantText) {
-    list.push({
-      id: -2,
-      role: "assistant",
-      text: pending.assistantText,
-      createdAt: 0,
-    });
-  }
-  return list;
 }
 
 export function AgentDrawer({ transactionId, open, onOpenChange }: Props) {
@@ -172,7 +152,6 @@ export function AgentDrawer({ transactionId, open, onOpenChange }: Props) {
     (openMutation.data?.messages as ReviewMessage[] | undefined) ??
     activeQuery.data?.messages ??
     [];
-  const messages = withPending(canonical, stream.pending);
   const isBootstrapping =
     providersQuery.isLoading || defaultQuery.isLoading || activeQuery.isLoading;
   const isLoadingMessages =
@@ -227,7 +206,11 @@ export function AgentDrawer({ transactionId, open, onOpenChange }: Props) {
               canStart={Boolean(pickedProviderId) && selectedHasKey}
             />
           ) : (
-            <AgentMessageList messages={messages} isWaiting={isWaiting} />
+            <AgentMessageList
+              messages={canonical}
+              pending={stream.pending}
+              isWaiting={isWaiting}
+            />
           )}
         </div>
 

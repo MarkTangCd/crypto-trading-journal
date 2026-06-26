@@ -13,9 +13,13 @@ import {
   type ChatMessage,
   type ChatProvider,
   ProviderError,
+  type ToolCall,
 } from "./providers/types";
 import { getProviderApiKey, getProviderBaseUrl } from "./secrets";
 import { runTools } from "./runTools";
+// Side-effect import: triggers boot-time tool registration so the agent can
+// surface get_klines / get_recent_trades to the model on first request.
+import "./tools";
 
 const FALLBACK_PROVIDER_ID = "deepseek";
 
@@ -24,6 +28,10 @@ export interface ReviewMessage {
   role: Message["role"];
   text: string;
   createdAt: number;
+  /** Present on assistant turns that asked the model to invoke tools. */
+  toolCalls?: ToolCall[];
+  /** Present on role=tool turns; ties the result to its assistant call. */
+  toolCallId?: string;
 }
 
 interface ResolvedProvider {
@@ -101,6 +109,17 @@ function toReviewMessage(message: Message): ReviewMessage {
   } catch {
     // raw string fallback
   }
+
+  let toolCalls: ToolCall[] | undefined;
+  if (message.toolCalls) {
+    try {
+      const parsed = JSON.parse(message.toolCalls) as unknown;
+      if (Array.isArray(parsed)) toolCalls = parsed as ToolCall[];
+    } catch {
+      // unparseable — drop silently; the renderer hides empty tool rows.
+    }
+  }
+
   return {
     id: message.id,
     role: message.role,
@@ -109,11 +128,34 @@ function toReviewMessage(message: Message): ReviewMessage {
       message.createdAt instanceof Date
         ? message.createdAt.getTime()
         : Number(message.createdAt),
+    ...(toolCalls ? { toolCalls } : {}),
+    ...(message.toolCallId ? { toolCallId: message.toolCallId } : {}),
   };
 }
 
 function toChatHistory(rows: ReviewMessage[]): ChatMessage[] {
-  return rows.map(row => ({ role: row.role, content: row.text }));
+  // Recover tool names from prior assistant tool_calls. openai-compatible
+  // tool messages need `name` alongside `tool_call_id`, but the column isn't
+  // persisted — we look it up by id so a tool-using thread can be replayed
+  // verbatim on subsequent user turns without the upstream rejecting an
+  // unattached tool message.
+  const idToName = new Map<string, string>();
+  for (const row of rows) {
+    if (row.toolCalls?.length) {
+      for (const call of row.toolCalls) idToName.set(call.id, call.name);
+    }
+  }
+
+  return rows.map(row => {
+    const message: ChatMessage = { role: row.role, content: row.text };
+    if (row.toolCalls?.length) message.toolCalls = row.toolCalls;
+    if (row.toolCallId) {
+      message.toolCallId = row.toolCallId;
+      const name = idToName.get(row.toolCallId);
+      if (name) message.name = name;
+    }
+    return message;
+  });
 }
 
 async function loadThread(
