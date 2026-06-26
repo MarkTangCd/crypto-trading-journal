@@ -15,6 +15,7 @@ import {
   ProviderError,
 } from "./providers/types";
 import { getProviderApiKey, getProviderBaseUrl } from "./secrets";
+import { runTools } from "./runTools";
 
 const FALLBACK_PROVIDER_ID = "deepseek";
 
@@ -290,6 +291,19 @@ export async function listReviewMessages(params: {
 
 export type StreamEvent =
   | { type: "delta"; text: string }
+  | {
+      type: "tool_call";
+      id: string;
+      name: string;
+      argsSummary: string;
+    }
+  | {
+      type: "tool_result";
+      id: string;
+      name: string;
+      ok: boolean;
+      summary: string;
+    }
   | { type: "done"; messageId: number }
   | { type: "error"; message: string };
 
@@ -333,14 +347,25 @@ export async function* streamUserMessage(params: {
     { role: "user", content: params.userText },
   ];
 
-  let assembled = "";
+  const generator = runTools({
+    provider: handle.provider,
+    model: handle.provider.defaultModel,
+    apiKey: handle.apiKey,
+    baseUrl: handle.baseUrl,
+    messages: history,
+    signal: params.signal,
+    userId: params.userId,
+  });
+
+  let appended: ChatMessage[] = [];
   try {
-    for await (const chunk of handle.provider.chatStream(
-      { model: handle.provider.defaultModel, messages: history },
-      { apiKey: handle.apiKey, baseUrl: handle.baseUrl, signal: params.signal }
-    )) {
-      assembled += chunk.delta;
-      yield { type: "delta", text: chunk.delta };
+    while (true) {
+      const { value, done } = await generator.next();
+      if (done) {
+        appended = value.appended;
+        break;
+      }
+      yield value;
     }
   } catch (error) {
     const message =
@@ -351,16 +376,36 @@ export async function* streamUserMessage(params: {
     return;
   }
 
-  if (assembled.length === 0) {
+  const finalAssistantTurn = [...appended]
+    .reverse()
+    .find(message => message.role === "assistant" && !message.toolCalls);
+  if (!finalAssistantTurn || finalAssistantTurn.content.length === 0) {
     yield { type: "error", message: "助手没有返回任何内容，请稍后再试。" };
     return;
   }
 
-  const persisted = await appendMessage({
-    conversationId: params.conversationId,
-    role: "assistant",
-    content: serialize(assembled),
-  });
+  let finalAssistantId: number | null = null;
+  for (const message of appended) {
+    const payload: Parameters<typeof appendMessage>[0] = {
+      conversationId: params.conversationId,
+      role: message.role,
+      content: serialize(message.content),
+    };
+    if (message.toolCalls?.length) {
+      payload.toolCalls = JSON.stringify(message.toolCalls);
+    }
+    if (message.toolCallId) payload.toolCallId = message.toolCallId;
+    const persisted = await appendMessage(payload);
+    if (message === finalAssistantTurn) {
+      finalAssistantId = persisted.id;
+    }
+  }
 
-  yield { type: "done", messageId: persisted.id };
+  // finalAssistantId is guaranteed by the finalAssistantTurn lookup above;
+  // assert for the type system.
+  if (finalAssistantId === null) {
+    throw new Error("finalAssistantId missing despite assistant turn present");
+  }
+
+  yield { type: "done", messageId: finalAssistantId };
 }

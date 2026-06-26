@@ -223,6 +223,16 @@ export const messages = sqliteTable(
       .notNull(),
     /** JSON-encoded payload */
     content: text("content").notNull(),
+    /**
+     * JSON-stringified ToolCall[] when the assistant turn asked the model to
+     * invoke tools. Null on all other rows.
+     */
+    toolCalls: text("toolCalls"),
+    /**
+     * Ties a role="tool" turn back to the assistant's ToolCall.id. Null on
+     * all other rows.
+     */
+    toolCallId: text("toolCallId"),
     createdAt: integer("createdAt", { mode: "timestamp_ms" })
       .default(sql`(unixepoch() * 1000)`)
       .notNull(),

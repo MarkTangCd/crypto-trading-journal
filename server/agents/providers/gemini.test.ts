@@ -427,6 +427,28 @@ describe("geminiProvider", () => {
       });
     });
 
+    it("drops req.tools with a console.warn (translation lives in a follow-up task)", async () => {
+      const { captured } = captureFetch(sseResponse([geminiFrame("ok")]));
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const result = await geminiProvider.chat(
+        {
+          model: "gemini-2.5-flash",
+          messages: [{ role: "user", content: "hi" }],
+          tools: [{ name: "get_x", description: "fetch x", parameters: {} }],
+        },
+        BASE_OPTIONS
+      );
+
+      // Response path stays alive — the upstream still got a normal request.
+      expect(result.content).toBe("ok");
+      const body = captured[0].body as Record<string, unknown>;
+      expect(body).not.toHaveProperty("tools");
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringMatching(/gemini.*tool/i)
+      );
+    });
+
     it("error mappings use ProviderError instances (not plain Error)", async () => {
       captureFetch(new Response("nope", { status: 401 }));
       vi.spyOn(console, "warn").mockImplementation(() => {});

@@ -1045,6 +1045,10 @@ export async function appendMessage(params: {
   role: "system" | "user" | "assistant" | "tool";
   /** Serialized JSON payload. Callers are responsible for JSON.stringify. */
   content: string;
+  /** JSON-stringified ToolCall[] for assistant turns that asked for tools. */
+  toolCalls?: string | null;
+  /** Ties a role="tool" turn back to the assistant's ToolCall.id. */
+  toolCallId?: string | null;
 }): Promise<Message> {
   return runInSqliteTransaction(async db => {
     const inserted = await db
@@ -1053,6 +1057,8 @@ export async function appendMessage(params: {
         conversationId: params.conversationId,
         role: params.role,
         content: params.content,
+        toolCalls: params.toolCalls ?? null,
+        toolCallId: params.toolCallId ?? null,
       })
       .returning();
 

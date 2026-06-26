@@ -267,6 +267,224 @@ describe("createOpenAICompatibleProvider", () => {
     });
   });
 
+  describe("tool calls", () => {
+    function toolDeltaFrame(
+      tool_calls: Array<{
+        index?: number;
+        id?: string;
+        function?: { name?: string; arguments?: string };
+      }>,
+      finish?: string
+    ): string {
+      const payload = finish
+        ? { choices: [{ delta: { tool_calls }, finish_reason: finish }] }
+        : { choices: [{ delta: { tool_calls } }] };
+      return `data: ${JSON.stringify(payload)}\n\n`;
+    }
+
+    it("forwards req.tools as tools[] + tool_choice:auto on the request body", async () => {
+      fetchMock.mockResolvedValueOnce(
+        sseResponse([deltaFrame("ok"), "data: [DONE]\n\n"])
+      );
+
+      await provider.chat(
+        {
+          model: "test-model",
+          messages: [{ role: "user", content: "hi" }],
+          tools: [
+            {
+              name: "get_x",
+              description: "fetch x",
+              parameters: {
+                type: "object",
+                properties: { x: { type: "number" } },
+              },
+            },
+          ],
+        },
+        { apiKey: "sk-abc" }
+      );
+
+      const [, init] = fetchMock.mock.calls[0];
+      const body = JSON.parse(init.body as string);
+      expect(body.tool_choice).toBe("auto");
+      expect(body.tools).toEqual([
+        {
+          type: "function",
+          function: {
+            name: "get_x",
+            description: "fetch x",
+            parameters: {
+              type: "object",
+              properties: { x: { type: "number" } },
+            },
+          },
+        },
+      ]);
+    });
+
+    it("omits tools / tool_choice when req.tools is absent (no regression for plain chats)", async () => {
+      fetchMock.mockResolvedValueOnce(
+        sseResponse([deltaFrame("ok"), "data: [DONE]\n\n"])
+      );
+
+      await provider.chat(
+        { model: "test-model", messages: [{ role: "user", content: "hi" }] },
+        { apiKey: "sk-abc" }
+      );
+
+      const [, init] = fetchMock.mock.calls[0];
+      const body = JSON.parse(init.body as string);
+      expect(body.tools).toBeUndefined();
+      expect(body.tool_choice).toBeUndefined();
+    });
+
+    it("merges streaming tool_calls deltas across frames and emits a final ToolCall[]", async () => {
+      fetchMock.mockResolvedValueOnce(
+        sseResponse([
+          toolDeltaFrame([
+            {
+              index: 0,
+              id: "call-1",
+              function: { name: "get_x", arguments: "" },
+            },
+          ]),
+          toolDeltaFrame([{ index: 0, function: { arguments: '{"x":' } }]),
+          toolDeltaFrame(
+            [{ index: 0, function: { arguments: "1}" } }],
+            "tool_calls"
+          ),
+          "data: [DONE]\n\n",
+        ])
+      );
+
+      const chunks = [];
+      for await (const chunk of provider.chatStream(
+        {
+          model: "test-model",
+          messages: [{ role: "user", content: "go" }],
+        },
+        { apiKey: "sk-abc" }
+      )) {
+        chunks.push(chunk);
+      }
+
+      const final = chunks.find(c => c.toolCalls);
+      expect(final?.toolCalls).toEqual([
+        { id: "call-1", name: "get_x", arguments: '{"x":1}' },
+      ]);
+    });
+
+    it("buffered tool_calls flush on stream end even without an explicit finish_reason", async () => {
+      fetchMock.mockResolvedValueOnce(
+        sseResponse([
+          toolDeltaFrame([
+            {
+              index: 0,
+              id: "call-2",
+              function: { name: "ping", arguments: "{}" },
+            },
+          ]),
+          "data: [DONE]\n\n",
+        ])
+      );
+
+      const chunks = [];
+      for await (const chunk of provider.chatStream(
+        {
+          model: "test-model",
+          messages: [{ role: "user", content: "go" }],
+        },
+        { apiKey: "sk-abc" }
+      )) {
+        chunks.push(chunk);
+      }
+
+      const final = chunks.find(c => c.toolCalls);
+      expect(final?.toolCalls).toEqual([
+        { id: "call-2", name: "ping", arguments: "{}" },
+      ]);
+    });
+
+    it("chat() returns toolCalls and skips the empty-content guard when tools are present", async () => {
+      fetchMock.mockResolvedValueOnce(
+        sseResponse([
+          toolDeltaFrame(
+            [
+              {
+                index: 0,
+                id: "call-3",
+                function: { name: "noop", arguments: "{}" },
+              },
+            ],
+            "tool_calls"
+          ),
+          "data: [DONE]\n\n",
+        ])
+      );
+
+      const result = await provider.chat(
+        {
+          model: "test-model",
+          messages: [{ role: "user", content: "go" }],
+          tools: [{ name: "noop", description: "", parameters: {} }],
+        },
+        { apiKey: "sk-abc" }
+      );
+
+      expect(result.content).toBe("");
+      expect(result.toolCalls).toEqual([
+        { id: "call-3", name: "noop", arguments: "{}" },
+      ]);
+    });
+
+    it("replays assistant turns with prior toolCalls back to the wire shape", async () => {
+      fetchMock.mockResolvedValueOnce(
+        sseResponse([deltaFrame("ack"), "data: [DONE]\n\n"])
+      );
+
+      await provider.chat(
+        {
+          model: "test-model",
+          messages: [
+            {
+              role: "assistant",
+              content: "",
+              toolCalls: [{ id: "call-1", name: "noop", arguments: "{}" }],
+            },
+            {
+              role: "tool",
+              content: '{"result":1}',
+              toolCallId: "call-1",
+              name: "noop",
+            },
+          ],
+        },
+        { apiKey: "sk-abc" }
+      );
+
+      const [, init] = fetchMock.mock.calls[0];
+      const body = JSON.parse(init.body as string);
+      expect(body.messages[0]).toEqual({
+        role: "assistant",
+        content: "",
+        tool_calls: [
+          {
+            id: "call-1",
+            type: "function",
+            function: { name: "noop", arguments: "{}" },
+          },
+        ],
+      });
+      expect(body.messages[1]).toEqual({
+        role: "tool",
+        content: '{"result":1}',
+        tool_call_id: "call-1",
+        name: "noop",
+      });
+    });
+  });
+
   it("maps mid-stream AbortError to NETWORK without leaking the raw error", async () => {
     const failing = new Response(
       new ReadableStream<Uint8Array>({

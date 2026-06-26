@@ -46,7 +46,14 @@ export interface ProviderCallOptions {
 }
 
 export interface ChatStreamChunk {
-  delta: string;
+  /** Incremental text emitted by the model. */
+  delta?: string;
+  /**
+   * Present on the FINAL chunk of a streaming response when the model asked
+   * to invoke tools. Merged across deltas (see openai-compatible provider for
+   * the merge buffer) so callers receive a single complete ToolCall[].
+   */
+  toolCalls?: ToolCall[];
 }
 
 export interface ChatProvider {

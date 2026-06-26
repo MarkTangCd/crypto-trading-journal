@@ -5,6 +5,7 @@ import {
   type ChatStreamChunk,
   type ProviderCallOptions,
   ProviderError,
+  type ToolCall,
 } from "./types";
 import { parseSseFrames } from "./sseParser";
 
@@ -21,8 +22,17 @@ export interface OpenAICompatibleProviderConfig {
   errorBrand: string;
 }
 
+interface ToolCallDelta {
+  index?: number;
+  id?: string;
+  function?: { name?: string; arguments?: string };
+}
+
 interface StreamDelta {
-  choices?: Array<{ delta?: { content?: string } }>;
+  choices?: Array<{
+    delta?: { content?: string; tool_calls?: ToolCallDelta[] };
+    finish_reason?: string | null;
+  }>;
 }
 
 function toOpenAIMessages(messages: ChatMessage[]) {
@@ -35,8 +45,34 @@ function toOpenAIMessages(messages: ChatMessage[]) {
         name: message.name,
       };
     }
+    if (message.role === "assistant" && message.toolCalls?.length) {
+      // Replay assistant tool-call turns with the wire shape the upstream
+      // expects (id + function.name + function.arguments). Required so the
+      // model can correlate prior tool_result turns to their originating call.
+      return {
+        role: "assistant" as const,
+        content: message.content,
+        tool_calls: message.toolCalls.map(call => ({
+          id: call.id,
+          type: "function" as const,
+          function: { name: call.name, arguments: call.arguments },
+        })),
+      };
+    }
     return { role: message.role, content: message.content };
   });
+}
+
+function toOpenAITools(req: ChatRequest) {
+  if (!req.tools?.length) return undefined;
+  return req.tools.map(tool => ({
+    type: "function" as const,
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters,
+    },
+  }));
 }
 
 function buildBody(
@@ -50,6 +86,11 @@ function buildBody(
   };
   if (typeof req.temperature === "number") {
     body.temperature = req.temperature;
+  }
+  const tools = toOpenAITools(req);
+  if (tools) {
+    body.tools = tools;
+    body.tool_choice = "auto";
   }
   return body;
 }
@@ -135,6 +176,59 @@ async function openStream(
   return response;
 }
 
+interface ToolCallBufferEntry {
+  id: string;
+  name: string;
+  argumentsBuffer: string;
+}
+
+// Merge an incoming streaming tool_calls delta array into the per-index buffer.
+// OpenAI streams `function.arguments` as concatenable substrings; we accumulate
+// until finish_reason="tool_calls" or end-of-stream, then emit completed calls.
+function mergeToolCallDeltas(
+  buffer: Map<number, ToolCallBufferEntry>,
+  deltas: ToolCallDelta[]
+): void {
+  for (const delta of deltas) {
+    const index = delta.index ?? 0;
+    const existing = buffer.get(index);
+    if (existing) {
+      if (delta.id) existing.id = delta.id;
+      if (delta.function?.name) existing.name = delta.function.name;
+      if (delta.function?.arguments) {
+        existing.argumentsBuffer += delta.function.arguments;
+      }
+    } else {
+      buffer.set(index, {
+        id: delta.id ?? "",
+        name: delta.function?.name ?? "",
+        argumentsBuffer: delta.function?.arguments ?? "",
+      });
+    }
+  }
+}
+
+function flushToolCalls(
+  buffer: Map<number, ToolCallBufferEntry>
+): ToolCall[] | undefined {
+  if (buffer.size === 0) return undefined;
+  const calls: ToolCall[] = [];
+  // Emit in index order so concurrent tool_calls keep their declared sequence.
+  const indices = Array.from(buffer.keys()).sort((a, b) => a - b);
+  for (const index of indices) {
+    const entry = buffer.get(index)!;
+    if (entry.id && entry.name) {
+      calls.push({
+        id: entry.id,
+        name: entry.name,
+        arguments: entry.argumentsBuffer,
+      });
+    }
+  }
+  buffer.clear();
+  return calls.length > 0 ? calls : undefined;
+}
+
 async function* iterateStream(
   response: Response,
   errorBrand: string
@@ -150,6 +244,32 @@ async function* iterateStream(
   const reader = body.getReader();
   const decoder = new TextDecoder("utf-8");
   let buffer = "";
+  const toolCallBuffer = new Map<number, ToolCallBufferEntry>();
+
+  function* processFrames(
+    frames: ReturnType<typeof parseSseFrames>["frames"]
+  ): Generator<ChatStreamChunk> {
+    for (const frame of frames) {
+      let payload: StreamDelta;
+      try {
+        payload = JSON.parse(frame.data) as StreamDelta;
+      } catch {
+        continue;
+      }
+      const choice = payload.choices?.[0];
+      const delta = choice?.delta?.content;
+      if (typeof delta === "string" && delta.length > 0) {
+        yield { delta };
+      }
+      if (choice?.delta?.tool_calls?.length) {
+        mergeToolCallDeltas(toolCallBuffer, choice.delta.tool_calls);
+      }
+      if (choice?.finish_reason === "tool_calls") {
+        const calls = flushToolCalls(toolCallBuffer);
+        if (calls) yield { toolCalls: calls };
+      }
+    }
+  }
 
   try {
     while (true) {
@@ -160,39 +280,25 @@ async function* iterateStream(
       const parsed = parseSseFrames(buffer);
       buffer = parsed.remainder;
 
-      for (const frame of parsed.frames) {
-        let payload: StreamDelta;
-        try {
-          payload = JSON.parse(frame.data) as StreamDelta;
-        } catch {
-          // Skip malformed frames rather than aborting the whole stream —
-          // upstream occasionally interleaves diagnostic data.
-          continue;
-        }
-        const delta = payload.choices?.[0]?.delta?.content;
-        if (typeof delta === "string" && delta.length > 0) {
-          yield { delta };
-        }
-      }
+      yield* processFrames(parsed.frames);
 
-      if (parsed.done) return;
+      if (parsed.done) {
+        const trailing = flushToolCalls(toolCallBuffer);
+        if (trailing) yield { toolCalls: trailing };
+        return;
+      }
     }
 
     // Flush any tail bytes (defensive — providers always end with \n\n).
     if (buffer.length > 0) {
       const tail = parseSseFrames(buffer + "\n\n");
-      for (const frame of tail.frames) {
-        try {
-          const payload = JSON.parse(frame.data) as StreamDelta;
-          const delta = payload.choices?.[0]?.delta?.content;
-          if (typeof delta === "string" && delta.length > 0) {
-            yield { delta };
-          }
-        } catch {
-          // ignore
-        }
-      }
+      yield* processFrames(tail.frames);
     }
+    // Stream closed without [DONE]; emit any remaining buffered tool_calls so
+    // the caller still receives a complete ToolCall[] (kimi/glm occasionally
+    // skip the finish_reason frame).
+    const trailing = flushToolCalls(toolCallBuffer);
+    if (trailing) yield { toolCalls: trailing };
   } catch (error) {
     if (error instanceof ProviderError) throw error;
     if ((error as { name?: string })?.name === "AbortError") {
@@ -227,16 +333,20 @@ export function createOpenAICompatibleProvider(
 
     async chat(req, options) {
       let assembled = "";
+      let toolCalls: ToolCall[] | undefined;
       for await (const chunk of this.chatStream(req, options)) {
-        assembled += chunk.delta;
+        if (typeof chunk.delta === "string") assembled += chunk.delta;
+        if (chunk.toolCalls?.length) toolCalls = chunk.toolCalls;
       }
-      if (assembled.length === 0) {
+      if (assembled.length === 0 && !toolCalls) {
         throw new ProviderError(
           "INVALID_RESPONSE",
           `${config.errorBrand} 返回为空，请稍后重试。`
         );
       }
-      return { role: "assistant", content: assembled };
+      const message: ChatMessage = { role: "assistant", content: assembled };
+      if (toolCalls) message.toolCalls = toolCalls;
+      return message;
     },
   };
 }

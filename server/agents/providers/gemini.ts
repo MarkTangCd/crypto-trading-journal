@@ -219,19 +219,30 @@ function mapHttpStatus(status: number, upstreamText: string): ProviderError {
   return new ProviderError("UPSTREAM", `gemini 接口异常（状态码 ${status}）。`);
 }
 
+// Tool calling needs gemini's FunctionDeclaration wire shape (different from
+// the openai-compatible tools[]). Translating it lives in a follow-up task; for
+// now we strip the tools field so the rest of the response path stays alive.
+function stripUnsupportedTools(req: ChatRequest): ChatRequest {
+  if (!req.tools?.length) return req;
+  console.warn(
+    "[ReviewAgent] gemini tool-calling not yet supported; dropping tools[] for this turn."
+  );
+  return { ...req, tools: undefined };
+}
+
 export const geminiProvider: ChatProvider = {
   id: "gemini",
   defaultModel: DEFAULT_MODEL,
 
   async *chatStream(req, options) {
-    const response = await openStream(req, options);
+    const response = await openStream(stripUnsupportedTools(req), options);
     yield* iterateStream(response);
   },
 
   async chat(req, options) {
     let assembled = "";
     for await (const chunk of this.chatStream(req, options)) {
-      assembled += chunk.delta;
+      if (typeof chunk.delta === "string") assembled += chunk.delta;
     }
     if (assembled.length === 0) {
       throw new ProviderError(
