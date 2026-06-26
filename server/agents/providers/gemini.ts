@@ -5,16 +5,35 @@ import {
   type ChatStreamChunk,
   type ProviderCallOptions,
   ProviderError,
+  type ToolCall,
 } from "./types";
 import { parseSseFrames } from "./sseParser";
+import {
+  type GeminiToolsBlock,
+  parseGeminiFunctionCalls,
+  translateToGeminiTools,
+} from "./geminiToolSchema";
 
 const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 const DEFAULT_MODEL = "gemini-2.5-flash";
 const REQUEST_TIMEOUT_MS = 60_000;
 
-interface GeminiPart {
+interface GeminiTextPart {
   text: string;
 }
+
+interface GeminiFunctionCallPart {
+  functionCall: { name: string; args: Record<string, unknown> };
+}
+
+interface GeminiFunctionResponsePart {
+  functionResponse: { name: string; response: { content: unknown } };
+}
+
+type GeminiPart =
+  | GeminiTextPart
+  | GeminiFunctionCallPart
+  | GeminiFunctionResponsePart;
 
 interface GeminiContent {
   role: "user" | "model";
@@ -24,23 +43,44 @@ interface GeminiContent {
 interface GeminiStreamPayload {
   candidates?: Array<{
     content?: {
-      parts?: Array<{ text?: string }>;
+      parts?: Array<{
+        text?: string;
+        functionCall?: { name: string; args?: Record<string, unknown> };
+      }>;
     };
   }>;
 }
 
 interface GeminiRequestBody {
   contents: GeminiContent[];
-  systemInstruction?: { parts: GeminiPart[] };
+  systemInstruction?: { parts: GeminiTextPart[] };
   generationConfig?: { temperature: number };
+  tools?: GeminiToolsBlock[];
+}
+
+/**
+ * Best-effort JSON parse for replaying prior tool messages. Real production
+ * tools always return JSON-stringified payloads (see runTools.executeToolCall),
+ * but defensive parsing keeps a malformed message from poisoning the contents
+ * array — we fall back to the raw string instead.
+ */
+function parseToolContent(content: string): unknown {
+  try {
+    return JSON.parse(content);
+  } catch {
+    return content;
+  }
 }
 
 /**
  * Walk the chat history once, extracting system messages into a single
  * `systemInstruction` block (joined by newlines) and mapping the remaining
- * user/assistant turns into google genai `contents[]` with `role: "model"`
- * for assistant. Tool turns are dropped — Phase 4 will light them up via
- * `tools: [{ functionDeclarations }]`.
+ * turns into google genai `contents[]`:
+ *   - user        -> { role: "user",  parts: [text] }
+ *   - assistant   -> { role: "model", parts: [text and/or functionCall] }
+ *   - tool        -> { role: "user",  parts: [functionResponse] }   (google's
+ *                    contract: functionResponse lives under role=user, NOT
+ *                    role=function)
  */
 function splitMessages(messages: ChatMessage[]): {
   contents: GeminiContent[];
@@ -54,13 +94,54 @@ function splitMessages(messages: ChatMessage[]): {
       systemParts.push(message.content);
       continue;
     }
+
     if (message.role === "tool") {
-      // TODO(phase-4): map tool turns to google genai functionResponse parts.
+      contents.push({
+        role: "user",
+        parts: [
+          {
+            functionResponse: {
+              name: message.name ?? "",
+              response: { content: parseToolContent(message.content) },
+            },
+          },
+        ],
+      });
       continue;
     }
-    const role: GeminiContent["role"] =
-      message.role === "assistant" ? "model" : "user";
-    contents.push({ role, parts: [{ text: message.content }] });
+
+    if (message.role === "assistant") {
+      const parts: GeminiPart[] = [];
+      if (message.content.length > 0) parts.push({ text: message.content });
+      if (message.toolCalls?.length) {
+        for (const call of message.toolCalls) {
+          let args: Record<string, unknown> = {};
+          try {
+            const parsed =
+              call.arguments.length > 0 ? JSON.parse(call.arguments) : {};
+            if (
+              parsed &&
+              typeof parsed === "object" &&
+              !Array.isArray(parsed)
+            ) {
+              args = parsed as Record<string, unknown>;
+            }
+          } catch {
+            // Malformed args replay shouldn't crash the chat — fall back to {}
+            // so the model still sees a functionCall part.
+          }
+          parts.push({ functionCall: { name: call.name, args } });
+        }
+      }
+      // Defensive: a model turn must have at least one part. An empty assistant
+      // turn (no text, no toolCalls) shouldn't happen but if it does, emit a
+      // single empty-text part rather than letting gemini 400.
+      if (parts.length === 0) parts.push({ text: "" });
+      contents.push({ role: "model", parts });
+      continue;
+    }
+
+    contents.push({ role: "user", parts: [{ text: message.content }] });
   }
 
   return { contents, systemText: systemParts.join("\n") };
@@ -74,6 +155,9 @@ function buildBody(req: ChatRequest): GeminiRequestBody {
   }
   if (typeof req.temperature === "number") {
     body.generationConfig = { temperature: req.temperature };
+  }
+  if (req.tools?.length) {
+    body.tools = [translateToGeminiTools(req.tools)];
   }
   return body;
 }
@@ -150,31 +234,39 @@ async function* iterateStream(
   const reader = body.getReader();
   const decoder = new TextDecoder("utf-8");
   let buffer = "";
+  const toolCallBuffer: ToolCall[] = [];
+
+  function* processBuffer(): Generator<ChatStreamChunk> {
+    const parsed = parseSseFrames(buffer);
+    buffer = parsed.remainder;
+    for (const frame of parsed.frames) {
+      const payload = parsePayload(frame.data);
+      if (!payload) continue;
+      const delta = extractDelta(payload);
+      if (delta) yield { delta };
+      const calls = parseGeminiFunctionCalls(payload);
+      if (calls) toolCallBuffer.push(...calls);
+    }
+  }
 
   try {
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
-
-      const parsed = parseSseFrames(buffer);
-      buffer = parsed.remainder;
-
-      for (const frame of parsed.frames) {
-        const delta = extractDelta(frame.data);
-        if (delta) yield { delta };
-      }
+      yield* processBuffer();
       // gemini never sends a `[DONE]` sentinel — stream end is signalled by
       // the reader closing, so we ignore parsed.done here.
     }
 
     // Flush any tail bytes (defensive — providers normally end with \n\n).
     if (buffer.length > 0) {
-      const tail = parseSseFrames(buffer + "\n\n");
-      for (const frame of tail.frames) {
-        const delta = extractDelta(frame.data);
-        if (delta) yield { delta };
-      }
+      buffer += "\n\n";
+      yield* processBuffer();
+    }
+
+    if (toolCallBuffer.length > 0) {
+      yield { toolCalls: toolCallBuffer.splice(0) };
     }
   } catch (error) {
     if (error instanceof ProviderError) throw error;
@@ -187,17 +279,24 @@ async function* iterateStream(
   }
 }
 
-function extractDelta(rawData: string): string | undefined {
-  let payload: GeminiStreamPayload;
+function parsePayload(rawData: string): GeminiStreamPayload | undefined {
   try {
-    payload = JSON.parse(rawData) as GeminiStreamPayload;
+    return JSON.parse(rawData) as GeminiStreamPayload;
   } catch {
     // Skip malformed frames rather than aborting the whole stream —
     // upstream occasionally interleaves diagnostic data.
     return undefined;
   }
-  const text = payload.candidates?.[0]?.content?.parts?.[0]?.text;
-  return typeof text === "string" && text.length > 0 ? text : undefined;
+}
+
+function extractDelta(payload: GeminiStreamPayload): string | undefined {
+  const parts = payload.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts)) return undefined;
+  let text = "";
+  for (const part of parts) {
+    if (typeof part.text === "string") text += part.text;
+  }
+  return text.length > 0 ? text : undefined;
 }
 
 function mapHttpStatus(status: number, upstreamText: string): ProviderError {
@@ -219,37 +318,30 @@ function mapHttpStatus(status: number, upstreamText: string): ProviderError {
   return new ProviderError("UPSTREAM", `gemini 接口异常（状态码 ${status}）。`);
 }
 
-// Tool calling needs gemini's FunctionDeclaration wire shape (different from
-// the openai-compatible tools[]). Translating it lives in a follow-up task; for
-// now we strip the tools field so the rest of the response path stays alive.
-function stripUnsupportedTools(req: ChatRequest): ChatRequest {
-  if (!req.tools?.length) return req;
-  console.warn(
-    "[ReviewAgent] gemini tool-calling not yet supported; dropping tools[] for this turn."
-  );
-  return { ...req, tools: undefined };
-}
-
 export const geminiProvider: ChatProvider = {
   id: "gemini",
   defaultModel: DEFAULT_MODEL,
 
   async *chatStream(req, options) {
-    const response = await openStream(stripUnsupportedTools(req), options);
+    const response = await openStream(req, options);
     yield* iterateStream(response);
   },
 
   async chat(req, options) {
     let assembled = "";
+    let toolCalls: ToolCall[] | undefined;
     for await (const chunk of this.chatStream(req, options)) {
       if (typeof chunk.delta === "string") assembled += chunk.delta;
+      if (chunk.toolCalls?.length) toolCalls = chunk.toolCalls;
     }
-    if (assembled.length === 0) {
+    if (assembled.length === 0 && !toolCalls) {
       throw new ProviderError(
         "INVALID_RESPONSE",
         "gemini 返回为空，请稍后重试。"
       );
     }
-    return { role: "assistant", content: assembled };
+    const message: ChatMessage = { role: "assistant", content: assembled };
+    if (toolCalls) message.toolCalls = toolCalls;
+    return message;
   },
 };

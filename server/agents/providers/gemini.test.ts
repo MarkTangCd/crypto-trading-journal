@@ -427,28 +427,6 @@ describe("geminiProvider", () => {
       });
     });
 
-    it("drops req.tools with a console.warn (translation lives in a follow-up task)", async () => {
-      const { captured } = captureFetch(sseResponse([geminiFrame("ok")]));
-      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-      const result = await geminiProvider.chat(
-        {
-          model: "gemini-2.5-flash",
-          messages: [{ role: "user", content: "hi" }],
-          tools: [{ name: "get_x", description: "fetch x", parameters: {} }],
-        },
-        BASE_OPTIONS
-      );
-
-      // Response path stays alive — the upstream still got a normal request.
-      expect(result.content).toBe("ok");
-      const body = captured[0].body as Record<string, unknown>;
-      expect(body).not.toHaveProperty("tools");
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringMatching(/gemini.*tool/i)
-      );
-    });
-
     it("error mappings use ProviderError instances (not plain Error)", async () => {
       captureFetch(new Response("nope", { status: 401 }));
       vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -465,6 +443,288 @@ describe("geminiProvider", () => {
       } catch (error) {
         expect(error).toBeInstanceOf(ProviderError);
       }
+    });
+  });
+
+  describe("tool calls", () => {
+    function functionCallFrame(name: string, args: object): string {
+      return `data: ${JSON.stringify({
+        candidates: [
+          {
+            content: { parts: [{ functionCall: { name, args } }] },
+          },
+        ],
+      })}\n\n`;
+    }
+
+    it("forwards req.tools as a translated functionDeclarations block on the body", async () => {
+      const { captured } = captureFetch(sseResponse([geminiFrame("ok")]));
+
+      await geminiProvider.chat(
+        {
+          model: "gemini-2.5-flash",
+          messages: [{ role: "user", content: "hi" }],
+          tools: [
+            {
+              name: "get_klines",
+              description: "fetch ohlcv",
+              parameters: {
+                $schema: "https://json-schema.org/draft/2020-12/schema",
+                type: "object",
+                properties: {
+                  symbol: { type: "string" },
+                  interval: { type: "string", enum: ["1h", "1d"] },
+                },
+                required: ["symbol", "interval"],
+                additionalProperties: false,
+              },
+            },
+          ],
+        },
+        BASE_OPTIONS
+      );
+
+      const body = captured[0].body as { tools: unknown };
+      expect(body.tools).toEqual([
+        {
+          functionDeclarations: [
+            {
+              name: "get_klines",
+              description: "fetch ohlcv",
+              parameters: {
+                type: "object",
+                properties: {
+                  symbol: { type: "string" },
+                  interval: { type: "string", enum: ["1h", "1d"] },
+                },
+                required: ["symbol", "interval"],
+              },
+            },
+          ],
+        },
+      ]);
+    });
+
+    it("omits tools when req.tools is absent (no regression for plain chats)", async () => {
+      const { captured } = captureFetch(sseResponse([geminiFrame("ok")]));
+
+      await geminiProvider.chat(
+        {
+          model: "gemini-2.5-flash",
+          messages: [{ role: "user", content: "hi" }],
+        },
+        BASE_OPTIONS
+      );
+
+      const body = captured[0].body as Record<string, unknown>;
+      expect(body).not.toHaveProperty("tools");
+    });
+
+    it("emits a single { toolCalls } chunk when a frame contains a functionCall", async () => {
+      captureFetch(
+        sseResponse([
+          functionCallFrame("get_klines", {
+            symbol: "BTCUSDT",
+            interval: "1h",
+          }),
+        ])
+      );
+
+      const chunks: { delta?: string; toolCalls?: unknown }[] = [];
+      for await (const chunk of geminiProvider.chatStream(
+        {
+          model: "gemini-2.5-flash",
+          messages: [{ role: "user", content: "go" }],
+        },
+        BASE_OPTIONS
+      )) {
+        chunks.push(chunk);
+      }
+
+      const final = chunks.find(c => c.toolCalls) as
+        | { toolCalls: Array<{ name: string; arguments: string }> }
+        | undefined;
+      expect(final?.toolCalls).toHaveLength(1);
+      expect(final?.toolCalls[0].name).toBe("get_klines");
+      expect(JSON.parse(final!.toolCalls[0].arguments)).toEqual({
+        symbol: "BTCUSDT",
+        interval: "1h",
+      });
+    });
+
+    it("chat() returns toolCalls and skips the empty-content guard when tools are present", async () => {
+      captureFetch(sseResponse([functionCallFrame("ping", {})]));
+
+      const result = await geminiProvider.chat(
+        {
+          model: "gemini-2.5-flash",
+          messages: [{ role: "user", content: "go" }],
+          tools: [{ name: "ping", description: "", parameters: {} }],
+        },
+        BASE_OPTIONS
+      );
+
+      expect(result.content).toBe("");
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls?.[0].name).toBe("ping");
+    });
+
+    it("maps role=tool history to role=user + functionResponse part", async () => {
+      const { captured } = captureFetch(sseResponse([geminiFrame("ack")]));
+
+      await geminiProvider.chat(
+        {
+          model: "gemini-2.5-flash",
+          messages: [
+            { role: "user", content: "look up btc" },
+            {
+              role: "assistant",
+              content: "",
+              toolCalls: [
+                {
+                  id: "call-1",
+                  name: "get_klines",
+                  arguments: JSON.stringify({ symbol: "BTCUSDT" }),
+                },
+              ],
+            },
+            {
+              role: "tool",
+              content: JSON.stringify({ close: 50_000 }),
+              toolCallId: "call-1",
+              name: "get_klines",
+            },
+          ],
+        },
+        BASE_OPTIONS
+      );
+
+      const body = captured[0].body as {
+        contents: Array<{
+          role: string;
+          parts: Array<Record<string, unknown>>;
+        }>;
+      };
+      // user prompt -> assistant functionCall -> user functionResponse
+      expect(body.contents).toHaveLength(3);
+      expect(body.contents[2]).toEqual({
+        role: "user",
+        parts: [
+          {
+            functionResponse: {
+              name: "get_klines",
+              response: { content: { close: 50_000 } },
+            },
+          },
+        ],
+      });
+    });
+
+    it("replays assistant turns with prior toolCalls as model + functionCall part", async () => {
+      const { captured } = captureFetch(sseResponse([geminiFrame("ack")]));
+
+      await geminiProvider.chat(
+        {
+          model: "gemini-2.5-flash",
+          messages: [
+            {
+              role: "assistant",
+              content: "",
+              toolCalls: [
+                {
+                  id: "call-1",
+                  name: "get_klines",
+                  arguments: JSON.stringify({
+                    symbol: "BTCUSDT",
+                    interval: "1h",
+                  }),
+                },
+              ],
+            },
+          ],
+        },
+        BASE_OPTIONS
+      );
+
+      const body = captured[0].body as {
+        contents: Array<{
+          role: string;
+          parts: Array<Record<string, unknown>>;
+        }>;
+      };
+      expect(body.contents).toEqual([
+        {
+          role: "model",
+          parts: [
+            {
+              functionCall: {
+                name: "get_klines",
+                args: { symbol: "BTCUSDT", interval: "1h" },
+              },
+            },
+          ],
+        },
+      ]);
+    });
+
+    it("preserves both text and functionCall parts on an assistant replay", async () => {
+      const { captured } = captureFetch(sseResponse([geminiFrame("ack")]));
+
+      await geminiProvider.chat(
+        {
+          model: "gemini-2.5-flash",
+          messages: [
+            {
+              role: "assistant",
+              content: "let me check",
+              toolCalls: [
+                {
+                  id: "call-1",
+                  name: "ping",
+                  arguments: "{}",
+                },
+              ],
+            },
+          ],
+        },
+        BASE_OPTIONS
+      );
+
+      const body = captured[0].body as {
+        contents: Array<{ role: string; parts: unknown[] }>;
+      };
+      expect(body.contents[0]).toEqual({
+        role: "model",
+        parts: [
+          { text: "let me check" },
+          { functionCall: { name: "ping", args: {} } },
+        ],
+      });
+    });
+
+    it("falls back to {} args when a replayed toolCall has malformed JSON arguments", async () => {
+      const { captured } = captureFetch(sseResponse([geminiFrame("ack")]));
+
+      await geminiProvider.chat(
+        {
+          model: "gemini-2.5-flash",
+          messages: [
+            {
+              role: "assistant",
+              content: "",
+              toolCalls: [{ id: "x", name: "ping", arguments: "{not json" }],
+            },
+          ],
+        },
+        BASE_OPTIONS
+      );
+
+      const body = captured[0].body as {
+        contents: Array<{ parts: Array<Record<string, unknown>> }>;
+      };
+      expect(body.contents[0].parts[0]).toEqual({
+        functionCall: { name: "ping", args: {} },
+      });
     });
   });
 });

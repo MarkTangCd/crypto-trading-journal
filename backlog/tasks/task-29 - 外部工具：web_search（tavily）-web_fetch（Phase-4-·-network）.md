@@ -3,9 +3,9 @@ id: TASK-29
 title: 外部工具：web_search（tavily）+ web_fetch（Phase 4 · network）
 status: Done
 assignee:
-  - '@myself'
-created_date: '2026-06-25 12:50'
-updated_date: '2026-06-26 08:59'
+  - "@myself"
+created_date: "2026-06-25 12:50"
+updated_date: "2026-06-26 08:59"
 labels:
   - ai-agent
   - phase-4
@@ -35,6 +35,7 @@ ordinal: 29000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
+
 ## Why
 
 让 agent 自己上网查 funding rate 新闻、链上数据帖子、宏观叙事。这是 Phase 4 把 review-agent 从"读你给的字段"升级到"主动调研"的转折点。tavily 作为默认搜索后端（已决议），后端可替换的设计留口给未来切 serper/brave。
@@ -58,7 +59,9 @@ ordinal: 29000
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
+
 <!-- AC:BEGIN -->
+
 - [x] #1 server/agents/tools/webSearch.ts 实现：Zod 参数校验、调 tavily search、返回 top-K 压缩结果
 - [x] #2 server/agents/tools/webFetch.ts 实现：30s timeout、200KB cap、non-html 返 ok=false、readability + markdown 裁到7k chars
 - [x] #3 tavily api key 存储走加密层，不入 ChatProvider registry；Settings 页增一条 'tavily search · api key' 输入，都是 Bench Notebook 风格
@@ -69,11 +72,10 @@ ordinal: 29000
 - [x] #8 npm run check + npm run format + npm run test 全绿
 <!-- AC:END -->
 
-
-
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
+
 ## Plan
 
 ### Server
@@ -114,6 +116,7 @@ ordinal: 29000
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
+
 ## Summary
 
 Phase 4 第三刀落地。review-agent 多了两把外网工具：`web_search`（tavily）和 `web_fetch`（任意 HTML → markdown）。
