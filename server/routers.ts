@@ -48,6 +48,7 @@ import {
 } from "./agents/reviewAgent";
 import { ProviderError } from "./agents/providers/types";
 import { listProviders } from "./agents/providers/registry";
+import { listSkillMetadata } from "./agents/skillRegistry";
 import {
   getProviderConfig,
   hasToolApiKey,
@@ -792,6 +793,38 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         await upsertAgentSettings(ctx.user.id, {
           defaultProvider: input.providerId,
+        });
+        return { success: true };
+      }),
+
+    // Catalogue of every registered skill, projected to client-safe metadata
+    // (no Zod parameter schemas, no `run` handles). Drives the Settings page
+    // toggle list (TASK-33).
+    listSkills: publicProcedure.query(() => {
+      return listSkillMetadata();
+    }),
+
+    // Returns the user's enabled-skill allowlist. Empty array means
+    // "default-all-enabled" — the same semantics runTools applies; the client
+    // hydrates this into a fully-checked UI so future-registered skills also
+    // auto-enable for users who never touched the setting.
+    getEnabledSkillIds: publicProcedure.query(async ({ ctx }) => {
+      const settings = await getAgentSettings(ctx.user.id);
+      return { enabledSkillIds: settings?.enabledSkillIds ?? [] };
+    }),
+
+    // Persists the user's allowlist. The UI is expected to collapse "all
+    // skills checked" into [] before calling, so future skills remain enabled
+    // by default; that policy is enforced on the client, not here.
+    setEnabledSkillIds: publicProcedure
+      .input(
+        z.object({
+          enabledSkillIds: z.array(z.string().min(1).max(50)).max(50),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        await upsertAgentSettings(ctx.user.id, {
+          enabledSkillIds: input.enabledSkillIds,
         });
         return { success: true };
       }),

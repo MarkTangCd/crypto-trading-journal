@@ -299,4 +299,91 @@ describe("settings router", () => {
       expect(db.upsertAgentSettings).not.toHaveBeenCalled();
     });
   });
+
+  describe("listSkills", () => {
+    it("returns client-safe skill metadata for every production skill", async () => {
+      const caller = appRouter.createCaller(makeCtx());
+
+      const result = await caller.settings.listSkills();
+
+      // We don't pin a specific count — Phase 5 keeps registering new
+      // skills — but the contract that internal-only skills (`__*`) stay
+      // hidden and that the projection never leaks `parameters` / `run`
+      // is load-bearing for the Settings UI and worth asserting.
+      expect(result.every(skill => !skill.name.startsWith("__"))).toBe(true);
+      for (const skill of result) {
+        expect(skill).toMatchObject({
+          name: expect.any(String),
+          description: expect.any(String),
+        });
+        expect(Object.keys(skill)).not.toContain("parameters");
+        expect(Object.keys(skill)).not.toContain("run");
+      }
+    });
+  });
+
+  describe("getEnabledSkillIds", () => {
+    it("returns the stored allowlist verbatim", async () => {
+      vi.mocked(db.getAgentSettings).mockResolvedValueOnce({
+        userId: 1,
+        defaultProvider: "deepseek",
+        providerConfigs: "",
+        enabledSkillIds: ["analyze", "web_search"],
+        updatedAt: new Date(),
+      });
+      const caller = appRouter.createCaller(makeCtx());
+
+      const result = await caller.settings.getEnabledSkillIds();
+
+      expect(result).toEqual({ enabledSkillIds: ["analyze", "web_search"] });
+    });
+
+    it("falls back to [] when no settings row exists yet (default-all-enabled)", async () => {
+      vi.mocked(db.getAgentSettings).mockResolvedValueOnce(undefined);
+      const caller = appRouter.createCaller(makeCtx());
+
+      const result = await caller.settings.getEnabledSkillIds();
+
+      expect(result).toEqual({ enabledSkillIds: [] });
+    });
+  });
+
+  describe("setEnabledSkillIds", () => {
+    it("upserts the allowlist scoped to ctx.user.id", async () => {
+      const caller = appRouter.createCaller(makeCtx());
+
+      const result = await caller.settings.setEnabledSkillIds({
+        enabledSkillIds: ["analyze", "summarize"],
+      });
+
+      expect(result).toEqual({ success: true });
+      expect(db.upsertAgentSettings).toHaveBeenCalledWith(1, {
+        enabledSkillIds: ["analyze", "summarize"],
+      });
+    });
+
+    it("accepts an empty array (the 'all enabled' sentinel)", async () => {
+      const caller = appRouter.createCaller(makeCtx());
+
+      await caller.settings.setEnabledSkillIds({ enabledSkillIds: [] });
+
+      expect(db.upsertAgentSettings).toHaveBeenCalledWith(1, {
+        enabledSkillIds: [],
+      });
+    });
+
+    it("rejects payloads exceeding the 50-entry cap", async () => {
+      const caller = appRouter.createCaller(makeCtx());
+
+      const enabledSkillIds = Array.from(
+        { length: 51 },
+        (_, i) => `skill-${i}`
+      );
+
+      await expect(
+        caller.settings.setEnabledSkillIds({ enabledSkillIds })
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      expect(db.upsertAgentSettings).not.toHaveBeenCalled();
+    });
+  });
 });

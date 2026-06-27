@@ -69,6 +69,32 @@ export function listSkills(): Skill[] {
   return Array.from(REGISTRY.values());
 }
 
+/**
+ * Client-safe projection of a registered skill. Strips `parameters` (a Zod
+ * schema) and `run` (a server function) so callers can safely return the
+ * payload over tRPC without leaking server-only handles.
+ */
+export interface SkillMetadata {
+  name: string;
+  description: string;
+  category?: Skill["category"];
+}
+
+/**
+ * Listing helper for the Settings UI. Production-only skills surface here;
+ * internal test skills (e.g. `__noop`) are filtered out so they never appear
+ * in the user-facing toggle list.
+ */
+export function listSkillMetadata(): SkillMetadata[] {
+  return listSkills()
+    .filter(skill => !skill.name.startsWith("__"))
+    .map(skill => ({
+      name: skill.name,
+      description: skill.description,
+      category: skill.category,
+    }));
+}
+
 function toDeclaration(skill: Skill): ToolDeclaration {
   return {
     name: skill.name,
