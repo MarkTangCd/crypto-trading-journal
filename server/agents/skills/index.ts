@@ -6,3 +6,4 @@ import "./getKlines";
 import "./getRecentTrades";
 import "./webSearch";
 import "./webFetch";
+import "./analyzeMarketStructure";
