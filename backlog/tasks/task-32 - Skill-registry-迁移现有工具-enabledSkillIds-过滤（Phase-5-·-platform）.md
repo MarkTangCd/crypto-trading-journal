@@ -1,11 +1,11 @@
 ---
 id: TASK-32
 title: Skill registry + 迁移现有工具 + enabledSkillIds 过滤（Phase 5 · platform）
-status: In Progress
+status: Done
 assignee:
-  - "@myself"
-created_date: "2026-06-26 13:26"
-updated_date: "2026-06-26 13:48"
+  - '@myself'
+created_date: '2026-06-26 13:26'
+updated_date: '2026-06-27 02:04'
 labels:
   - ai-agent
   - phase-5
@@ -14,6 +14,25 @@ milestone: m-0
 dependencies: []
 documentation:
   - .lavish/trade-review-ai-agent-plan.html
+modified_files:
+  - server/agents/skillRegistry.ts
+  - server/agents/skillRegistry.test.ts
+  - server/agents/skills/getKlines.ts
+  - server/agents/skills/getKlines.test.ts
+  - server/agents/skills/getRecentTrades.ts
+  - server/agents/skills/getRecentTrades.test.ts
+  - server/agents/skills/webSearch.ts
+  - server/agents/skills/webSearch.test.ts
+  - server/agents/skills/webFetch.ts
+  - server/agents/skills/webFetch.test.ts
+  - server/agents/skills/index.ts
+  - server/agents/skills/searchBackends/index.ts
+  - server/agents/skills/searchBackends/tavily.ts
+  - server/agents/skills/searchBackends/tavily.test.ts
+  - server/agents/skills/searchBackends/types.ts
+  - server/agents/runTools.ts
+  - server/agents/runTools.test.ts
+  - server/agents/reviewAgent.ts
 priority: high
 ordinal: 32000
 ---
@@ -21,7 +40,6 @@ ordinal: 32000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-
 ## Why
 
 Phase 5 plan：`SkillRegistry boot-time 扫描 server/agents/skills/*；Settings 勾选启用；先迁移现有内部工具到 skill 形态；为后续 analyze_market_structure 等留口`。本任务是 Phase 5 的 platform 单切片：把抽象层 + 迁移 + 过滤一并落地，**不**含 Settings UI（留给 TASK-33）。
@@ -75,23 +93,20 @@ Phase 5 plan：`SkillRegistry boot-time 扫描 server/agents/skills/*；Settings
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
-
 <!-- AC:BEGIN -->
-
-- [ ] #1 server/agents/skills/ 下 4 个 skill 文件落地（迁自 tools/），原 tools/{getKlines,getRecentTrades,webSearch,webFetch}.ts 删除，其他引用处跟随更新
-- [ ] #2 skillRegistry 提供 register / getSkill / listSkills / listEnabledSkillDeclarations(enabledSkillIds) 公开 API，保留 register / getTool / listTools / listToolDeclarations 作为兼容 alias
-- [ ] #3 listEnabledSkillDeclarations: 空数组 → 返全部 skill；非空 → 仅返 id 在列表中的 skill；未知 id 静默忽略（不报错）
-- [ ] #4 runTools 接受 enabledSkillIds? 参数并送进 listEnabledSkillDeclarations；不传 = 默认全启用（零行为变更）
-- [ ] #5 reviewAgent.ts 从 agentSettings 读 enabledSkillIds 透传到 runTools，未配置 = 默认全启
-- [ ] #6 所有 skill module export 叠加一个 named const（如 getKlinesSkill）供 TASK-33 UI 受例枚使用，同时保留 side-effect register()
-- [ ] #7 skillRegistry 新增单测覆盖 listEnabledSkillDeclarations 三条分支，4 个 skill 原有测试跟随迁移后全绿
-- [ ] #8 npm run check + npm run format + npm run test 全绿；烟测：默认路径与 TASK-31 完全等价，手动缩到只启一个 skill 时 agent 只能调该 skill
+- [x] #1 server/agents/skills/ 下 4 个 skill 文件落地（迁自 tools/），原 tools/{getKlines,getRecentTrades,webSearch,webFetch}.ts 删除，其他引用处跟随更新
+- [x] #2 skillRegistry 提供 register / getSkill / listSkills / listEnabledSkillDeclarations(enabledSkillIds) 公开 API，保留 register / getTool / listTools / listToolDeclarations 作为兼容 alias
+- [x] #3 listEnabledSkillDeclarations: 空数组 → 返全部 skill；非空 → 仅返 id 在列表中的 skill；未知 id 静默忽略（不报错）
+- [x] #4 runTools 接受 enabledSkillIds? 参数并送进 listEnabledSkillDeclarations；不传 = 默认全启用（零行为变更）
+- [x] #5 reviewAgent.ts 从 agentSettings 读 enabledSkillIds 透传到 runTools，未配置 = 默认全启
+- [x] #6 所有 skill module export 叠加一个 named const（如 getKlinesSkill）供 TASK-33 UI 受例枚使用，同时保留 side-effect register()
+- [x] #7 skillRegistry 新增单测覆盖 listEnabledSkillDeclarations 三条分支，4 个 skill 原有测试跟随迁移后全绿
+- [x] #8 npm run check + npm run format + npm run test 全绿；烟测：默认路径与 TASK-31 完全等价，手动缩到只启一个 skill 时 agent 只能调该 skill
 <!-- AC:END -->
 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-
 ## 设计要点
 
 1. **Skill = Tool + 元数据**：在 `skillRegistry.ts` 里定义 `Skill` 接口，继承 `Tool { name, description, parameters, run }`，新增**必填** `id: string`（语义上与 name 同义，作为 UI 稳定枚举键）+ 可选 `category: "internal" | "network" | "analysis"`。`register()` 内部断言 `skill.id === skill.name`，REGISTRY 仍按 `name` 索引（不引第二把钥匙）。
@@ -146,3 +161,28 @@ Settings UI（TASK-33）、新 skill 实现（TASK-34/35/36/37）、动态文件
 
 - TASK-33 UI 之后用 `skill.name` + `skill.category` 枚举。
 <!-- SECTION:PLAN:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+## 改动
+
+- `server/agents/skillRegistry.{ts,test.ts}` 新建：定义 `Skill = Tool + 可选 category`（id 即 name，文档约定）。导出 `register / getSkill / listSkills / listEnabledSkillDeclarations / runSkill / unregisterForTest`，保留 `getTool / listTools / listToolDeclarations / runTool / registerSkill` 作 alias。`listEnabledSkillDeclarations([])` 返全部、非空按 `name` 过滤、未知 id 静默忽略。
+- `server/agents/tools/` 整目录 → `server/agents/skills/`（git mv 保 history）。4 个 skill 文件改 import 到 `../skillRegistry`，加 `category: "internal" | "network"` + named const `xxxSkill` 给 TASK-33 UI 枚举用。`searchBackends/` 一起搬。barrel `skills/index.ts` 触发 4 条 side-effect register。
+- `server/agents/runTools.ts`：`RunToolsParams` 加 `enabledSkillIds?: string[]`；`runOneChatStep` 用 `listEnabledSkillDeclarations(...)`；`executeToolCall` 二次防御 —— 非空且未命中 → `ok=false { error: "skill not enabled: X" }`。
+- `server/agents/reviewAgent.ts`：`import "./tools"` → `import "./skills"`；`streamUserMessage` 在调 `runTools` 前 `await getAgentSettings(userId)`，透 `enabledSkillIds ?? []`。
+- `server/agents/runTools.test.ts`：path 切到 `./skillRegistry`；新增 2 条用例 —— 声明层只暴露列出 skill / 执行层拒未启 skill。
+
+## 验证
+
+- `npm run check / format / test` 全绿 → 272 tests（baseline 265 → +7：skillRegistry 5 个新分支 + runTools 2 个 enabledSkillIds 新分支）。
+- SSE 烟测（详见 commit 26e6785 触发的 verify run）：
+  - **默认路径**（`enabledSkillIds=[]`）：模型并发调 `get_klines` + `web_search`，两者都 dispatch；web_search 真实拿到 Tavily/Coinglass 结果。零回归。
+  - **过滤路径**（SQL 改 `enabledSkillIds=["get_klines"]`）：`get_klines` 通过、`web_search` 被 `executeToolCall` 防御层挡掉 → `ok:false {"error":"skill not enabled: web_search"}`。
+
+## 跟邻位任务的关系
+
+- **TASK-38**（coinank 30s timeout + retry-once）：烟测时顺手抓到的 coinank 网络稳定性问题，已在 commit `dd378d4` 独立修复。跟本任务无依赖。
+- **TASK-33**（Settings UI Skills 勾选）：下游消费者。UI 用 `skill.name` + `skill.category` 枚举即可。
+- **TASK-34/35/36/37**（4 个 future skill）：可直接按 `getKlinesSkill` 同款形态新建在 `server/agents/skills/`，加进 barrel 即可。
+<!-- SECTION:FINAL_SUMMARY:END -->
