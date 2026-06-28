@@ -1,9 +1,10 @@
 ---
 id: TASK-35
 title: Skill · fetch_funding_rates（Phase 5 · skills）
-status: To Do
+status: Done
 assignee: []
-created_date: "2026-06-26 13:28"
+created_date: '2026-06-26 13:28'
+updated_date: '2026-06-28 02:27'
 labels:
   - ai-agent
   - phase-5
@@ -15,6 +16,17 @@ dependencies:
 documentation:
   - .lavish/trade-review-ai-agent-plan.html
   - .lavish/coinank-kline-plan.html
+modified_files:
+  - server/agents/skills/fundingBackends/types.ts
+  - server/agents/skills/fundingBackends/binance.ts
+  - server/agents/skills/fundingBackends/binance.test.ts
+  - server/agents/skills/fundingBackends/index.ts
+  - server/agents/skills/fetchFundingRates.ts
+  - server/agents/skills/fetchFundingRates.test.ts
+  - server/agents/skills/index.ts
+  - server/_core/index.ts
+  - package.json
+  - package-lock.json
 priority: medium
 ordinal: 35000
 ---
@@ -22,7 +34,6 @@ ordinal: 35000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-
 ## Why
 
 Plan "Skill 扩展机制" 段 `fetch_funding_rates`：`拉 coinank funding rates，对照进出场时段，判断是否在极端 funding 时段做反向`。Phase 5 已决议 4 skill 之一。
@@ -84,14 +95,53 @@ z.object({
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
-
 <!-- AC:BEGIN -->
-
-- [ ] #1 server/agents/skills/fetchFundingRates.ts 落地，注册 id = 'fetch_funding_rates'，category = 'network'
-- [ ] #2 参数 zod schema：symbol 必填、lookbackHours 24–720 默认 168
-- [ ] #3 复用现有 coinank fetch helper / auth（如有）；不复用也要抽到 fundingBackends/coinank.ts 作为 SearchBackend 同型 adapter
-- [ ] #4 输出 unit=percent（rate × 100）；current / extremes / history 三块都需；extremes 阈值 0.05% 写死在输出中 threshold 字段
-- [ ] #5 测试覆盖：happy path / coinank 错误 / 空数据 / extremes 识别边界（4 条）
-- [ ] #6 错误路径返 ok=false + 中文 error（与 web_search/web_fetch 一致风格）
-- [ ] #7 npm run check + format + test 全绿；烟测：BTCUSDT 7 天 funding history 可拉、extremes 能出现在中间 8 月15 日极端点（以实际数据为准）
+- [x] #1 server/agents/skills/fetchFundingRates.ts 落地，注册 id = 'fetch_funding_rates'，category = 'network'
+- [x] #2 参数 zod schema：symbol 必填、lookbackHours 24–720 默认 168
+- [x] #3 复用现有 coinank fetch helper / auth（如有）；不复用也要抽到 fundingBackends/coinank.ts 作为 SearchBackend 同型 adapter
+- [x] #4 输出 unit=percent（rate × 100）；current / extremes / history 三块都需；extremes 阈值 0.05% 写死在输出中 threshold 字段
+- [x] #5 测试覆盖：happy path / coinank 错误 / 空数据 / extremes 识别边界（4 条）
+- [x] #6 错误路径返 ok=false + 中文 error（与 web_search/web_fetch 一致风格）
+- [x] #7 npm run check + format + test 全绿；烟测：BTCUSDT 7 天 funding history 可拉、extremes 能出现在中间 8 月15 日极端点（以实际数据为准）
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+## Summary
+
+Adds `fetch_funding_rates` skill (Phase 5) — perp funding-rate history + current value + extreme tags so review can check whether a trade was opened/held during one-sided crowding.
+
+## Data source
+
+CoinAnk's funding endpoint is gated (`/api/fundingRate/*` returns 403 across all probed variants; only the k-line `/open` route is public). Switched to Binance's public USD-M perp endpoint `fapi.binance.com/fapi/v1/fundingRate` — no auth, same upstream CoinAnk aggregates. Adapter pattern preserved so a future CoinAnk backend can drop in.
+
+## Implementation
+
+- **`fundingBackends/{types,binance,index}.ts`** — `FundingBackend` contract mirrors `SearchBackend`; `binanceBackend` carries `intervalHours: 8`, hits the public funding history API, parses rows to `{ts, rate}`, returns ascending-by-ts.
+- **`fetchFundingRates.ts`** — zod schema (tradingPair, lookbackHours 24–720 default 168); `limit = ceil(lookbackHours / 8)`; rate × 100 → percent; extremes filter `|rate| > 0.05%` (strict) and tag side as `long-heavy` (rate > 0) / `short-heavy` (rate < 0); current = history.last; threshold + intervalHours + source returned for model introspection.
+- **Tests** — 6 backend cases (id+interval, parse+sort, non-200, fetch-throw, empty array, non-array body) + 5 skill cases (registration, happy path with edge-case threshold, empty backend history, error passthrough, zod boundary).
+
+## Verification
+
+- `npm run check` ✓
+- `npm run format` ✓ (backlog/*.md reverted per CLAUDE.md guardrail)
+- `npm run test` ✓ 315/315 (baseline 304 + 11 new)
+- AC #7 浏览器烟测：等用户在 review 会话里 BTCUSDT 验收 history + extremes。
+
+## Notes
+
+- Skill 注册后自动出现在 Settings → Skills 列表（依赖 TASK-33）。
+- 阈值 0.05% 写死在 output `threshold` 字段；模型自己读 extremes 判断。
+- Source 字段对外暴露 `binance`，方便日后切换 backend 时模型能感知数据来源差异。
+
+## Smoke-test follow-up
+
+Smoke test surfaced two issues:
+
+1. **Cause swallowed** — undici's `fetch failed` message hides the real reason in `error.cause`. Updated `binance.ts` to surface cause in the returned error and `console.error` it for server-log visibility.
+
+2. **Proxy not honored** — Node's native fetch doesn't read `HTTPS_PROXY`, so users behind GFW with Clash/Surge couldn't reach `fapi.binance.com` even with VPN on. Added `undici` as a direct dep and wired `setGlobalDispatcher(new EnvHttpProxyAgent())` early in `server/_core/index.ts` (right after `dotenv/config`). Honors `HTTPS_PROXY` / `HTTP_PROXY` + `NO_PROXY`; no-op when env vars are unset. All future skills' outbound fetch benefit automatically.
+
+User confirmed smoke test passed after setting `HTTPS_PROXY=http://127.0.0.1:7890` in `.env`.
+<!-- SECTION:FINAL_SUMMARY:END -->
