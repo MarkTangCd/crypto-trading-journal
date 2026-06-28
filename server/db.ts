@@ -14,6 +14,13 @@ import {
   accounts,
   InsertAccount,
   Account,
+  conversations,
+  type Conversation,
+  messages,
+  type Message,
+  agentSettings,
+  type AgentSettings,
+  type InsertAgentSettings,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { ANONYMOUS_OPEN_ID, ANONYMOUS_USER_NAME } from "@shared/const";
@@ -953,4 +960,202 @@ export async function getAccountCount(userId: number): Promise<number> {
     .where(eq(accounts.userId, userId));
 
   return result[0]?.count ?? 0;
+}
+
+// ============ Review Agent: conversations / messages / settings ============
+
+export async function getConversationById(
+  id: number,
+  userId: number
+): Promise<Conversation | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const rows = await db
+    .select()
+    .from(conversations)
+    .where(and(eq(conversations.id, id), eq(conversations.userId, userId)))
+    .limit(1);
+
+  return rows[0];
+}
+
+export async function getConversationByTransaction(
+  userId: number,
+  transactionId: number
+): Promise<Conversation | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const rows = await db
+    .select()
+    .from(conversations)
+    .where(
+      and(
+        eq(conversations.userId, userId),
+        eq(conversations.transactionId, transactionId)
+      )
+    )
+    .limit(1);
+
+  return rows[0];
+}
+
+export async function getOrCreateConversation(params: {
+  userId: number;
+  transactionId: number;
+  providerId: string;
+  model: string;
+}): Promise<Conversation> {
+  return runInSqliteTransaction(async db => {
+    const existing = await db
+      .select()
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.userId, params.userId),
+          eq(conversations.transactionId, params.transactionId)
+        )
+      )
+      .limit(1);
+
+    if (existing.length > 0) {
+      return existing[0];
+    }
+
+    const inserted = await db
+      .insert(conversations)
+      .values({
+        userId: params.userId,
+        transactionId: params.transactionId,
+        providerId: params.providerId,
+        model: params.model,
+      })
+      .returning();
+
+    if (!inserted[0]) {
+      throw new Error("Failed to create conversation");
+    }
+    return inserted[0];
+  });
+}
+
+export async function appendMessage(params: {
+  conversationId: number;
+  role: "system" | "user" | "assistant" | "tool";
+  /** Serialized JSON payload. Callers are responsible for JSON.stringify. */
+  content: string;
+  /** JSON-stringified ToolCall[] for assistant turns that asked for tools. */
+  toolCalls?: string | null;
+  /** Ties a role="tool" turn back to the assistant's ToolCall.id. */
+  toolCallId?: string | null;
+}): Promise<Message> {
+  return runInSqliteTransaction(async db => {
+    const inserted = await db
+      .insert(messages)
+      .values({
+        conversationId: params.conversationId,
+        role: params.role,
+        content: params.content,
+        toolCalls: params.toolCalls ?? null,
+        toolCallId: params.toolCallId ?? null,
+      })
+      .returning();
+
+    if (!inserted[0]) {
+      throw new Error("Failed to append message");
+    }
+
+    // Bump conversation.updatedAt so list views can sort by recent activity.
+    await db
+      .update(conversations)
+      .set({ updatedAt: new Date() })
+      .where(eq(conversations.id, params.conversationId));
+
+    return inserted[0];
+  });
+}
+
+/**
+ * List a conversation's messages, scoped by userId via a JOIN guard so a
+ * caller cannot read another user's transcript by guessing a conversationId.
+ */
+export async function listMessages(params: {
+  conversationId: number;
+  userId: number;
+}): Promise<Message[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = await db
+    .select({ message: messages })
+    .from(messages)
+    .innerJoin(conversations, eq(conversations.id, messages.conversationId))
+    .where(
+      and(
+        eq(messages.conversationId, params.conversationId),
+        eq(conversations.userId, params.userId)
+      )
+    )
+    .orderBy(asc(messages.createdAt), asc(messages.id));
+
+  return rows.map(row => row.message);
+}
+
+export async function getAgentSettings(
+  userId: number
+): Promise<AgentSettings | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db
+    .select()
+    .from(agentSettings)
+    .where(eq(agentSettings.userId, userId))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function upsertAgentSettings(
+  userId: number,
+  patch: Partial<Omit<InsertAgentSettings, "userId" | "updatedAt">>
+): Promise<AgentSettings> {
+  return runInSqliteTransaction(async db => {
+    const now = new Date();
+    const insertValues: InsertAgentSettings = {
+      userId,
+      defaultProvider: patch.defaultProvider ?? "deepseek",
+      providerConfigs: patch.providerConfigs ?? "",
+      enabledSkillIds: patch.enabledSkillIds ?? [],
+      updatedAt: now,
+    };
+
+    const updateSet: Record<string, unknown> = { updatedAt: now };
+    if (patch.defaultProvider !== undefined) {
+      updateSet.defaultProvider = patch.defaultProvider;
+    }
+    if (patch.providerConfigs !== undefined) {
+      updateSet.providerConfigs = patch.providerConfigs;
+    }
+    if (patch.enabledSkillIds !== undefined) {
+      updateSet.enabledSkillIds = patch.enabledSkillIds;
+    }
+
+    await db
+      .insert(agentSettings)
+      .values(insertValues)
+      .onConflictDoUpdate({ target: agentSettings.userId, set: updateSet });
+
+    const result = await db
+      .select()
+      .from(agentSettings)
+      .where(eq(agentSettings.userId, userId))
+      .limit(1);
+
+    if (!result[0]) {
+      throw new Error("Failed to upsert agent settings");
+    }
+    return result[0];
+  });
 }

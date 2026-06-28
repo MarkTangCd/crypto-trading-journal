@@ -34,10 +34,10 @@ code"). It mixes:
 - a host for `CloseTradeModal`
 
 The page is also a hot edit surface — the previous batch's plan README
-explicitly flagged it: *"before any future page-component refactor (e.g.
+explicitly flagged it: _"before any future page-component refactor (e.g.
 splitting the 607-line `Transactions.tsx`), land 005 first so the
 close-trade / new-trade golden paths are protected by an end-to-end smoke
-test"*. That smoke spec (`e2e/smoke.spec.ts`) is now in place and exercises
+test"_. That smoke spec (`e2e/smoke.spec.ts`) is now in place and exercises
 the close-trade row action end to end. The refactor is safe.
 
 The split is also a prerequisite for adding any future per-tag /
@@ -53,7 +53,7 @@ per-cycle analytics column without pushing the file past 700 LOC.
   consumed.
 - `client/src/lib/ledger.tsx` — shared brand primitives
   (`SELECT_CLASS, INPUT_CLASS, Field, SectionHeader, fmtMoney, fmtRatio,
-  fmtDateTime, fmtDecimal, toneClass, Tone`). Already imported by the
+fmtDateTime, fmtDecimal, toneClass, Tone`). Already imported by the
   page; reuse them.
 
 ### Existing internal seams in `Transactions.tsx`
@@ -110,14 +110,14 @@ From `DESIGN.md` and CLAUDE.md:
 
 ## Commands you will need
 
-| Purpose      | Command                                            | Expected           |
-| ------------ | -------------------------------------------------- | ------------------ |
-| Typecheck    | `npm run check`                                    | exit 0             |
-| Tests        | `npm test -- --run`                                | 104 passed         |
-| E2E (smoke)  | `npm run test:e2e`                                 | smoke spec passes  |
-| Build        | `npm run build`                                    | exit 0             |
-| Format       | `npm run format`                                   | exit 0             |
-| Dev server   | `NODE_OPTIONS='--experimental-sqlite' NODE_ENV=development npx tsx server/_core/index.ts` | http on 3000 |
+| Purpose     | Command                                                                                   | Expected          |
+| ----------- | ----------------------------------------------------------------------------------------- | ----------------- |
+| Typecheck   | `npm run check`                                                                           | exit 0            |
+| Tests       | `npm test -- --run`                                                                       | 104 passed        |
+| E2E (smoke) | `npm run test:e2e`                                                                        | smoke spec passes |
+| Build       | `npm run build`                                                                           | exit 0            |
+| Format      | `npm run format`                                                                          | exit 0            |
+| Dev server  | `NODE_OPTIONS='--experimental-sqlite' NODE_ENV=development npx tsx server/_core/index.ts` | http on 3000      |
 
 ## Scope
 
@@ -125,8 +125,8 @@ From `DESIGN.md` and CLAUDE.md:
 
 - `client/src/pages/Transactions.tsx` — slim it to **≤200 LOC** by
   extracting the three sub-pieces below. Keep state + queries + mutation
-  + handlers + the wiring JSX (header, the four extracted children,
-  empty states).
+  - handlers + the wiring JSX (header, the four extracted children,
+    empty states).
 - `client/src/components/transactions/TransactionsFilters.tsx` — **NEW**.
   Houses the filter type aliases (`Outcome`, `Direction`, `Status`),
   `FilterField`, and the filter bar JSX. ≤200 LOC.
@@ -377,10 +377,7 @@ ALL must hold:
 - [ ] `npm run test:e2e` passes.
 - [ ] `npm run build` exits 0.
 - [ ] No new ESM import outside the in-scope file list. `git status`
-      shows only:
-        - `client/src/pages/Transactions.tsx` (modified)
-        - `client/src/components/transactions/*.tsx` (3 new files)
-        - `plans/README.md` (status update)
+      shows only: - `client/src/pages/Transactions.tsx` (modified) - `client/src/components/transactions/*.tsx` (3 new files) - `plans/README.md` (status update)
 - [ ] `plans/README.md` row for plan 010 set to DONE.
 
 ## STOP conditions
@@ -412,7 +409,7 @@ Stop and report (do not improvise) if:
   the touch surface is now just `TransactionsTable.tsx` (and the
   underlying tRPC `list` return shape). The filter bar and the
   delete dialog stay frozen.
-- The user-level rule of 200 LOC per component applies to *every*
+- The user-level rule of 200 LOC per component applies to _every_
   React component the agent writes — `TransactionsFilters` and
   `TransactionsTable` are themselves at risk of regrowth. Future
   PRs that push either past 200 should split again before adding

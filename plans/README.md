@@ -29,8 +29,8 @@ end-to-end safety net.
 | 008  | Delete dead `HttpError` family and `manusTypes.ts`           | P2       | S      | —          | DONE   |
 | 009  | Drop `users.initialBalance` column + helpers                 | P2       | M      | —          | DONE   |
 | 010  | Split `Transactions.tsx` (599 LOC) into <200 LOC             | P2       | M      | 005        | DONE   |
-| 011  | Split `NewTransaction.tsx` (550 LOC) into <200 LOC           | P2       | M      | 005        | TODO   |
-| 012  | Split `CloseTradeModal.tsx` (419 LOC) into <200 LOC          | P3       | M      | 005        | TODO   |
+| 011  | Split `NewTransaction.tsx` (550 LOC) into <200 LOC           | P2       | M      | 005        | DONE   |
+| 012  | Split `CloseTradeModal.tsx` (419 LOC) into <200 LOC          | P3       | M      | 005        | DONE   |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason)
 | REJECTED (with one-line rationale)

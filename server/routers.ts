@@ -36,8 +36,37 @@ import {
 import {
   ALLOWED_TRANSITIONS,
   MARKET_CYCLES,
+  TIME_FRAMES,
   TRANSACTION_TYPES,
 } from "@shared/const";
+import { fetchCandles } from "./_core/coinank";
+import {
+  getActiveConversation,
+  listReviewMessages,
+  openConversation,
+  sendUserMessage,
+} from "./agents/reviewAgent";
+import { ProviderError } from "./agents/providers/types";
+import { listProviders } from "./agents/providers/registry";
+import { listSkillMetadata } from "./agents/skillRegistry";
+import {
+  getProviderConfig,
+  hasToolApiKey,
+  setProviderConfig,
+  setToolApiKey,
+  type ToolId,
+} from "./agents/secrets";
+import { getAgentSettings, upsertAgentSettings } from "./db";
+
+// Derived from the static registry at module load. z.enum needs a non-empty
+// tuple, so cast after asserting at least one provider exists.
+const SUPPORTED_PROVIDER_IDS = listProviders().map(p => p.id) as [
+  string,
+  ...string[],
+];
+const providerIdSchema = z.enum(SUPPORTED_PROVIDER_IDS);
+
+const TRADING_PAIR_RE = /^[A-Z0-9]{4,20}$/;
 
 /**
  * Run a tradeMath helper and surface its validation failures as BAD_REQUEST.
@@ -560,6 +589,25 @@ export const appRouter = router({
       }),
   }),
 
+  // Market data (read-only proxy to CoinAnk's public kline endpoint).
+  market: router({
+    getCandles: publicProcedure
+      .input(
+        z.object({
+          tradingPair: z
+            .string()
+            .transform(s => s.toUpperCase())
+            .refine(s => TRADING_PAIR_RE.test(s), {
+              message: "Invalid trading pair",
+            }),
+          timeFrame: z.enum(TIME_FRAMES),
+        })
+      )
+      .query(async ({ input }) => {
+        return fetchCandles(input);
+      }),
+  }),
+
   // Accounts
   account: router({
     create: publicProcedure
@@ -645,6 +693,247 @@ export const appRouter = router({
         return { success: true };
       }),
   }),
+
+  // Agent / provider settings. API keys are encrypted at rest; this router
+  // never returns plaintext keys to the client — only a hasKey boolean.
+  settings: router({
+    // Catalogue of every registered provider, joined with per-user config
+    // status. Plaintext apiKey is intentionally NEVER part of the payload —
+    // only the boolean `hasKey` and the user's optional baseUrl override.
+    listProviders: publicProcedure.query(async ({ ctx }) => {
+      const providers = listProviders();
+      return Promise.all(
+        providers.map(async meta => {
+          const config = await getProviderConfig(ctx.user.id, meta.id);
+          return {
+            id: meta.id,
+            label: meta.label,
+            defaultBaseUrl: meta.defaultBaseUrl,
+            defaultModel: meta.defaultModel,
+            hasKey: Boolean(config?.apiKey),
+            configuredBaseUrl: config?.baseUrl ?? null,
+          };
+        })
+      );
+    }),
+
+    getProviderConfig: publicProcedure
+      .input(z.object({ providerId: providerIdSchema }))
+      .query(async ({ ctx, input }) => {
+        const config = await getProviderConfig(ctx.user.id, input.providerId);
+        return {
+          providerId: input.providerId,
+          hasKey: Boolean(config?.apiKey),
+          baseUrl: config?.baseUrl ?? null,
+        };
+      }),
+
+    setProviderConfig: publicProcedure
+      .input(
+        z.object({
+          providerId: providerIdSchema,
+          apiKey: z.string().trim().min(1).max(200).optional(),
+          baseUrl: z
+            .string()
+            .trim()
+            .max(500)
+            .optional()
+            .transform(value =>
+              value && value.length > 0 ? value : undefined
+            ),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        await setProviderConfig(ctx.user.id, input.providerId, {
+          apiKey: input.apiKey,
+          baseUrl: input.baseUrl ?? null,
+        });
+        return { success: true };
+      }),
+
+    // External tool keys (web_search backends etc.) live outside the
+    // ChatProvider enum on purpose — they're not selectable as the agent
+    // brain, just optional capability switches.
+    getToolKeyStatus: publicProcedure.query(async ({ ctx }) => {
+      const tools: ToolId[] = ["tavily"];
+      const entries = await Promise.all(
+        tools.map(
+          async tool =>
+            [tool, { hasKey: await hasToolApiKey(ctx.user.id, tool) }] as const
+        )
+      );
+      return Object.fromEntries(entries) as Record<ToolId, { hasKey: boolean }>;
+    }),
+
+    setToolKey: publicProcedure
+      .input(
+        z.object({
+          tool: z.enum(["tavily"]),
+          apiKey: z.string().trim().min(1).max(200),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        await setToolApiKey(ctx.user.id, input.tool, input.apiKey);
+        return { success: true };
+      }),
+
+    // Returns the user's stored default provider id. Falls back to "deepseek"
+    // (matches `agentSettings.defaultProvider` column default) when no row
+    // exists yet, so the client always gets a non-null id to render against.
+    getDefaultProvider: publicProcedure.query(async ({ ctx }) => {
+      const settings = await getAgentSettings(ctx.user.id);
+      return { defaultProvider: settings?.defaultProvider ?? "deepseek" };
+    }),
+
+    // Writes the user's default provider. NO hasKey check on purpose — the
+    // user may be about to fill in that provider's key. The UI surfaces a
+    // friendly hint instead.
+    setDefaultProvider: publicProcedure
+      .input(z.object({ providerId: providerIdSchema }))
+      .mutation(async ({ ctx, input }) => {
+        await upsertAgentSettings(ctx.user.id, {
+          defaultProvider: input.providerId,
+        });
+        return { success: true };
+      }),
+
+    // Catalogue of every registered skill, projected to client-safe metadata
+    // (no Zod parameter schemas, no `run` handles). Drives the Settings page
+    // toggle list (TASK-33).
+    listSkills: publicProcedure.query(() => {
+      return listSkillMetadata();
+    }),
+
+    // Returns the user's enabled-skill allowlist. Empty array means
+    // "default-all-enabled" — the same semantics runTools applies; the client
+    // hydrates this into a fully-checked UI so future-registered skills also
+    // auto-enable for users who never touched the setting.
+    getEnabledSkillIds: publicProcedure.query(async ({ ctx }) => {
+      const settings = await getAgentSettings(ctx.user.id);
+      return { enabledSkillIds: settings?.enabledSkillIds ?? [] };
+    }),
+
+    // Persists the user's allowlist. The UI is expected to collapse "all
+    // skills checked" into [] before calling, so future skills remain enabled
+    // by default; that policy is enforced on the client, not here.
+    setEnabledSkillIds: publicProcedure
+      .input(
+        z.object({
+          enabledSkillIds: z.array(z.string().min(1).max(50)).max(50),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        await upsertAgentSettings(ctx.user.id, {
+          enabledSkillIds: input.enabledSkillIds,
+        });
+        return { success: true };
+      }),
+  }),
+
+  // AI review agent — per-trade conversation backed by a ChatProvider.
+  reviewAgent: router({
+    // Lightweight lookup used by the client to decide whether to render the
+    // provider picker (no conversation yet) or the locked label (already
+    // open). Never creates a conversation row.
+    getActive: publicProcedure
+      .input(z.object({ transactionId: z.number().int().positive() }))
+      .query(async ({ ctx, input }) => {
+        const transaction = await getTransactionById(
+          input.transactionId,
+          ctx.user.id
+        );
+        if (!transaction) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Transaction not found or not owned by user",
+          });
+        }
+        const active = await getActiveConversation({
+          userId: ctx.user.id,
+          transactionId: input.transactionId,
+        });
+        if (!active) return null;
+        return {
+          conversationId: active.conversation.id,
+          providerId: active.conversation.providerId,
+          messages: active.messages,
+        };
+      }),
+
+    open: publicProcedure
+      .input(
+        z.object({
+          transactionId: z.number().int().positive(),
+          providerId: providerIdSchema.optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const transaction = await getTransactionById(
+          input.transactionId,
+          ctx.user.id
+        );
+        if (!transaction) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Transaction not found or not owned by user",
+          });
+        }
+        return runAgent(() =>
+          openConversation({
+            userId: ctx.user.id,
+            transaction,
+            providerId: input.providerId,
+          })
+        );
+      }),
+
+    send: publicProcedure
+      .input(
+        z.object({
+          conversationId: z.number().int().positive(),
+          userText: z.string().trim().min(1).max(4000),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        return runAgent(() =>
+          sendUserMessage({
+            userId: ctx.user.id,
+            conversationId: input.conversationId,
+            userText: input.userText,
+          })
+        );
+      }),
+
+    list: publicProcedure
+      .input(z.object({ conversationId: z.number().int().positive() }))
+      .query(async ({ ctx, input }) =>
+        listReviewMessages({
+          userId: ctx.user.id,
+          conversationId: input.conversationId,
+        })
+      ),
+  }),
 });
+
+/**
+ * Map ProviderError (typed, user-safe) to TRPCError. AUTH and RATE_LIMIT
+ * are user-actionable → BAD_REQUEST. NETWORK / UPSTREAM / INVALID_RESPONSE
+ * are upstream issues → INTERNAL_SERVER_ERROR. All messages are pre-translated
+ * to Chinese inside the provider, so we surface them as-is.
+ */
+async function runAgent<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error instanceof ProviderError) {
+      const code =
+        error.code === "AUTH" || error.code === "RATE_LIMIT"
+          ? "BAD_REQUEST"
+          : "INTERNAL_SERVER_ERROR";
+      throw new TRPCError({ code, message: error.message });
+    }
+    throw error;
+  }
+}
 
 export type AppRouter = typeof appRouter;

@@ -10,12 +10,21 @@ import {
   type IChartApi,
   type MouseEventParams,
   type Time,
+  type UTCTimestamp,
   type SeriesMarker,
 } from "lightweight-charts";
 
+export interface CandleClickPayload {
+  time: UTCTimestamp;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
 interface CandlestickChartProps {
-  data: CandlestickData<string>[];
-  onCandleSelect?: (time: string) => void;
+  data: CandlestickData<UTCTimestamp>[];
+  onCandleClick?: (candle: CandleClickPayload) => void;
   className?: string;
 }
 
@@ -70,13 +79,23 @@ function readPalette(): {
 
 export default function CandlestickChart({
   data,
-  onCandleSelect,
+  onCandleClick,
   className,
 }: CandlestickChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
-  const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  const dataRef = useRef<CandlestickData<UTCTimestamp>[]>(data);
+  const onCandleClickRef = useRef<typeof onCandleClick>(onCandleClick);
+  const [selectedTime, setSelectedTime] = useState<number | null>(null);
+
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
+  useEffect(() => {
+    onCandleClickRef.current = onCandleClick;
+  }, [onCandleClick]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -100,6 +119,8 @@ export default function CandlestickChart({
       },
       timeScale: {
         borderColor: palette.mist,
+        timeVisible: true,
+        secondsVisible: false,
       },
       crosshair: {
         vertLine: {
@@ -129,18 +150,17 @@ export default function CandlestickChart({
       wickDownColor: palette.ink,
     });
 
-    series.setData(data);
-    chart.timeScale().fitContent();
-
     chartRef.current = chart;
     seriesRef.current = series;
 
     const handleClick = (param: MouseEventParams<Time>) => {
       if (!param.time || !seriesRef.current) return;
 
-      const timeStr = param.time.toString();
-      setSelectedTime(timeStr);
-      onCandleSelect?.(timeStr);
+      const time = param.time as UTCTimestamp;
+      const candle = dataRef.current.find(c => c.time === time);
+      if (!candle) return;
+
+      setSelectedTime(time);
 
       const marker: SeriesMarker<Time> = {
         time: param.time,
@@ -149,8 +169,15 @@ export default function CandlestickChart({
         color: palette.ink,
         text: "entry",
       };
-
       createSeriesMarkers(seriesRef.current, [marker]);
+
+      onCandleClickRef.current?.({
+        time,
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+      });
     };
 
     chart.subscribeClick(handleClick);
@@ -170,14 +197,22 @@ export default function CandlestickChart({
     return () => {
       resizeObserver.disconnect();
       chart.remove();
+      chartRef.current = null;
+      seriesRef.current = null;
     };
-  }, [data, onCandleSelect]);
+  }, []);
+
+  useEffect(() => {
+    if (!seriesRef.current || !chartRef.current) return;
+    seriesRef.current.setData(data);
+    chartRef.current.timeScale().fitContent();
+  }, [data]);
 
   return (
     <div
       ref={containerRef}
       data-testid="candlestick-chart-container"
-      data-selected-time={selectedTime || ""}
+      data-selected-time={selectedTime === null ? "" : String(selectedTime)}
       className={className}
       style={{ width: "100%", height: "400px" }}
     />

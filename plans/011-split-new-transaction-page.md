@@ -28,7 +28,7 @@ classification, context) into a single component, plus a planned-r/r
 preview function and a `previewPlannedRiskReward` calculator.
 
 The page is a "recording" surface — the cognitive-load argument in
-`PRODUCT.md` is *"the interface must subtract from it"*. A
+`PRODUCT.md` is _"the interface must subtract from it"_. A
 600-line single-file form is the opposite. Splitting also makes it
 easier to add per-section helpers (e.g. tradeItems autocomplete, click-to-mark
 wiring from the chart) without pushing the page past 800 LOC.
@@ -77,13 +77,13 @@ wiring from the chart) without pushing the page past 800 LOC.
 
 ## Commands you will need
 
-| Purpose      | Command                                            | Expected           |
-| ------------ | -------------------------------------------------- | ------------------ |
-| Typecheck    | `npm run check`                                    | exit 0             |
-| Tests        | `npm test -- --run`                                | 104 passed         |
-| E2E (smoke)  | `npm run test:e2e`                                 | smoke spec passes  |
-| Build        | `npm run build`                                    | exit 0             |
-| Format       | `npm run format`                                   | exit 0             |
+| Purpose     | Command             | Expected          |
+| ----------- | ------------------- | ----------------- |
+| Typecheck   | `npm run check`     | exit 0            |
+| Tests       | `npm test -- --run` | 104 passed        |
+| E2E (smoke) | `npm run test:e2e`  | smoke spec passes |
+| Build       | `npm run build`     | exit 0            |
+| Format      | `npm run format`    | exit 0            |
 
 ## Scope
 
@@ -340,11 +340,7 @@ ALL must hold:
 - [ ] `npm test -- --run` reports `Tests 104 passed (104)`.
 - [ ] `npm run test:e2e` passes.
 - [ ] `npm run build` exits 0.
-- [ ] `git status` shows changes only in:
-        - `client/src/pages/NewTransaction.tsx` (modified)
-        - `client/src/components/new-transaction/*.tsx` (5 new files)
-        - `client/src/lib/plannedRiskReward.ts` (new file)
-        - `plans/README.md` (status update)
+- [ ] `git status` shows changes only in: - `client/src/pages/NewTransaction.tsx` (modified) - `client/src/components/new-transaction/*.tsx` (5 new files) - `client/src/lib/plannedRiskReward.ts` (new file) - `plans/README.md` (status update)
 - [ ] `plans/README.md` row for plan 011 set to DONE.
 
 ## STOP conditions
@@ -384,5 +380,5 @@ Stop and report (do not improvise) if:
   reader knows to keep them aligned.
 - The chart `<section>` is a deliberate one-liner today
   (`<CandlestickChart data={MOCK_CANDLE_DATA} />`). When the direction
-  finding "replace mock OHLC with real klines" lands, *that* is the
+  finding "replace mock OHLC with real klines" lands, _that_ is the
   moment to extract a `ChartSection.tsx` wrapper — don't pre-extract.

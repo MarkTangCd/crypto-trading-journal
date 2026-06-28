@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { EnvHttpProxyAgent, setGlobalDispatcher } from "undici";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
@@ -6,7 +7,19 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { assertClosedTradesHaveEndTime } from "../db";
+import { mountReviewAgentSseRoute } from "./reviewAgentSseRoute";
 import { serveStatic, setupVite } from "./vite";
+
+// Route all outbound fetch() through HTTPS_PROXY / HTTP_PROXY when set, with
+// NO_PROXY honored as a bypass list. No-op when no proxy env vars exist, so
+// the same line is safe in proxy-less environments.
+setGlobalDispatcher(new EnvHttpProxyAgent());
+if (process.env.HTTPS_PROXY || process.env.HTTP_PROXY) {
+  console.log(
+    `[proxy] outbound fetch via ${process.env.HTTPS_PROXY ?? process.env.HTTP_PROXY}` +
+      (process.env.NO_PROXY ? ` (bypass: ${process.env.NO_PROXY})` : "")
+  );
+}
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -41,6 +54,9 @@ async function startServer() {
       createContext,
     })
   );
+  // Streaming SSE endpoint for the review agent (sits next to tRPC because
+  // httpBatchLink can't carry SSE).
+  app.use("/api/review-agent", mountReviewAgentSseRoute());
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);

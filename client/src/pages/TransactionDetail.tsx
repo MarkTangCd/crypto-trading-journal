@@ -2,7 +2,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { CloseTradeModal } from "@/components/CloseTradeModal";
+import { CloseTradeModal } from "@/components/close-trade/CloseTradeModal";
+import { AgentDrawerToggle } from "@/components/review-agent/AgentDrawerToggle";
 import { useAccount } from "@/contexts/AccountContext";
 import {
   Field,
@@ -143,12 +144,15 @@ export default function TransactionDetail() {
     <div className="space-y-16">
       <h1 className="sr-only">trade {transaction.tradingPair}</h1>
 
-      <Link
-        href="/transactions"
-        className="text-label hover:text-foreground transition-colors inline-block"
-      >
-        ← transactions
-      </Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link
+          href="/transactions"
+          className="text-label hover:text-foreground transition-colors inline-block"
+        >
+          ← transactions
+        </Link>
+        <AgentDrawerToggle transactionId={transaction.id} />
+      </div>
 
       {/* Page header: pair + status marker + meta */}
       <header className="space-y-2">

@@ -62,7 +62,7 @@ export const users = sqliteTable(
       .default(sql`(unixepoch() * 1000)`)
       .notNull(),
     /** Initial account balance set by user */
-    initialBalance: text("initialBalance").default("0"),  // <-- DROP
+    initialBalance: text("initialBalance").default("0"), // <-- DROP
   },
   table => [check("users_role_check", sql`${table.role} in ('user', 'admin')`)]
 );
@@ -133,13 +133,13 @@ need to rebuild the `users` table.
 
 ## Commands you will need
 
-| Purpose      | Command                                            | Expected           |
-| ------------ | -------------------------------------------------- | ------------------ |
-| Typecheck    | `npm run check`                                    | exit 0             |
-| Tests        | `npm test -- --run`                                | 104 passed         |
-| Format       | `npm run format`                                   | exit 0             |
-| Migrations   | (do NOT run `npm run db:push` against the user's   | n/a — migration    |
-|              | live DB; see Step 6.)                              | applies on startup |
+| Purpose    | Command                                          | Expected           |
+| ---------- | ------------------------------------------------ | ------------------ |
+| Typecheck  | `npm run check`                                  | exit 0             |
+| Tests      | `npm test -- --run`                              | 104 passed         |
+| Format     | `npm run format`                                 | exit 0             |
+| Migrations | (do NOT run `npm run db:push` against the user's | n/a — migration    |
+|            | live DB; see Step 6.)                            | applies on startup |
 
 ## Scope
 
@@ -239,13 +239,13 @@ Add a new entry to the `entries` array in `_journal.json` (keep the file
 formatted to match the existing two-space indent / sorted-key style):
 
 ```json
-    {
-      "idx": 7,
-      "version": "6",
-      "when": 1781800000000,
-      "tag": "0007_drop_users_initial_balance",
-      "breakpoints": true
-    }
+{
+  "idx": 7,
+  "version": "6",
+  "when": 1781800000000,
+  "tag": "0007_drop_users_initial_balance",
+  "breakpoints": true
+}
 ```
 
 (Use any monotonically-increasing `when` value greater than the previous
@@ -390,7 +390,7 @@ Stop and report (do not improvise) if:
   `_sqliteDb.prepare("select sqlite_version()").get()` output).
 - More than 3 tests would have to be deleted from
   `server/sqlite.integration.test.ts` to make things compile. The
-  intent is to delete tests that are *meaningless* without the dead
+  intent is to delete tests that are _meaningless_ without the dead
   helpers, not to gut the integration suite. Resurface and ask.
 
 ## Maintenance notes

@@ -107,11 +107,11 @@ the modules are dead has drifted, and this plan must be re-scoped.
 
 ## Commands you will need
 
-| Purpose      | Command                          | Expected           |
-| ------------ | -------------------------------- | ------------------ |
-| Typecheck    | `npm run check`                  | exit 0             |
-| Tests        | `npm test -- --run`              | 104 passed         |
-| Format       | `npm run format`                 | exit 0             |
+| Purpose   | Command             | Expected   |
+| --------- | ------------------- | ---------- |
+| Typecheck | `npm run check`     | exit 0     |
+| Tests     | `npm test -- --run` | 104 passed |
+| Format    | `npm run format`    | exit 0     |
 
 ## Scope
 
