@@ -9,3 +9,4 @@ import "./webFetch";
 import "./analyzeMarketStructure";
 import "./fetchFundingRates";
 import "./compareWithMyBaseline";
+import "./onChainSnapshot";
