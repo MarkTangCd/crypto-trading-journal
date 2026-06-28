@@ -7,3 +7,4 @@ import "./getRecentTrades";
 import "./webSearch";
 import "./webFetch";
 import "./analyzeMarketStructure";
+import "./fetchFundingRates";
