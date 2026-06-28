@@ -195,6 +195,7 @@ function renderUserContext({
   lines.push("以下是这笔交易的完整记录，请阅读后给出你的初步复盘意见。");
   lines.push("");
   lines.push("## 交易基本信息");
+  lines.push(`- 交易ID：${transaction.id}`);
   lines.push(`- 交易对：${transaction.tradingPair}`);
   lines.push(`- 方向：${transaction.direction}`);
   lines.push(`- 周期：${transaction.timeFrame}`);

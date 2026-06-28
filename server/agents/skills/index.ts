@@ -8,3 +8,4 @@ import "./webSearch";
 import "./webFetch";
 import "./analyzeMarketStructure";
 import "./fetchFundingRates";
+import "./compareWithMyBaseline";
