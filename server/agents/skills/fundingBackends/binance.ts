@@ -51,9 +51,14 @@ async function fetchBinanceFunding(
       signal,
     });
   } catch (error) {
+    const cause = error instanceof Error ? error.cause : undefined;
     const message =
       error instanceof Error ? error.message : "binance funding request failed";
-    return { ok: false, error: `binance 请求失败: ${message}` };
+    // undici hides geo-block / DNS / TCP details inside error.cause; surface
+    // them so callers (and the agent's log pane) see why the call failed.
+    console.error("[Binance] funding fetch failed", error, "cause:", cause);
+    const causeStr = cause instanceof Error ? `: ${cause.message}` : "";
+    return { ok: false, error: `binance 请求失败: ${message}${causeStr}` };
   }
 
   if (!response.ok) {
