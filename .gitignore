@@ -2,6 +2,9 @@
 **/node_modules
 .pnpm-store/
 
+# Devbox / Nix (commit devbox.json + devbox.lock; ignore local env dir)
+.devbox/
+
 # Build outputs
 dist/
 build/

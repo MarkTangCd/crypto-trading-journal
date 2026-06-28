@@ -40,7 +40,51 @@ Guidance for Claude Code and other coding agents working in this repository.
 - Use English for code comments.
 - Keep explanations concise and direct; avoid preamble.
 
+## Dev Environment (Devbox)
+
+This project pins its toolchain via [Devbox](https://www.jetify.com/devbox).
+Config lives in `devbox.json`; the resolved versions are locked in `devbox.lock`
+(both committed). `.devbox/` is local and gitignored.
+
+**Agents must run dependency-sensitive commands inside the devbox env**, so
+output reflects the project's pinned Node (>= 22.5.0) rather than whatever
+runtime happens to be on the host. This covers:
+
+- Anything that calls `node`, `npm`, `npx`, `tsx`, `vitest`, `playwright`, or
+  `drizzle-kit`.
+- The npm scripts listed in `## Commands` below.
+- Native rebuilds (`better-sqlite3`, etc.) and `npm install`.
+
+Two equivalent invocation styles — pick whichever is cleaner per call site:
+
+```bash
+# Run a single command in the env (best for one-shot agent calls)
+devbox run -- npm run check
+devbox run -- npx vitest run server/transaction.test.ts
+
+# Use predefined devbox script aliases (see devbox.json `shell.scripts`)
+devbox run check
+devbox run test
+devbox run dev
+
+# Enter an interactive shell (best for a sequence of commands)
+devbox shell
+```
+
+You may skip devbox **only** for commands that don't touch the JS toolchain
+(`git`, `rg`, `ls`, file edits, `backlog` CLI, etc.).
+
+First-time setup on a fresh machine:
+
+```bash
+curl -fsSL https://get.jetify.com/devbox | bash   # install devbox
+devbox install                                    # materialize .devbox/ from lockfile
+devbox run install                                # npm install inside the env
+```
+
 ## Commands
+
+Run these via `devbox run -- <cmd>` (or `devbox shell` first).
 
 ```bash
 # Development
@@ -204,9 +248,10 @@ iterate visually.
 - No unrelated refactors.
 - TypeScript strict; no type suppression.
 - Alias, import, and formatting style preserved.
-- Ran `npm run format` after meaningful edits.
-- Ran `npm run check` for code changes.
-- Ran `npm run test` (or the relevant single server test) when backend behavior changed.
+- Ran `devbox run -- npm run format` after meaningful edits.
+- Ran `devbox run -- npm run check` for code changes.
+- Ran `devbox run -- npm run test` (or the relevant single server test) when
+  backend behavior changed.
 
 ## Backlog.md (Task Management)
 

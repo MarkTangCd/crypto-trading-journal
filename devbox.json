@@ -1,0 +1,22 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.14.0/.schema/devbox.schema.json",
+  "packages": [
+    "nodejs@22"
+  ],
+  "shell": {
+    "init_hook": [
+      "echo \"[devbox] crypto-trading-journal | node $(node -v) | npm $(npm -v)\""
+    ],
+    "scripts": {
+      "install":  "npm install",
+      "dev":      "npm run dev",
+      "build":    "npm run build",
+      "start":    "npm run start",
+      "check":    "npm run check",
+      "format":   "npm run format",
+      "test":     "npm run test",
+      "test:e2e": "npm run test:e2e",
+      "db:push":  "npm run db:push"
+    }
+  }
+}
