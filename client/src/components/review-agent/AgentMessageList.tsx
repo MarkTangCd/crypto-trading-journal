@@ -1,4 +1,5 @@
 import { Loader2 } from "lucide-react";
+import { AgentMarkdown } from "./AgentMarkdown";
 import { ToolCallLine, ToolResultLine } from "./ToolBubble";
 import type { StreamPending } from "./useReviewStream";
 
@@ -101,11 +102,7 @@ export function AgentMessageList({ messages, pending, isWaiting }: Props) {
                   argsSummary={truncate(call.arguments, SUMMARY_MAX_CHARS)}
                 />
               ))}
-              {message.text ? (
-                <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                  {message.text}
-                </p>
-              ) : null}
+              {message.text ? <AgentMarkdown text={message.text} /> : null}
             </div>
           );
         }
@@ -115,9 +112,7 @@ export function AgentMessageList({ messages, pending, isWaiting }: Props) {
             <p className="text-label">
               {message.role === "assistant" ? "agent" : "you"}
             </p>
-            <p className="whitespace-pre-wrap text-sm leading-relaxed">
-              {message.text}
-            </p>
+            <AgentMarkdown text={message.text} />
           </div>
         );
       })}
@@ -139,9 +134,7 @@ function PendingTurn({ pending }: { pending: StreamPending }) {
     <>
       <div className="space-y-1">
         <p className="text-label">you</p>
-        <p className="whitespace-pre-wrap text-sm leading-relaxed">
-          {pending.userText}
-        </p>
+        <AgentMarkdown text={pending.userText} />
       </div>
       {pending.toolBubbles.length > 0 ? (
         <div className="space-y-1">
@@ -165,9 +158,7 @@ function PendingTurn({ pending }: { pending: StreamPending }) {
       {pending.assistantText ? (
         <div className="space-y-1">
           <p className="text-label">agent</p>
-          <p className="whitespace-pre-wrap text-sm leading-relaxed">
-            {pending.assistantText}
-          </p>
+          <AgentMarkdown text={pending.assistantText} />
         </div>
       ) : null}
     </>
