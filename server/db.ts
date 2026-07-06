@@ -21,6 +21,9 @@ import {
   agentSettings,
   type AgentSettings,
   type InsertAgentSettings,
+  preTrades,
+  type PreTrade,
+  type InsertPreTrade,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { ANONYMOUS_OPEN_ID, ANONYMOUS_USER_NAME } from "@shared/const";
@@ -1100,6 +1103,111 @@ export async function listMessages(params: {
     .orderBy(asc(messages.createdAt), asc(messages.id));
 
   return rows.map(row => row.message);
+}
+
+// ============ Pre-trade planning sessions ============
+
+export async function createPreTrade(
+  input: Omit<InsertPreTrade, "id" | "createdAt" | "updatedAt">
+): Promise<PreTrade> {
+  return runInSqliteTransaction(async db => {
+    const inserted = await db.insert(preTrades).values(input).returning();
+    if (!inserted[0]) {
+      throw new Error("Failed to create pre-trade");
+    }
+    return inserted[0];
+  });
+}
+
+export async function getPreTradeById(
+  id: number,
+  userId: number
+): Promise<PreTrade | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const rows = await db
+    .select()
+    .from(preTrades)
+    .where(and(eq(preTrades.id, id), eq(preTrades.userId, userId)))
+    .limit(1);
+
+  return rows[0];
+}
+
+export async function listPreTradesByUser(
+  userId: number,
+  limit: number = 50
+): Promise<PreTrade[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(preTrades)
+    .where(eq(preTrades.userId, userId))
+    .orderBy(desc(preTrades.createdAt))
+    .limit(limit);
+}
+
+export async function getConversationByPreTrade(
+  userId: number,
+  preTradeId: number
+): Promise<Conversation | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const rows = await db
+    .select()
+    .from(conversations)
+    .where(
+      and(
+        eq(conversations.userId, userId),
+        eq(conversations.preTradeId, preTradeId)
+      )
+    )
+    .limit(1);
+
+  return rows[0];
+}
+
+export async function getOrCreateConversationForPreTrade(params: {
+  userId: number;
+  preTradeId: number;
+  providerId: string;
+  model: string;
+}): Promise<Conversation> {
+  return runInSqliteTransaction(async db => {
+    const existing = await db
+      .select()
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.userId, params.userId),
+          eq(conversations.preTradeId, params.preTradeId)
+        )
+      )
+      .limit(1);
+
+    if (existing.length > 0) {
+      return existing[0];
+    }
+
+    const inserted = await db
+      .insert(conversations)
+      .values({
+        userId: params.userId,
+        preTradeId: params.preTradeId,
+        providerId: params.providerId,
+        model: params.model,
+      })
+      .returning();
+
+    if (!inserted[0]) {
+      throw new Error("Failed to create pre-trade conversation");
+    }
+    return inserted[0];
+  });
 }
 
 export async function getAgentSettings(

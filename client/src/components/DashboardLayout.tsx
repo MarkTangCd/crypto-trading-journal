@@ -17,6 +17,7 @@ import {
   PanelLeft,
   Plus,
   Settings,
+  Sparkles,
   TrendingUp,
   Wallet,
 } from "lucide-react";
@@ -28,6 +29,7 @@ const menuItems = [
   { icon: BarChart3, label: "Dashboard", path: "/" },
   { icon: FileText, label: "Transactions", path: "/transactions" },
   { icon: Plus, label: "New Trade", path: "/transactions/new" },
+  { icon: Sparkles, label: "Pre-Trade", path: "/pre-trade" },
   { icon: Wallet, label: "Accounts", path: "/accounts" },
   { icon: Settings, label: "Settings", path: "/settings" },
 ];

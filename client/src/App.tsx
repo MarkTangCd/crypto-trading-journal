@@ -11,6 +11,7 @@ import Transactions from "./pages/Transactions";
 import NewTransaction from "./pages/NewTransaction";
 import TransactionDetail from "./pages/TransactionDetail";
 import Accounts from "./pages/Accounts";
+import PreTrade from "./pages/PreTrade";
 import Settings from "./pages/Settings";
 
 function Router() {
@@ -22,6 +23,8 @@ function Router() {
         <Route path="/transactions/new" component={NewTransaction} />
         <Route path="/transactions/:id" component={TransactionDetail} />
         <Route path="/accounts" component={Accounts} />
+        <Route path="/pre-trade" component={PreTrade} />
+        <Route path="/pre-trade/:id" component={PreTrade} />
         <Route path="/settings" component={Settings} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />

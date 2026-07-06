@@ -46,7 +46,24 @@ export default function NewTransaction() {
     },
   });
 
-  const [formData, setFormData] = useState<FormData>(INITIAL_FORM_DATA);
+  const [formData, setFormData] = useState<FormData>(() => {
+    // Support ?pair=BTCUSDT&direction=long&tf=4H prefill from the pre-trade
+    // "convert to transaction" CTA. Falls back to INITIAL_FORM_DATA when the
+    // query string is missing or invalid; unknown values are ignored.
+    if (typeof window === "undefined") return INITIAL_FORM_DATA;
+    const params = new URLSearchParams(window.location.search);
+    const pair = params.get("pair");
+    const direction = params.get("direction");
+    const tf = params.get("tf");
+    return {
+      ...INITIAL_FORM_DATA,
+      ...(pair && /^[A-Z0-9]{4,20}$/.test(pair.toUpperCase())
+        ? { tradingPair: pair.toUpperCase() }
+        : {}),
+      ...(direction === "long" || direction === "short" ? { direction } : {}),
+      ...(tf ? { timeFrame: tf } : {}),
+    };
+  });
 
   const plannedRrPreview = useMemo(
     () =>

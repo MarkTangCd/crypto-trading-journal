@@ -20,6 +20,8 @@ import {
   updateAccount,
   deleteAccountWithTransactions,
   getAccountCount,
+  // Pre-trade
+  listPreTradesByUser,
 } from "./db";
 import type { TrpcContext } from "./_core/context";
 import type { Account, Transaction } from "../drizzle/schema";
@@ -46,6 +48,12 @@ import {
   openConversation,
   sendUserMessage,
 } from "./agents/reviewAgent";
+import {
+  createSession as createPreTradeSession,
+  getActiveConversation as getActivePreTradeConversation,
+  listPreTradeMessages,
+  sendUserMessage as sendPreTradeUserMessage,
+} from "./agents/preTradeAgent";
 import { ProviderError } from "./agents/providers/types";
 import { listProviders } from "./agents/providers/registry";
 import { listSkillMetadata } from "./agents/skillRegistry";
@@ -908,6 +916,121 @@ export const appRouter = router({
       .input(z.object({ conversationId: z.number().int().positive() }))
       .query(async ({ ctx, input }) =>
         listReviewMessages({
+          userId: ctx.user.id,
+          conversationId: input.conversationId,
+        })
+      ),
+  }),
+
+  // AI pre-trade planning agent — discuss a trade idea BEFORE opening it.
+  preTradeAgent: router({
+    // List past pre-trade sessions for the sidebar/history view (phase 5).
+    listSessions: publicProcedure.query(async ({ ctx }) => {
+      return listPreTradesByUser(ctx.user.id);
+    }),
+
+    // Resume an existing session: returns the pre-trade config + conversation
+    // + messages. Null when the session doesn't exist or isn't owned.
+    getActive: publicProcedure
+      .input(z.object({ preTradeId: z.number().int().positive() }))
+      .query(async ({ ctx, input }) => {
+        const active = await getActivePreTradeConversation({
+          userId: ctx.user.id,
+          preTradeId: input.preTradeId,
+        });
+        if (!active) return null;
+        return {
+          preTrade: active.preTrade,
+          conversationId: active.conversation.id,
+          providerId: active.conversation.providerId,
+          messages: active.messages,
+        };
+      }),
+
+    // Create a new session AND its conversation atomically. Seeds the first
+    // assistant reply so the client renders a live thread immediately.
+    create: publicProcedure
+      .input(
+        z
+          .object({
+            tradingPair: z.string().regex(TRADING_PAIR_RE),
+            direction: z.enum(["long", "short"]).nullable(),
+            primaryTimeFrame: z.enum(TIME_FRAMES),
+            primaryCandleCount: z.number().int().min(20).max(500),
+            contextTimeframes: z
+              .array(
+                z.object({
+                  tf: z.enum(TIME_FRAMES),
+                  candleCount: z.number().int().min(20).max(500),
+                })
+              )
+              .max(4),
+            anchorMs: z.number().int().positive().nullable(),
+            idea: z.string().trim().min(1).max(4000),
+            providerId: providerIdSchema.optional(),
+          })
+          .refine(
+            data =>
+              !data.contextTimeframes.some(
+                entry => entry.tf === data.primaryTimeFrame
+              ),
+            {
+              message: "context timeframes cannot include the primary tf",
+              path: ["contextTimeframes"],
+            }
+          )
+          .refine(
+            data => {
+              const seen = new Set<string>();
+              for (const entry of data.contextTimeframes) {
+                if (seen.has(entry.tf)) return false;
+                seen.add(entry.tf);
+              }
+              return true;
+            },
+            {
+              message: "context timeframes must be unique",
+              path: ["contextTimeframes"],
+            }
+          )
+      )
+      .mutation(async ({ ctx, input }) => {
+        return runAgent(() =>
+          createPreTradeSession({
+            userId: ctx.user.id,
+            tradingPair: input.tradingPair,
+            direction: input.direction,
+            primaryTimeFrame: input.primaryTimeFrame,
+            primaryCandleCount: input.primaryCandleCount,
+            contextTimeframes: input.contextTimeframes,
+            anchorMs: input.anchorMs,
+            idea: input.idea,
+            providerId: input.providerId,
+          })
+        );
+      }),
+
+    send: publicProcedure
+      .input(
+        z.object({
+          conversationId: z.number().int().positive(),
+          userText: z.string().trim().min(1).max(4000),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        return runAgent(() =>
+          sendPreTradeUserMessage({
+            userId: ctx.user.id,
+            conversationId: input.conversationId,
+            userText: input.userText,
+          })
+        );
+      }),
+
+    list: publicProcedure
+      .input(z.object({ conversationId: z.number().int().positive() }))
+      .query(async ({ ctx, input }) =>
+        listPreTradeMessages({
           userId: ctx.user.id,
           conversationId: input.conversationId,
         })

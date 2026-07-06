@@ -174,7 +174,51 @@ export type Account = typeof accounts.$inferSelect;
 export type InsertAccount = typeof accounts.$inferInsert;
 
 /**
- * Per-trade AI review conversation. One row per (userId, transactionId).
+ * Pre-trade brainstorming session. Written when the user commits to "start
+ * discussion" on the /pre-trade page. One row per session; a session may
+ * spawn one conversation via `conversations.preTradeId`.
+ */
+export const preTrades = sqliteTable("pre_trades", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  /** Foreign key to users table */
+  userId: integer("userId").notNull(),
+  /** Trading pair e.g., BTCUSDT */
+  tradingPair: text("tradingPair").notNull(),
+  /** Declared direction. Optional because a pre-trade is exploratory. */
+  direction: text("direction").$type<"long" | "short">(),
+  /** Main trading timeframe — always included in the payload. */
+  primaryTimeFrame: text("primaryTimeFrame").notNull(),
+  /** Candle count for the primary timeframe (clamp 20..500). */
+  primaryCandleCount: integer("primaryCandleCount").notNull().default(100),
+  /**
+   * Additional context timeframes. JSON array of `{ tf, candleCount }`.
+   * Length 0..4 — combined with primary, max 5 timeframes per session.
+   */
+  contextTimeframes: text("contextTimeframes", { mode: "json" })
+    .$type<Array<{ tf: string; candleCount: number }>>()
+    .notNull()
+    .default(sql`'[]'`),
+  /** Anchor timestamp in ms; when null, backend uses "now" at start time. */
+  anchorMs: integer("anchorMs", { mode: "number" }),
+  /** Trader's idea (verbatim). */
+  idea: text("idea").notNull(),
+  /** Record creation timestamp */
+  createdAt: integer("createdAt", { mode: "timestamp_ms" })
+    .default(sql`(unixepoch() * 1000)`)
+    .notNull(),
+  /** Record update timestamp */
+  updatedAt: integer("updatedAt", { mode: "timestamp_ms" })
+    .default(sql`(unixepoch() * 1000)`)
+    .notNull(),
+});
+
+export type PreTrade = typeof preTrades.$inferSelect;
+export type InsertPreTrade = typeof preTrades.$inferInsert;
+
+/**
+ * AI conversation — either per-trade (review) or per-pre-trade (planning).
+ * Exactly one of `transactionId` / `preTradeId` is set; the check constraint
+ * enforces XOR so a row can never be orphaned or double-attached.
  */
 export const conversations = sqliteTable(
   "conversations",
@@ -182,8 +226,10 @@ export const conversations = sqliteTable(
     id: integer("id").primaryKey({ autoIncrement: true }),
     /** Foreign key to users table */
     userId: integer("userId").notNull(),
-    /** Foreign key to transactions table */
-    transactionId: integer("transactionId").notNull(),
+    /** Foreign key to transactions table. Null when this is a pre-trade thread. */
+    transactionId: integer("transactionId"),
+    /** Foreign key to pre_trades table. Null when this is a review thread. */
+    preTradeId: integer("preTradeId"),
     /** Provider id, e.g. "deepseek" */
     providerId: text("providerId").notNull(),
     /** Model name passed to the provider, e.g. "deepseek-chat" */
@@ -196,10 +242,20 @@ export const conversations = sqliteTable(
       .notNull(),
   },
   table => [
+    // XOR: exactly one attachment id must be non-null on every row.
+    check(
+      "conversations_attachment_xor_check",
+      sql`(${table.transactionId} is not null) <> (${table.preTradeId} is not null)`
+    ),
     // Lookup: open/get-or-create scans by (userId, transactionId).
     index("conversations_user_transaction_idx").on(
       table.userId,
       table.transactionId
+    ),
+    // Lookup: open/get-or-create scans by (userId, preTradeId).
+    index("conversations_user_pre_trade_idx").on(
+      table.userId,
+      table.preTradeId
     ),
   ]
 );

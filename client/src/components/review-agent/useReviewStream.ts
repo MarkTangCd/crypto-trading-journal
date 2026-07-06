@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const STREAM_URL = "/api/review-agent/stream";
+const DEFAULT_STREAM_URL = "/api/review-agent/stream";
 
 export type ToolBubbleStatus = "running" | "ok" | "failed";
 
@@ -20,6 +20,11 @@ export interface StreamPending {
 
 interface UseReviewStreamOptions {
   conversationId: number | null;
+  /**
+   * Override the SSE endpoint. Defaults to the review agent stream. Pass
+   * `/api/pre-trade-agent/stream` for the planning agent.
+   */
+  streamUrl?: string;
   onDone?: (messageId: number) => void;
   onError?: (message: string) => void;
 }
@@ -87,8 +92,10 @@ export function useReviewStream(
 
       let assembled = "";
 
+      const streamUrl = opts.streamUrl ?? DEFAULT_STREAM_URL;
+
       try {
-        const res = await fetch(STREAM_URL, {
+        const res = await fetch(streamUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -187,7 +194,7 @@ export function useReviewStream(
         setPending(null);
       }
     },
-    [opts.conversationId]
+    [opts.conversationId, opts.streamUrl]
   );
 
   const stop = useCallback(() => {

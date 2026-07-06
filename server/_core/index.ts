@@ -7,6 +7,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { assertClosedTradesHaveEndTime } from "../db";
+import { mountPreTradeAgentSseRoute } from "./preTradeAgentSseRoute";
 import { mountReviewAgentSseRoute } from "./reviewAgentSseRoute";
 import { serveStatic, setupVite } from "./vite";
 
@@ -54,9 +55,11 @@ async function startServer() {
       createContext,
     })
   );
-  // Streaming SSE endpoint for the review agent (sits next to tRPC because
-  // httpBatchLink can't carry SSE).
+  // Streaming SSE endpoints for the review agent (post-trade) and the
+  // pre-trade agent (pre-trade). httpBatchLink can't carry SSE, so both
+  // agents mount plain Express routers next to tRPC.
   app.use("/api/review-agent", mountReviewAgentSseRoute());
+  app.use("/api/pre-trade-agent", mountPreTradeAgentSseRoute());
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
