@@ -3,9 +3,9 @@ id: TASK-36
 title: Skill · compare_with_my_baseline（Phase 5 · skills）
 status: Done
 assignee:
-  - '@myself'
-created_date: '2026-06-26 13:29'
-updated_date: '2026-06-28 03:12'
+  - "@myself"
+created_date: "2026-06-26 13:29"
+updated_date: "2026-06-28 03:12"
 labels:
   - ai-agent
   - phase-5
@@ -30,6 +30,7 @@ ordinal: 36000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
+
 ## Why
 
 Plan "Skill 扩展机制" 段 `compare_with_my_baseline`：`统计该用户最近 50 笔交易的 r:r 分布与胜率，告诉 agent "这笔单子在你自己的样本里属于什么档次"`。Phase 5 已决议 4 skill 之一。
@@ -93,7 +94,9 @@ z.object({
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
+
 <!-- AC:BEGIN -->
+
 - [x] #1 server/agents/skills/compareWithMyBaseline.ts 落地，注册 id = 'compare_with_my_baseline'，category = 'analysis'
 - [x] #2 参数 zod schema：transactionId / windowSize 10–200 默认 50 / pairScope all|same-pair|same-direction 默认 all
 - [x] #3 skill 复用 server/db.ts 现有 transaction 查询（不在 skill 里写新 SQL）；scope 到 ctx.userId，跨用户注入不能发生
@@ -104,11 +107,10 @@ z.object({
 - [x] #8 npm run check + format + test 全绿；烟测：启用后跳一笔 transaction 跳 review，问 'compare to my baseline' 能出对比
 <!-- AC:END -->
 
-
-
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
+
 ## 落地
 
 `compare_with_my_baseline` skill 上线，纯本地、零网络，read-only。流程：用 `getTransactionById(ctx.userId)` 锁定当前 trade → 用 `getTransactionsByUserId(ctx.userId, opts)` 拉 windowSize+buffer 条历史 → 过滤（排除自身 / 仅 closed-或-reviewed / r:r 可 parse） → 用 `_helpers/baseline.ts` 算 quartile / 胜率 / 持仓时长 / tied-aware percentile → 拼中文 interpretation。
@@ -148,4 +150,5 @@ z.object({
 复测：`npm run check` + `npm run test` 仍 341 全绿（contextBuilder 既有断言 `toContain('## 交易基本信息')` 不受影响）。
 
 烟测待用户最终确认：启用 skill → 任挑一笔 closed trade（先确保未 review 过，或删旧 conversation）→ 重启 dev → 进 Review → 问「我这笔在我历史里属于什么档次」→ 确认 agent 自动带上正确 `transactionId` 并输出量化、无主观词的 interpretation。
+
 <!-- SECTION:FINAL_SUMMARY:END -->

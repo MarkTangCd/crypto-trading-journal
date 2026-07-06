@@ -3,9 +3,9 @@ id: TASK-37
 title: Skill · on_chain_snapshot（Phase 5 · skills · optional · BTC/ETH only）
 status: Done
 assignee:
-  - '@myself'
-created_date: '2026-06-26 13:30'
-updated_date: '2026-06-28 03:49'
+  - "@myself"
+created_date: "2026-06-26 13:30"
+updated_date: "2026-06-28 03:49"
 labels:
   - ai-agent
   - phase-5
@@ -24,6 +24,7 @@ ordinal: 37000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
+
 ## Why
 
 Plan "Skill 扩展机制" 段 `on_chain_snapshot`（标 optional）：`可选 skill，调用 glassnode / nansen 公开 endpoint，仅在 pair = BTC/ETH 且时段命中时启用`。Phase 5 已决议 4 skill 全做，但 plan 自己标了 optional + 仅 BTC/ETH——本任务尊重该约束、低优先级。
@@ -91,7 +92,9 @@ z.object({
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
+
 <!-- AC:BEGIN -->
+
 - [x] #1 server/agents/skills/onChainSnapshot.ts 落地，注册 id = 'on_chain_snapshot'，category = 'network'
 - [x] #2 pair gate：调用前先判 symbol，非 BTC*/ETH* 直接返 ok=false 中文提示，不发 fetch
 - [x] #3 参数 zod schema：symbol / lookbackHours 24–168 / metrics 枚举（active_addresses / exchange_netflow / miner_revenue）默认取前两项
@@ -101,14 +104,14 @@ z.object({
 - [x] #7 npm run check + format + test 全绿；烟测（需配 Glassnode free key）：BTCUSDT review 问 'on chain' 能出 metrics；SOLUSDT trade 上该 skill 明确拒绝
 <!-- AC:END -->
 
-
-
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
+
 ## 落地
 
 `on_chain_snapshot` skill 上线，category `network`，**backend = Blockchain.com Charts**（keyless / 完全免费 / BTC-only）。两轮回头：
+
 - **首轮**：Glassnode 方案，免费 tier 可用性不确定，未烟测
 - **二轮**：CoinMetrics community，烟测踩 403——免费 tier 不给 `TxTfrValAdjUSD` / `RevAllUSD`，连 `AdrActCnt` 也只返单点无 history
 - **三轮（当前）**：Blockchain.com Charts，curl 实测三个 endpoint 都返完整 history，BTC-only 但语义清晰
@@ -133,13 +136,13 @@ z.object({
 
 ## 与 task spec 偏离点
 
-| spec | 实现 | 原因 |
-|---|---|---|
+| spec                                                                 | 实现                                                          | 原因                                                                             |
+| -------------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | `metrics: ["active_addresses", "exchange_netflow", "miner_revenue"]` | `["active_addresses", "transfer_value_usd", "miner_revenue"]` | Blockchain.com Charts 无 exchange-flow chart；transfer-volume 是最接近的免费替代 |
-| BTC/ETH 都支持 | **BTC-only** | 无免费 ETH 链上 backend；ETH 显式拒绝并解释 |
-| `getToolApiKey(userId, 'glassnode')` | 无 key | Blockchain.com Charts 不需要 key；secrets.ts 无改动 |
-| AC #4 "Glassnode endpoint" | Blockchain.com endpoint | backend 换 |
-| AC #6 "Glassnode 401 / 429" | Blockchain.com 404 / 500 / 429 | backend 换 |
+| BTC/ETH 都支持                                                       | **BTC-only**                                                  | 无免费 ETH 链上 backend；ETH 显式拒绝并解释                                      |
+| `getToolApiKey(userId, 'glassnode')`                                 | 无 key                                                        | Blockchain.com Charts 不需要 key；secrets.ts 无改动                              |
+| AC #4 "Glassnode endpoint"                                           | Blockchain.com endpoint                                       | backend 换                                                                       |
+| AC #6 "Glassnode 401 / 429"                                          | Blockchain.com 404 / 500 / 429                                | backend 换                                                                       |
 
 ## 文件
 

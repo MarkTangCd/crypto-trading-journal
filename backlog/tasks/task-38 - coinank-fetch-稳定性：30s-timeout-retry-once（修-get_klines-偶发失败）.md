@@ -3,9 +3,9 @@ id: TASK-38
 title: coinank fetch 稳定性：30s timeout + retry-once（修 get_klines 偶发失败）
 status: Done
 assignee:
-  - '@myself'
-created_date: '2026-06-26 14:24'
-updated_date: '2026-06-26 14:26'
+  - "@myself"
+created_date: "2026-06-26 14:24"
+updated_date: "2026-06-26 14:26"
 labels:
   - server
   - reliability
@@ -21,6 +21,7 @@ ordinal: 38000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
+
 ## Why
 
 TASK-32 烟测时发现 `get_klines` 调用经常返回 `Failed to reach market data provider`。诊断：
@@ -48,7 +49,9 @@ TASK-32 烟测时发现 `get_klines` 调用经常返回 `Failed to reach market 
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
+
 <!-- AC:BEGIN -->
+
 - [x] #1 fetchCandles 用 AbortSignal.timeout(30_000) 控总耗时，失败 catch 里 1 s 退避后 retry once；两次都失败才 throw TRPCError BAD_GATEWAY
 - [x] #2 retry catch 把 err.cause（如有）也 console.error 出来，方便后续诊断
 - [x] #3 现有 coinank 测试不变；新增 1-2 条单测覆盖『第一次抛错+第二次成功』与『两次都失败』分支
@@ -58,6 +61,7 @@ TASK-32 烟测时发现 `get_klines` 调用经常返回 `Failed to reach market 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
+
 ## 改动
 
 - `server/_core/coinank.ts`：抽出 `fetchWithRetry(url)`，给 fetch 套 `AbortSignal.timeout(REQUEST_TIMEOUT_MS = 30_000)` 替默认 connect-only 10s；第一次 catch 里 1 s 退避后 retry once，两次都失败再 throw `BAD_GATEWAY`。`console.warn`/`console.error` 把 `err.cause` 也打出来。
@@ -71,4 +75,5 @@ TASK-32 烟测时发现 `get_klines` 调用经常返回 `Failed to reach market 
 ## 跟 TASK-32 关系
 
 完全独立。TASK-32 烟测顺手暴露了这个埋藏问题，本任务在 TASK-32 落地分支上接着做。建议两个一起合或者按时间序合，不要相互依赖。
+
 <!-- SECTION:FINAL_SUMMARY:END -->

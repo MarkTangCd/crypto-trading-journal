@@ -1,11 +1,11 @@
 ---
 id: TASK-33
-title: 'Settings UI: Skills 启用勾选（Phase 5 · UX）'
+title: "Settings UI: Skills 启用勾选（Phase 5 · UX）"
 status: Done
 assignee:
-  - '@myself'
-created_date: '2026-06-26 13:27'
-updated_date: '2026-06-27 02:38'
+  - "@myself"
+created_date: "2026-06-26 13:27"
+updated_date: "2026-06-27 02:38"
 labels:
   - ai-agent
   - phase-5
@@ -32,6 +32,7 @@ ordinal: 33000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
+
 ## Why
 
 TASK-32 把 skill 抽象 + enabledSkillIds 过滤 wire 起来了，但用户没法手动开关。Phase 5 plan 要求 `Settings 勾选启用`。这一步把 Skills 列表 + 勾选交互加到 Settings 页，**保留 Bench Notebook 风格**（lowercase labels、tabular-nums、零阴影、零圆角）。
@@ -74,7 +75,9 @@ TASK-32 把 skill 抽象 + enabledSkillIds 过滤 wire 起来了，但用户没�
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
+
 <!-- AC:BEGIN -->
+
 - [x] #1 Settings 页新增 'skills' 区块，列出当前所有已注册 skill、勾选状态反映 enabledSkillIds，调式跟 provider 区块一致（Bench Notebook 风格）
 - [x] #2 agentSettings.listSkills tRPC 过程返回 [{ id, name, description, category }]；skillRegistry 新增 listSkills() / SkillMetadata 类型
 - [x] #3 首次加载：服务端 enabledSkillIds = [] 时 UI 显示全部勾上（不能呈现为空选）
@@ -84,11 +87,10 @@ TASK-32 把 skill 抽象 + enabledSkillIds 过滤 wire 起来了，但用户没�
 - [x] #7 组件拆分后 Settings.tsx + SkillsSection.tsx 各 ≤ 200 LOC；npm run check + format + test 全绿
 <!-- AC:END -->
 
-
-
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
+
 ## Plan
 
 1. **后端 · skillRegistry**
@@ -136,6 +138,7 @@ TASK-32 把 skill 抽象 + enabledSkillIds 过滤 wire 起来了，但用户没�
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
+
 ## Summary
 
 Phase 5 UX: Settings 页加 `skills` 区块，让用户勾选 review agent 可调用的 skill。后端 enabledSkillIds 过滤在 TASK-32 已落地，本任务点亮交互。
@@ -147,7 +150,7 @@ Phase 5 UX: Settings 页加 `skills` 区块，让用户勾选 review agent 可�
    - `listSkills` query → `SkillMetadata[]`
    - `getEnabledSkillIds` query → `{ enabledSkillIds: string[] }`（无行返 `[]`）
    - `setEnabledSkillIds` mutation → `z.array(z.string().min(1).max(50)).max(50)`，写 `upsertAgentSettings({ enabledSkillIds })`
-   颗粒度沿用 `getDefaultProvider/setDefaultProvider` 的对称风格。
+     颗粒度沿用 `getDefaultProvider/setDefaultProvider` 的对称风格。
 3. **SkillsSection** (`client/src/components/settings/SkillsSection.tsx`, 165 LOC) Bench Notebook 风格：lowercase 标题、native checkbox、tabular-nums、零 card / shadow / radius。"未保存改动 / 无改动" hint + 单一 save 按钮。
 4. **空集 ↔ 全启转换** (`skillsSelection.ts`, 47 LOC) 纯函数：
    - `fromSavedSkillIds([], allIds)` → 全集（hydrate UI 时把 `[]` sentinel 展开成全勾，未知 id 自动丢弃）
@@ -172,6 +175,7 @@ Phase 5 UX: Settings 页加 `skills` 区块，让用户勾选 review agent 可�
 后端层面 enabledSkillIds 的硬过滤已由 `runTools.test.ts:321-368` 覆盖（"non-empty enabledSkillIds advertises only the listed skills" + "blocks execution of a skill the provider names outside enabledSkillIds"），结构上保证 web_search 不会被调用。
 
 但 AC #6 要求观察"agent 回复里明确说明用不了该工具"——这一行为依赖具体 provider 的语义、需要真实 LLM key。建议用户在浏览器：
+
 1. /settings → 取消 web_search → 保存
 2. 打开某笔 trade → 起 review 会话 → "搜一下 funding rate"
 3. 确认 SSE 流里无 `tool_call: web_search`，且 assistant 文本里提到"没有联网工具/无法搜索"之类的解释

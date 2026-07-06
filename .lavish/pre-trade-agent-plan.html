@@ -1,0 +1,2072 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>pre-trade agent · plan</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.15.0/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({
+        startOnLoad: true,
+        theme: "base",
+        securityLevel: "strict",
+        fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
+        themeVariables: {
+          background: "#f7f6f2",
+          primaryColor: "#f7f6f2",
+          primaryTextColor: "#2b2b28",
+          primaryBorderColor: "#2b2b28",
+          lineColor: "#2b2b28",
+          secondaryColor: "#eceae2",
+          tertiaryColor: "#f7f6f2",
+          clusterBkg: "#eceae2",
+          clusterBorder: "#2b2b28",
+          edgeLabelBackground: "#f7f6f2",
+        },
+        flowchart: { htmlLabels: true, curve: "linear", padding: 8 },
+      });
+    </script>
+    <style>
+      :root {
+        --paper: oklch(0.985 0 0);
+        --paper-2: oklch(0.965 0.004 90);
+        --paper-3: oklch(0.945 0.006 90);
+        --ink: oklch(0.18 0 0);
+        --ink-2: oklch(0.36 0 0);
+        --ink-3: oklch(0.52 0 0);
+        --rule: oklch(0.86 0.004 90);
+        --rule-2: oklch(0.78 0.005 90);
+        --win: oklch(0.5 0.13 150);
+        --loss: oklch(0.48 0.18 25);
+        --hot: oklch(0.5 0.1 65);
+        --cool: oklch(0.5 0.05 240);
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      :where(.grid, .flex) > * {
+        min-width: 0;
+      }
+
+      html,
+      body {
+        background: var(--paper);
+        color: var(--ink);
+        font-family: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+        font-weight: 400;
+        font-size: 14px;
+        line-height: 1.55;
+        margin: 0;
+        padding: 0;
+        text-rendering: geometricPrecision;
+        -webkit-font-smoothing: antialiased;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .wrap {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 40px 32px 96px;
+      }
+
+      /* ────── head ────── */
+      .doc-head {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 24px;
+        align-items: end;
+        padding-bottom: 20px;
+        border-bottom: 1px solid var(--ink);
+        margin-bottom: 36px;
+      }
+      .doc-head .brand {
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: lowercase;
+        color: var(--ink-3);
+        margin-bottom: 8px;
+      }
+      .doc-head h1 {
+        font-size: 40px;
+        font-weight: 500;
+        letter-spacing: -0.01em;
+        margin: 0 0 8px;
+        line-height: 1.15;
+        padding-bottom: 2px;
+      }
+      .doc-head .sub {
+        color: var(--ink-2);
+        font-size: 14px;
+        max-width: 620px;
+      }
+      .doc-meta {
+        text-align: right;
+        font-size: 11px;
+        color: var(--ink-3);
+        text-transform: lowercase;
+        letter-spacing: 0.06em;
+        line-height: 1.8;
+      }
+      .doc-meta .k {
+        color: var(--ink-2);
+      }
+
+      /* ────── sections ────── */
+      section.block {
+        margin: 56px 0 0;
+      }
+      section.block:first-of-type {
+        margin-top: 0;
+      }
+      h2.label {
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: lowercase;
+        color: var(--ink-3);
+        border-bottom: 1px solid var(--rule);
+        padding-bottom: 10px;
+        margin: 0 0 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+      }
+      h2.label .num {
+        color: var(--ink-2);
+      }
+      h2.label .aside {
+        color: var(--ink-3);
+      }
+      h3.step {
+        font-size: 13px;
+        font-weight: 500;
+        text-transform: lowercase;
+        margin: 0 0 12px;
+        color: var(--ink);
+        letter-spacing: 0.02em;
+      }
+      p {
+        margin: 0 0 12px;
+        color: var(--ink-2);
+      }
+      p.lead {
+        color: var(--ink);
+        font-size: 15px;
+      }
+      .muted {
+        color: var(--ink-3);
+      }
+      code.inline {
+        background: var(--paper-2);
+        border: 1px solid var(--rule);
+        padding: 1px 6px;
+        font-size: 12px;
+        color: var(--ink);
+      }
+
+      /* ────── two-col grids ────── */
+      .grid-2 {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 32px;
+      }
+      @media (max-width: 820px) {
+        .grid-2 {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+
+      /* ────── goal / state cards ────── */
+      .state {
+        border: 1px solid var(--rule);
+        padding: 20px 22px;
+        background: var(--paper);
+      }
+      .state .tag {
+        font-size: 10px;
+        letter-spacing: 0.16em;
+        text-transform: lowercase;
+        color: var(--ink-3);
+        margin-bottom: 12px;
+      }
+      .state .now {
+        font-size: 22px;
+        font-weight: 500;
+        letter-spacing: -0.01em;
+        margin: 0 0 10px;
+      }
+      .state ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .state ul li {
+        color: var(--ink-2);
+        border-top: 1px dashed var(--rule);
+        padding: 8px 0;
+        display: flex;
+        gap: 10px;
+        align-items: baseline;
+      }
+      .state ul li:first-child {
+        border-top: 0;
+        padding-top: 0;
+      }
+      .state ul li::before {
+        content: "";
+        width: 8px;
+        height: 1px;
+        background: var(--ink-3);
+        display: block;
+        flex-shrink: 0;
+        margin-top: 10px;
+      }
+
+      /* ────── mockup shell ────── */
+      .mockup {
+        border: 1px solid var(--ink);
+        background: var(--paper);
+        overflow: hidden;
+      }
+      .mockup .chrome {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 12px;
+        padding: 10px 14px;
+        background: var(--paper-2);
+        border-bottom: 1px solid var(--ink);
+        font-size: 11px;
+        color: var(--ink-3);
+        text-transform: lowercase;
+        letter-spacing: 0.08em;
+      }
+      .mockup .chrome .dots {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      .mockup .chrome .dot {
+        width: 8px;
+        height: 8px;
+        border: 1px solid var(--ink-2);
+      }
+      .mockup .body {
+        display: grid;
+        grid-template-columns: 200px minmax(0, 1fr);
+        min-height: 480px;
+      }
+      .mockup .sidebar {
+        border-right: 1px solid var(--rule);
+        padding: 20px 14px;
+        background: var(--paper);
+      }
+      .mockup .sidebar .brand {
+        font-size: 11px;
+        color: var(--ink-3);
+        letter-spacing: 0.12em;
+        margin-bottom: 24px;
+      }
+      .mockup .sidebar nav {
+        margin: 0;
+      }
+      .mockup .sidebar nav a {
+        display: block;
+        padding: 8px 10px;
+        margin: 2px 0;
+        color: var(--ink-2);
+        text-decoration: none;
+        font-size: 13px;
+        position: relative;
+      }
+      .mockup .sidebar nav a.active {
+        background: var(--paper-2);
+        color: var(--ink);
+        font-weight: 500;
+      }
+      .mockup .sidebar nav a.new {
+        color: var(--ink);
+        font-weight: 500;
+        padding-right: 42px;
+      }
+      .mockup .sidebar nav a.new::after {
+        content: "new";
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 9px;
+        letter-spacing: 0.14em;
+        color: var(--win);
+        text-transform: lowercase;
+      }
+      .mockup .main {
+        padding: 28px 32px;
+      }
+      .mockup .crumbs {
+        font-size: 11px;
+        color: var(--ink-3);
+        letter-spacing: 0.08em;
+        margin-bottom: 6px;
+      }
+      .mockup h1.page-title {
+        font-size: 24px;
+        font-weight: 500;
+        margin: 0 0 6px;
+      }
+      .mockup .page-sub {
+        color: var(--ink-3);
+        font-size: 12px;
+        margin-bottom: 26px;
+      }
+      .mockup .section-label {
+        font-size: 10px;
+        letter-spacing: 0.16em;
+        color: var(--ink-3);
+        border-bottom: 1px solid var(--rule);
+        padding-bottom: 8px;
+        margin: 22px 0 16px;
+        text-transform: lowercase;
+      }
+
+      /* ────── form field mimics (bench aesthetic) ────── */
+      .form-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 22px 28px;
+        margin-bottom: 4px;
+      }
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .field label {
+        font-size: 10px;
+        letter-spacing: 0.14em;
+        color: var(--ink-3);
+        text-transform: lowercase;
+      }
+      .field .input {
+        border-bottom: 1px solid var(--rule-2);
+        padding: 4px 0 6px;
+        min-height: 26px;
+        color: var(--ink);
+        font-size: 14px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .field .input.empty {
+        color: var(--ink-3);
+      }
+      .field .input .caret {
+        color: var(--ink-3);
+      }
+      .field .hint {
+        font-size: 10px;
+        color: var(--ink-3);
+        text-transform: lowercase;
+        letter-spacing: 0.08em;
+      }
+
+      /* ────── timeframe row ────── */
+      .tf-row {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+      .tf-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .tf-chip {
+        border: 1px solid var(--rule);
+        padding: 6px 10px;
+        font-size: 12px;
+        color: var(--ink-3);
+        display: inline-flex;
+        gap: 8px;
+        align-items: baseline;
+      }
+      .tf-chip.sel {
+        border-color: var(--ink);
+        color: var(--ink);
+      }
+      .tf-chip.primary {
+        border-color: var(--ink);
+        background: var(--ink);
+        color: var(--paper);
+      }
+      .tf-chip .n {
+        font-size: 10px;
+        color: var(--ink-3);
+        letter-spacing: 0.06em;
+      }
+      .tf-chip.sel .n {
+        color: var(--ink);
+      }
+      .tf-chip.primary .n {
+        color: var(--paper);
+        opacity: 0.7;
+      }
+      .tf-chip .mark {
+        font-size: 9px;
+        letter-spacing: 0.14em;
+        text-transform: lowercase;
+      }
+      .tf-chip.primary .mark {
+        color: var(--paper);
+      }
+
+      .tf-legend {
+        font-size: 10px;
+        color: var(--ink-3);
+        text-transform: lowercase;
+        letter-spacing: 0.08em;
+        display: flex;
+        gap: 18px;
+        margin-top: 2px;
+      }
+      .tf-legend .swatch {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border: 1px solid var(--ink);
+        vertical-align: -1px;
+        margin-right: 6px;
+      }
+      .tf-legend .swatch.filled {
+        background: var(--ink);
+      }
+
+      /* idea textarea mock */
+      .idea-box {
+        border: 1px solid var(--rule);
+        padding: 14px 16px;
+        min-height: 128px;
+        color: var(--ink-2);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+      .idea-box .placeholder {
+        color: var(--ink-3);
+        font-style: italic;
+      }
+
+      .actions-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-top: 1px solid var(--rule);
+        padding-top: 20px;
+        margin-top: 28px;
+      }
+      .btn {
+        font-family: inherit;
+        font-size: 13px;
+        text-transform: lowercase;
+        letter-spacing: 0.06em;
+        padding: 8px 16px;
+        border: 1px solid var(--ink);
+        background: var(--paper);
+        color: var(--ink);
+        cursor: pointer;
+      }
+      .btn.primary {
+        background: var(--ink);
+        color: var(--paper);
+      }
+      .btn.ghost {
+        border-color: var(--rule);
+        color: var(--ink-3);
+      }
+
+      /* ────── chat mockup ────── */
+      .chat {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+      .msg-user {
+        padding: 12px 0;
+        border-bottom: 1px dashed var(--rule);
+      }
+      .msg-user .who {
+        font-size: 10px;
+        letter-spacing: 0.16em;
+        color: var(--ink-3);
+        text-transform: lowercase;
+        margin-bottom: 8px;
+      }
+      .msg-user details {
+        border: 1px solid var(--rule);
+        padding: 10px 12px;
+        background: var(--paper-2);
+        margin-bottom: 8px;
+      }
+      .msg-user details summary {
+        cursor: pointer;
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: lowercase;
+        color: var(--ink-3);
+        list-style: none;
+      }
+      .msg-user details summary::before {
+        content: "▸ ";
+        color: var(--ink-3);
+      }
+      .msg-user details[open] summary::before {
+        content: "▾ ";
+      }
+      .msg-user details .ctx {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px dashed var(--rule);
+        font-size: 12px;
+        color: var(--ink-2);
+        line-height: 1.65;
+      }
+      .msg-user details .ctx pre {
+        font-size: 11px;
+        color: var(--ink-2);
+        background: var(--paper);
+        border: 1px solid var(--rule);
+        padding: 8px 10px;
+        margin: 6px 0;
+        white-space: pre;
+        overflow-x: auto;
+      }
+      .msg-user .body {
+        font-size: 13px;
+        color: var(--ink);
+        line-height: 1.65;
+      }
+      .msg-agent {
+        padding: 12px 0;
+      }
+      .msg-agent .who {
+        font-size: 10px;
+        letter-spacing: 0.16em;
+        color: var(--ink-3);
+        text-transform: lowercase;
+        margin-bottom: 8px;
+      }
+      .md h4 {
+        font-size: 12px;
+        margin: 14px 0 6px;
+        color: var(--ink);
+        letter-spacing: 0.06em;
+      }
+      .md p {
+        margin: 0 0 8px;
+        color: var(--ink);
+      }
+      .md ul {
+        margin: 0 0 8px 0;
+        padding-left: 18px;
+      }
+      .md ul li {
+        margin: 3px 0;
+        color: var(--ink);
+      }
+      .md ol {
+        padding-left: 20px;
+        margin: 0 0 8px 0;
+      }
+      .md blockquote {
+        border-left: 2px solid var(--ink);
+        padding: 4px 0 4px 12px;
+        margin: 8px 0;
+        color: var(--ink-2);
+      }
+      .md .pill {
+        display: inline-block;
+        border: 1px solid var(--rule);
+        padding: 1px 6px;
+        font-size: 11px;
+        color: var(--ink-2);
+      }
+      .md .win {
+        color: var(--win);
+      }
+      .md .loss {
+        color: var(--loss);
+      }
+
+      /* tool bubble */
+      .tool-bubble {
+        font-size: 11px;
+        color: var(--ink-3);
+        text-transform: lowercase;
+        letter-spacing: 0.08em;
+        padding: 3px 0;
+      }
+      .tool-bubble::before {
+        content: "· ";
+        color: var(--ink-3);
+      }
+
+      .composer {
+        border-top: 1px solid var(--rule);
+        margin-top: 20px;
+        padding-top: 16px;
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        gap: 12px;
+        align-items: end;
+      }
+      .composer textarea {
+        border: 1px solid var(--rule);
+        padding: 10px 12px;
+        font: inherit;
+        font-size: 13px;
+        color: var(--ink);
+        background: var(--paper);
+        min-height: 44px;
+        resize: none;
+        outline: none;
+      }
+      .composer .hotkey {
+        font-size: 10px;
+        color: var(--ink-3);
+        letter-spacing: 0.06em;
+        text-transform: lowercase;
+        align-self: end;
+      }
+
+      /* ────── mermaid frame ────── */
+      .mermaid-frame {
+        border: 1px solid var(--rule);
+        padding: 20px 18px;
+        background: var(--paper);
+        overflow-x: auto;
+      }
+      .mermaid {
+        color: var(--ink);
+      }
+
+      /* ────── comparison table ────── */
+      .compare {
+        border: 1px solid var(--ink);
+        overflow: hidden;
+      }
+      .compare .row {
+        display: grid;
+        grid-template-columns: 160px minmax(0, 1fr) minmax(0, 1fr);
+        gap: 0;
+        border-top: 1px solid var(--rule);
+      }
+      .compare .row:first-child {
+        border-top: 0;
+      }
+      .compare .row .cell {
+        padding: 14px 16px;
+      }
+      .compare .row .head {
+        background: var(--paper-2);
+        font-size: 10px;
+        letter-spacing: 0.16em;
+        text-transform: lowercase;
+        color: var(--ink-3);
+      }
+      .compare .row.header .cell {
+        background: var(--ink);
+        color: var(--paper);
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: lowercase;
+        padding: 12px 16px;
+      }
+      .compare .row.header .cell.pick {
+        background: var(--win);
+      }
+      .compare .row .cell.a {
+        border-left: 1px solid var(--rule);
+      }
+      .compare .row .cell.b {
+        border-left: 1px solid var(--rule);
+      }
+      .compare .cell.a ul,
+      .compare .cell.b ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+      .compare .cell.a ul li,
+      .compare .cell.b ul li {
+        margin: 3px 0;
+        color: var(--ink);
+        font-size: 12px;
+      }
+      .compare .rec {
+        display: inline-block;
+        font-size: 9px;
+        letter-spacing: 0.16em;
+        text-transform: lowercase;
+        color: var(--win);
+        border: 1px solid var(--win);
+        padding: 1px 5px;
+        margin-left: 6px;
+        vertical-align: 1px;
+      }
+
+      /* ────── file map ────── */
+      .file-map {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 24px;
+      }
+      @media (max-width: 820px) {
+        .file-map {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+      .file-group {
+        border: 1px solid var(--rule);
+      }
+      .file-group h4 {
+        font-size: 10px;
+        letter-spacing: 0.14em;
+        text-transform: lowercase;
+        color: var(--ink-3);
+        border-bottom: 1px solid var(--rule);
+        padding: 10px 14px;
+        margin: 0;
+        background: var(--paper-2);
+        display: flex;
+        justify-content: space-between;
+      }
+      .file-group h4 .count {
+        color: var(--ink);
+      }
+      .file-group ul {
+        list-style: none;
+        margin: 0;
+        padding: 8px 0;
+      }
+      .file-group ul li {
+        padding: 6px 14px;
+        font-size: 12px;
+        display: grid;
+        grid-template-columns: 42px minmax(0, 1fr);
+        gap: 6px 10px;
+        align-items: baseline;
+      }
+      .file-group ul li .marker {
+        font-size: 10px;
+        color: var(--ink-3);
+        letter-spacing: 0.08em;
+        text-transform: lowercase;
+      }
+      .file-group ul li .marker.add {
+        color: var(--win);
+      }
+      .file-group ul li .marker.mod {
+        color: var(--hot);
+      }
+      .file-group ul li .path {
+        color: var(--ink);
+        overflow-wrap: anywhere;
+        min-width: 0;
+      }
+      .file-group ul li .note {
+        grid-column: 2;
+        color: var(--ink-3);
+        font-size: 11px;
+        overflow-wrap: anywhere;
+      }
+
+      /* ────── phases ────── */
+      .phases {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 0;
+        border-top: 1px solid var(--ink);
+        border-bottom: 1px solid var(--ink);
+      }
+      @media (max-width: 900px) {
+        .phases {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+      .phase {
+        padding: 18px 16px;
+        border-left: 1px solid var(--rule);
+      }
+      .phase:first-child {
+        border-left: 0;
+      }
+      .phase .num {
+        font-size: 10px;
+        letter-spacing: 0.16em;
+        color: var(--ink-3);
+        text-transform: lowercase;
+        margin-bottom: 8px;
+      }
+      .phase .title {
+        font-size: 15px;
+        font-weight: 500;
+        margin-bottom: 10px;
+        letter-spacing: -0.01em;
+      }
+      .phase ul {
+        margin: 0;
+        padding-left: 16px;
+      }
+      .phase ul li {
+        color: var(--ink-2);
+        font-size: 12px;
+        margin: 3px 0;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+      .phase ul li code.inline {
+        word-break: break-all;
+        overflow-wrap: anywhere;
+        white-space: normal;
+      }
+
+      /* ────── decisions (input surface) ────── */
+      .decision {
+        border: 1px solid var(--rule);
+        padding: 20px 22px;
+        margin-bottom: 22px;
+        background: var(--paper);
+      }
+      .decision h3 {
+        font-size: 15px;
+        margin: 0 0 4px;
+        font-weight: 500;
+        letter-spacing: -0.01em;
+      }
+      .decision .rationale {
+        color: var(--ink-3);
+        font-size: 12px;
+        margin: 0 0 16px;
+      }
+      .decision form {
+        display: grid;
+        gap: 10px;
+      }
+      .decision label.opt {
+        display: grid;
+        grid-template-columns: 20px 1fr;
+        gap: 10px;
+        align-items: baseline;
+        padding: 8px 10px;
+        border: 1px solid var(--rule);
+        background: var(--paper);
+        cursor: pointer;
+        font-size: 13px;
+      }
+      .decision label.opt:hover {
+        border-color: var(--ink);
+      }
+      .decision label.opt input[type="radio"],
+      .decision label.opt input[type="checkbox"] {
+        margin: 0;
+        accent-color: var(--ink);
+        transform: translateY(2px);
+      }
+      .decision label.opt .name {
+        color: var(--ink);
+        font-weight: 500;
+      }
+      .decision label.opt .desc {
+        color: var(--ink-3);
+        font-size: 11px;
+        margin-top: 2px;
+      }
+      .decision .submit-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 8px;
+      }
+      .decision .submit-row .hint {
+        font-size: 11px;
+        color: var(--ink-3);
+        text-transform: lowercase;
+        letter-spacing: 0.06em;
+      }
+      .decision button[type="submit"] {
+        font-family: inherit;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: lowercase;
+        padding: 6px 14px;
+        border: 1px solid var(--ink);
+        background: var(--paper);
+        color: var(--ink);
+        cursor: pointer;
+      }
+      .decision button[type="submit"]:hover {
+        background: var(--ink);
+        color: var(--paper);
+      }
+      .decision .recommend {
+        display: inline-block;
+        font-size: 9px;
+        letter-spacing: 0.16em;
+        text-transform: lowercase;
+        color: var(--win);
+        border: 1px solid var(--win);
+        padding: 1px 5px;
+        margin-left: 6px;
+        vertical-align: 1px;
+      }
+
+      /* footer */
+      .doc-foot {
+        margin-top: 72px;
+        padding-top: 20px;
+        border-top: 1px solid var(--ink);
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        color: var(--ink-3);
+        text-transform: lowercase;
+        letter-spacing: 0.06em;
+      }
+    </style>
+  </head>
+
+  <body>
+    <main class="wrap">
+      <!-- ────────── head ────────── -->
+      <header class="doc-head">
+        <div>
+          <div class="brand">bench notebook · design doc</div>
+          <h1>pre-trade agent</h1>
+          <p class="sub">
+            交易前一致性检查：先选标的与多个时间框架的 K 线，写下你的想法，让
+            agent 从多周期上下文出发挑毛病、补漏点、给建议。
+          </p>
+        </div>
+        <div class="doc-meta">
+          <div><span class="k">status</span> · proposal</div>
+          <div><span class="k">touches</span> · 12 files (7 new · 5 mod)</div>
+          <div><span class="k">schema</span> · 1 new table + 1 col</div>
+          <div><span class="k">phases</span> · 5</div>
+        </div>
+      </header>
+
+      <!-- ────────── 1 · goal ────────── -->
+      <section class="block">
+        <h2 class="label">
+          <span>01 · goal</span><span class="aside">what & why</span>
+        </h2>
+        <p class="lead">
+          现有 review agent 只在交易<strong>之后</strong>被触发（挂在
+          transaction detail 抽屉里）。它读单一时间框架的 ±100 根 K
+          线，做事后复盘。缺口很明显：真正影响结果的思考发生在下单<strong>之前</strong>。
+        </p>
+        <div class="grid-2" style="margin-top: 20px">
+          <div class="state">
+            <div class="tag">current state</div>
+            <div class="now">复盘型 agent，只在交易后可用</div>
+            <ul>
+              <li>入口挂在 <code class="inline">TransactionDetail</code></li>
+              <li>context = 单个 timeframe 的 ±100 根 K 线</li>
+              <li>依赖已存在的 <code class="inline">transactions</code> 行</li>
+              <li>无法为「还没下单的想法」保留讨论历史</li>
+            </ul>
+          </div>
+          <div class="state">
+            <div class="tag">desired state</div>
+            <div class="now">决策型 agent，专为交易前一致性检查</div>
+            <ul>
+              <li>侧栏一级入口 <code class="inline">/pre-trade</code></li>
+              <li>context = 多时间框架 K 线 + 标注主交易 tf</li>
+              <li>每根 tf 的 candle 数可调（默认 100）</li>
+              <li>不需要先建 transaction，独立持久化讨论草稿</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ────────── 2 · UI mockup ────────── -->
+      <section class="block">
+        <h2 class="label">
+          <span>02 · ui mockup</span
+          ><span class="aside">bench notebook · paper/ink/mono</span>
+        </h2>
+        <p>
+          两个屏：<strong>setup</strong>（配置 context）→
+          <strong>chat</strong>（对话面）。setup 是一次性表单，chat 复用现有
+          <code class="inline">AgentMessageList</code> /
+          <code class="inline">AgentMarkdown</code> /
+          <code class="inline">useReviewStream</code> 组件，只换掉 URL 与
+          header。
+        </p>
+
+        <!-- SETUP SCREEN -->
+        <h3 class="step" style="margin: 28px 0 10px">step 1 · setup</h3>
+        <div class="mockup">
+          <div class="chrome">
+            <div class="dots">
+              <span class="dot"></span><span class="dot"></span
+              ><span class="dot"></span>
+            </div>
+            <div style="text-align: center">localhost:3000 · pre-trade</div>
+            <div>bench notebook</div>
+          </div>
+          <div class="body">
+            <aside class="sidebar">
+              <div class="brand">bench notebook</div>
+              <nav>
+                <a>dashboard</a>
+                <a>transactions</a>
+                <a class="new active">pre-trade</a>
+                <a>accounts</a>
+                <a>settings</a>
+              </nav>
+            </aside>
+            <div class="main">
+              <div class="crumbs">pre-trade / new</div>
+              <h1 class="page-title">new pre-trade discussion</h1>
+              <div class="page-sub">
+                pick your instrument, timeframes, and idea. context is built
+                once — agent takes it from there.
+              </div>
+
+              <div class="section-label">instrument · idea</div>
+              <div class="form-grid">
+                <div class="field">
+                  <label>trading pair</label>
+                  <div class="input">
+                    <span>BTCUSDT</span>
+                  </div>
+                  <div class="hint">uppercase · 4-20 chars</div>
+                </div>
+                <div class="field">
+                  <label>direction (optional)</label>
+                  <div class="input">
+                    <span>long</span>
+                    <span class="caret">▾</span>
+                  </div>
+                  <div class="hint">helps frame the review</div>
+                </div>
+                <div class="field">
+                  <label>anchor time</label>
+                  <div class="input">
+                    <span>now</span>
+                    <span class="caret">▾</span>
+                  </div>
+                  <div class="hint">candle window ends here</div>
+                </div>
+              </div>
+
+              <div class="section-label">timeframes · candle count</div>
+              <div class="tf-row">
+                <div class="tf-chips">
+                  <div class="tf-chip primary">
+                    <span>4h</span><span class="mark">primary</span
+                    ><span class="n">150</span>
+                  </div>
+                  <div class="tf-chip sel">
+                    1d <span class="mark">context</span>
+                    <span class="n">100</span>
+                  </div>
+                  <div class="tf-chip sel">
+                    1h <span class="mark">context</span>
+                    <span class="n">100</span>
+                  </div>
+                  <div class="tf-chip sel">
+                    15m <span class="mark">context</span>
+                    <span class="n">120</span>
+                  </div>
+                  <div class="tf-chip">1w</div>
+                  <div class="tf-chip">30m</div>
+                  <div class="tf-chip">5m</div>
+                  <div class="tf-chip">1m</div>
+                </div>
+                <div class="tf-legend">
+                  <span
+                    ><span class="swatch filled"></span>primary · exactly
+                    1</span
+                  >
+                  <span
+                    ><span class="swatch"></span>context · 0..n · click to edit
+                    count</span
+                  >
+                </div>
+              </div>
+
+              <div class="section-label">your idea</div>
+              <div class="idea-box">
+                <p style="margin: 0">
+                  4h 结构从 62k 反弹后横盘，日线是双底 neckline 附近。想在回踩
+                  63.8k 支撑做 long，止损 62.5k，目标 68k。 1h
+                  有小背离但不明显……
+                </p>
+              </div>
+
+              <div class="actions-row">
+                <div class="hint" style="color: var(--ink-3); font-size: 11px">
+                  context payload preview · 4 timeframes · ~470 candles · ~9.2
+                  kb
+                </div>
+                <div style="display: flex; gap: 12px">
+                  <button class="btn ghost">cancel</button>
+                  <button class="btn primary">start discussion →</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CHAT SCREEN -->
+        <h3 class="step" style="margin: 36px 0 10px">
+          step 2 · chat · agent reply rendered as markdown
+        </h3>
+        <div class="mockup">
+          <div class="chrome">
+            <div class="dots">
+              <span class="dot"></span><span class="dot"></span
+              ><span class="dot"></span>
+            </div>
+            <div style="text-align: center">
+              localhost:3000 · pre-trade / btcusdt · 4h primary
+            </div>
+            <div>bench notebook</div>
+          </div>
+          <div class="body">
+            <aside class="sidebar">
+              <div class="brand">bench notebook</div>
+              <nav>
+                <a>dashboard</a>
+                <a>transactions</a>
+                <a class="new active">pre-trade</a>
+                <a>accounts</a>
+                <a>settings</a>
+              </nav>
+            </aside>
+            <div class="main">
+              <div class="crumbs">
+                pre-trade / btcusdt · 4h primary · started 2 min ago
+              </div>
+              <h1 class="page-title">btcusdt · long @ 63.8k</h1>
+              <div class="page-sub">
+                using deepseek-chat · 4 timeframes injected · draft not
+                committed
+              </div>
+
+              <div class="chat">
+                <!-- user msg (injected context folded) -->
+                <div class="msg-user">
+                  <div class="who">you</div>
+                  <details>
+                    <summary>injected trade context · 4 timeframes</summary>
+                    <div class="ctx">
+                      <p style="margin: 0 0 6px">
+                        <strong>primary tf</strong> ·
+                        <span class="md pill">4H · 150 candles</span><br />
+                        <strong>context tf</strong> ·
+                        <span class="md pill">1D · 100</span>
+                        <span class="md pill">1H · 100</span>
+                        <span class="md pill">15M · 120</span>
+                      </p>
+                      <pre>
+## market context · 4H (primary)
+[[ts, o, h, l, c, v], ...]
+1717516800000  63420.1  63985.0  63102.3  63811.0  4832
+1717531200000  63811.0  64200.0  63550.5  63970.4  3211
+…
+## market context · 1D
+…</pre
+                      >
+                    </div>
+                  </details>
+                  <div class="body">
+                    4h 结构从 62k 反弹后横盘，日线是双底 neckline 附近。想在回踩
+                    63.8k 支撑做 long，止损 62.5k，目标 68k。 1h
+                    有小背离但不明显。
+                  </div>
+                </div>
+
+                <!-- tool bubble -->
+                <div class="tool-bubble">
+                  analyze_market_structure · 4h · done · 118 ms
+                </div>
+
+                <!-- agent md reply -->
+                <div class="msg-agent">
+                  <div class="who">agent · deepseek-chat</div>
+                  <div class="md">
+                    <p>
+                      先复述一下我看到的：主交易框架
+                      <strong>4H</strong>，方向 <span class="win">long</span>，
+                      在 63.8k 支撑做多，止损 62.5k，目标 68k。R:R ≈ 3.2。
+                    </p>
+                    <h4>值得肯定的地方</h4>
+                    <ul>
+                      <li>入场依附结构位而不是追高，方向和 1D neckline 对齐</li>
+                      <li>R:R > 3，符合你的账号历史盈亏比中位数</li>
+                    </ul>
+                    <h4>没考虑到的点</h4>
+                    <ul>
+                      <li>
+                        <strong>1D neckline 的定义</strong>是 63500 还是
+                        64100？两个价位差
+                        1%，直接影响你现在这单是「回踩确认」还是「击穿反抽」
+                      </li>
+                      <li>
+                        <strong>15M 缺失</strong>还没到你要的支撑，为什么已经想
+                        long？可能是你把 4H 的 sweep 当成了短周期确认
+                      </li>
+                    </ul>
+                    <blockquote>
+                      我的建议：把 stop 移到 62.2k（1D 上一波低点下面 30
+                      bps），或者把 size 减一半、等 15M 出现明确 reclaim
+                      再加仓。
+                    </blockquote>
+                  </div>
+                </div>
+              </div>
+
+              <div class="composer">
+                <textarea placeholder="你的追问 · ⌘/ctrl+enter 发送"></textarea>
+                <button class="btn">stop</button>
+                <div class="hotkey">⌘↵</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ────────── 3 · data flow ────────── -->
+      <section class="block">
+        <h2 class="label">
+          <span>03 · data flow</span
+          ><span class="aside">setup → context → stream</span>
+        </h2>
+        <p>
+          setup 提交后，后端并行拉取每个 tf 的
+          <code class="inline">fetchCandles</code>，拼装带 primary 标注的初始
+          user 消息，然后交给 <code class="inline">runTools</code> 循环（skill
+          目录与 review agent 共用）。前端走
+          <code class="inline">POST /api/pre-trade-agent/stream</code> SSE，跟
+          review 抽屉一样的事件协议。
+        </p>
+        <div class="mermaid-frame">
+          <div class="mermaid">
+            flowchart TD A["frontend<br />PreTrade.tsx setup"]:::user -->
+            B["trpc<br />preTradeAgent.open"]:::rpc B --> C[("db<br />pre_trades<br />conversations")]:::db
+            B --> D["fetchCandles<br />(× N timeframes)"]:::svc D -->
+            E["preTradeContextBuilder<br />primary + context tfs"]:::svc E -->
+            F["seed messages<br />system + user (idea + klines)"]:::svc F -->
+            G["runTools loop<br />(shared)"]:::svc G -.tool call.-> H["skills<br />get_klines,
+            analyze_market_structure, …"]:::svc H -.result.-> G G --> I["stream
+            events<br />delta / tool_call / tool_result / done"]:::svc I -->
+            J["POST /api/pre-trade-agent/stream (SSE)"]:::rpc J -->
+            K["useReviewStream<br />(URL parameterized)"]:::user K -->
+            L["AgentMessageList<br />+ AgentMarkdown"]:::user classDef user
+            fill:#f7f6f2,stroke:#2b2b28,stroke-width:1px,color:#2b2b28 classDef
+            rpc fill:#eceae2,stroke:#2b2b28,stroke-width:1px,color:#2b2b28
+            classDef svc
+            fill:#f7f6f2,stroke:#2b2b28,stroke-width:1px,color:#2b2b28 classDef
+            db fill:#2b2b28,stroke:#2b2b28,stroke-width:1px,color:#f7f6f2
+          </div>
+        </div>
+      </section>
+
+      <!-- ────────── 4 · backend architecture ────────── -->
+      <section class="block">
+        <h2 class="label">
+          <span>04 · backend architecture</span
+          ><span class="aside">reuse-heavy · 3 new files</span>
+        </h2>
+        <p>
+          几乎所有既有基础设施都是共用的：<code class="inline">runTools</code>
+          orchestrator、<code class="inline">skillRegistry</code
+          >、providers、SSE 序列化、markdown 组件。仅
+          <strong>context builder + service layer + router namespace</strong>
+          是新写的。
+        </p>
+        <div class="mermaid-frame">
+          <div class="mermaid">
+            flowchart LR subgraph new [" new (3 files) "] direction TB
+            PA["preTradeAgent.ts<br />service"]:::new
+            PC["preTradeContextBuilder.ts<br />system prompt + kline
+            block"]:::new PR["routers.ts · preTradeAgent<br />getActive / open /
+            send / list"]:::new PS["preTradeAgentSseRoute.ts<br />SSE
+            endpoint"]:::new end subgraph reuse [" reuse (verbatim) "] direction
+            TB RT["runTools.ts"]:::reuse SR["skillRegistry + skills/*"]:::reuse
+            PV["providers/*<br />deepseek/kimi/glm/…"]:::reuse
+            CN["coinank.fetchCandles"]:::reuse AS["agentSettings<br />(shared
+            provider config)"]:::reuse end subgraph db [" db "] direction TB
+            PT[("pre_trades<br />NEW table")]:::db CV[("conversations<br />+
+            preTradeId column")]:::db MS[("messages<br />unchanged")]:::db end
+            PA --> PC PA --> RT RT --> SR RT --> PV PC --> CN PA --> PT PA -->
+            CV PA --> MS PR --> PA PS --> PA PA -.reads.-> AS classDef new
+            fill:#f7f6f2,stroke:#2b2b28,stroke-width:2px,color:#2b2b28 classDef
+            reuse fill:#eceae2,stroke:#78766e,stroke-width:1px,color:#2b2b28
+            classDef db fill:#2b2b28,stroke:#2b2b28,color:#f7f6f2
+          </div>
+        </div>
+        <p class="muted" style="margin-top: 14px">
+          注意：<code class="inline">conversations</code> 目前
+          <code class="inline">transactionId NOT NULL</code>，必须先放开为
+          nullable + 加 <code class="inline">preTradeId</code>（见 05
+          节的两个选项）。
+        </p>
+      </section>
+
+      <!-- ────────── 5 · data model choice ────────── -->
+      <section class="block">
+        <h2 class="label">
+          <span>05 · data model · pick one</span
+          ><span class="aside">how to persist a pre-trade discussion</span>
+        </h2>
+
+        <div class="compare">
+          <div class="row header">
+            <div class="cell">dimension</div>
+            <div class="cell pick">
+              option a · new table + shared conversations<span class="rec"
+                >recommended</span
+              >
+            </div>
+            <div class="cell">option b · discriminator column</div>
+          </div>
+          <div class="row">
+            <div class="cell head">what changes</div>
+            <div class="cell a">
+              <ul>
+                <li>new table <code class="inline">pre_trades</code></li>
+                <li>
+                  relax <code class="inline">conversations.transactionId</code>
+                  → nullable
+                </li>
+                <li>
+                  add
+                  <code class="inline">conversations.preTradeId</code> (nullable
+                  fk)
+                </li>
+                <li>check constraint: exactly one of the two ids present</li>
+              </ul>
+            </div>
+            <div class="cell b">
+              <ul>
+                <li>
+                  add <code class="inline">kind</code> col to conversations
+                </li>
+                <li>
+                  store pre-trade fields (pair / primary tf / tfs json / idea)
+                  directly on conversations row
+                </li>
+                <li>polymorphic table</li>
+              </ul>
+            </div>
+          </div>
+          <div class="row">
+            <div class="cell head">query shape</div>
+            <div class="cell a">
+              <ul>
+                <li>
+                  parallel to today's
+                  <code class="inline">getConversationByTransaction</code>
+                </li>
+                <li>
+                  clean joins:
+                  <code class="inline"
+                    >pre_trades ⨝ conversations ⨝ messages</code
+                  >
+                </li>
+              </ul>
+            </div>
+            <div class="cell b">
+              <ul>
+                <li>
+                  every query needs a <code class="inline">where kind = ?</code>
+                </li>
+                <li>columns unused half the time (weak invariant)</li>
+              </ul>
+            </div>
+          </div>
+          <div class="row">
+            <div class="cell head">extensibility</div>
+            <div class="cell a">
+              <ul>
+                <li>later "convert to transaction" = simple fk hop</li>
+                <li>can list drafts independently of transactions</li>
+              </ul>
+            </div>
+            <div class="cell b">
+              <ul>
+                <li>adding new agent kinds keeps widening the table</li>
+                <li>hard to migrate away later</li>
+              </ul>
+            </div>
+          </div>
+          <div class="row">
+            <div class="cell head">migration cost</div>
+            <div class="cell a">
+              <ul>
+                <li>
+                  one migration: create table + alter nullable + add fk column
+                </li>
+                <li>reversible, no data change</li>
+              </ul>
+            </div>
+            <div class="cell b">
+              <ul>
+                <li>alter conversations wide</li>
+                <li>backfill kind='review' on all existing rows</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <p class="muted" style="margin-top: 16px">
+          <code class="inline">pre_trades</code> proposed columns:
+          <code class="inline"
+            >id · userId · tradingPair · direction? · primaryTimeFrame ·
+            timeframesJson (`[{tf, candleCount}]`) · anchorMs · idea ·
+            providerId? · status · createdAt · updatedAt</code
+          >.
+        </p>
+      </section>
+
+      <!-- ────────── 6 · context payload shape ────────── -->
+      <section class="block">
+        <h2 class="label">
+          <span>06 · context payload</span
+          ><span class="aside">what the agent sees on first turn</span>
+        </h2>
+        <p>
+          借鉴 review agent 的
+          <code class="inline">renderUserContext</code> 结构，但换成决策语气 +
+          多 timeframe：
+        </p>
+        <div class="mermaid-frame" style="padding: 0; background: var(--paper)">
+          <pre
+            style="
+              margin: 0;
+              padding: 20px 22px;
+              font-size: 12px;
+              color: var(--ink);
+              white-space: pre;
+              overflow-x: auto;
+            "
+          ><span style="color: var(--ink-3)"># pre-trade brief · btcusdt</span>
+
+<span style="color: var(--ink-3)">## instrument</span>
+pair       : BTCUSDT
+direction  : long (declared, not yet executed)
+anchor     : 2026-07-05T14:30:00Z (window ends here)
+
+<span style="color: var(--ink-3)">## timeframes injected</span>
+primary    : 4H · 150 candles   <span style="color: var(--win)">← main trade timeframe</span>
+context    : 1D · 100 candles
+             1H · 100 candles
+             15M · 120 candles
+
+<span style="color: var(--ink-3)">## trader's idea (verbatim)</span>
+> 4h 结构从 62k 反弹后横盘，日线是双底 neckline 附近。
+> 想在回踩 63.8k 支撑做 long，止损 62.5k，目标 68k。
+> 1h 有小背离但不明显。
+
+<span style="color: var(--ink-3)">## market context · 4H (primary)</span>
+```
+[ts, o, h, l, c, v]
+1717516800000  63420.10  63985.00  63102.30  63811.00  4832
+1717531200000  63811.00  64200.00  63550.50  63970.40  3211
+… (150 rows)
+```
+
+<span style="color: var(--ink-3)">## market context · 1D</span>
+```
+… (100 rows)
+```
+<span style="color: var(--ink-3)">## market context · 1H</span>
+```
+… (100 rows)
+```
+<span style="color: var(--ink-3)">## market context · 15M</span>
+```
+… (120 rows)
+```</pre>
+        </div>
+        <p class="muted" style="margin-top: 14px">
+          单 payload 上限沿用 review 的
+          <code class="inline">KLINE_SECTION_CHAR_CAP = 12000</code>：溢出时按
+          <em
+            >context tf 优先降级（drop volume → drop 最远时间的 tf → 最后才影响
+            primary）</em
+          >。
+        </p>
+      </section>
+
+      <!-- ────────── 7 · file map ────────── -->
+      <section class="block">
+        <h2 class="label">
+          <span>07 · file map</span><span class="aside">12 files</span>
+        </h2>
+        <div class="file-map">
+          <div class="file-group">
+            <h4>frontend <span class="count">4 new · 2 mod</span></h4>
+            <ul>
+              <li>
+                <span class="marker add">new</span
+                ><span class="path">client/src/pages/PreTrade.tsx</span
+                ><span class="note">page shell</span>
+              </li>
+              <li>
+                <span class="marker add">new</span
+                ><span class="path"
+                  >client/src/components/pre-trade/PreTradeSetup.tsx</span
+                ><span class="note">setup form</span>
+              </li>
+              <li>
+                <span class="marker add">new</span
+                ><span class="path"
+                  >client/src/components/pre-trade/TimeframePicker.tsx</span
+                ><span class="note">multi-select + primary + count</span>
+              </li>
+              <li>
+                <span class="marker add">new</span
+                ><span class="path"
+                  >client/src/components/pre-trade/PreTradeChat.tsx</span
+                ><span class="note">wraps AgentMessageList</span>
+              </li>
+              <li>
+                <span class="marker mod">mod</span
+                ><span class="path">client/src/App.tsx</span
+                ><span class="note">+ /pre-trade route</span>
+              </li>
+              <li>
+                <span class="marker mod">mod</span
+                ><span class="path"
+                  >client/src/components/DashboardLayout.tsx</span
+                ><span class="note">+ sidebar entry</span>
+              </li>
+              <li>
+                <span class="marker mod">mod</span
+                ><span class="path"
+                  >client/src/components/review-agent/useReviewStream.ts</span
+                ><span class="note">accept endpoint url arg</span>
+              </li>
+            </ul>
+          </div>
+          <div class="file-group">
+            <h4>backend + schema <span class="count">3 new · 3 mod</span></h4>
+            <ul>
+              <li>
+                <span class="marker add">new</span
+                ><span class="path">server/agents/preTradeAgent.ts</span
+                ><span class="note">service layer</span>
+              </li>
+              <li>
+                <span class="marker add">new</span
+                ><span class="path"
+                  >server/agents/preTradeContextBuilder.ts</span
+                ><span class="note">multi-tf kline injector</span>
+              </li>
+              <li>
+                <span class="marker add">new</span
+                ><span class="path">server/_core/preTradeAgentSseRoute.ts</span
+                ><span class="note">SSE endpoint</span>
+              </li>
+              <li>
+                <span class="marker mod">mod</span
+                ><span class="path">server/routers.ts</span
+                ><span class="note">+ preTradeAgent namespace</span>
+              </li>
+              <li>
+                <span class="marker mod">mod</span
+                ><span class="path">server/_core/index.ts</span
+                ><span class="note">mount SSE route</span>
+              </li>
+              <li>
+                <span class="marker mod">mod</span
+                ><span class="path">drizzle/schema.ts</span
+                ><span class="note">+ pre_trades table · conv nullable</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ────────── 8 · phases ────────── -->
+      <section class="block">
+        <h2 class="label">
+          <span>08 · implementation phases</span
+          ><span class="aside">each phase ships end-to-end verifiable</span>
+        </h2>
+        <div class="phases">
+          <div class="phase">
+            <div class="num">phase 01</div>
+            <div class="title">schema + context</div>
+            <ul>
+              <li>add <code class="inline">pre_trades</code></li>
+              <li>relax conversations.transactionId</li>
+              <li>write preTradeContextBuilder</li>
+              <li>unit test payload cap</li>
+            </ul>
+          </div>
+          <div class="phase">
+            <div class="num">phase 02</div>
+            <div class="title">service + router</div>
+            <ul>
+              <li>preTradeAgent.ts (open/send/list)</li>
+              <li>preTradeAgent router (getActive/open/send/list)</li>
+              <li>reuse runTools verbatim</li>
+              <li>server test: open → 1 agent reply</li>
+            </ul>
+          </div>
+          <div class="phase">
+            <div class="num">phase 03</div>
+            <div class="title">SSE + stream hook</div>
+            <ul>
+              <li>preTradeAgentSseRoute mounted</li>
+              <li>useReviewStream: url arg</li>
+              <li>smoke: curl SSE returns deltas</li>
+            </ul>
+          </div>
+          <div class="phase">
+            <div class="num">phase 04</div>
+            <div class="title">frontend setup + chat</div>
+            <ul>
+              <li>PreTrade page + sidebar entry</li>
+              <li>TimeframePicker component</li>
+              <li>PreTradeChat reuses list + markdown</li>
+              <li>e2e: setup → chat</li>
+            </ul>
+          </div>
+          <div class="phase">
+            <div class="num">phase 05</div>
+            <div class="title">polish · list · convert</div>
+            <ul>
+              <li>list previous pre-trades</li>
+              <li>"convert to transaction" cta</li>
+              <li>error / empty / loading states</li>
+              <li>backlog task done</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ────────── 9 · decisions (INPUT) ────────── -->
+      <section class="block">
+        <h2 class="label">
+          <span>09 · open decisions</span
+          ><span class="aside">pick & queue — 我按你的选择动手</span>
+        </h2>
+        <p>
+          下面几个选择会影响架构与工作量。<strong
+            >每题勾选后点 "queue answer"</strong
+          >；一次性把所有决策攒好，最后一起 send 给我。
+        </p>
+
+        <!-- Q1: data model -->
+        <form
+          class="decision"
+          data-lavish-question="data-model"
+          onsubmit="
+            event.preventDefault();
+            const v = new FormData(event.currentTarget).get('data-model');
+            if (v)
+              window.lavish.queuePrompt('data model: use ' + v, {
+                tag: 'decision',
+                text: 'data model → ' + v,
+                element: event.currentTarget,
+                data: { question: 'data-model', answer: v },
+              });
+          "
+        >
+          <h3>
+            q1 · data model
+            <span class="recommend">i recommend: separate table</span>
+          </h3>
+          <p class="rationale">
+            交易前讨论要不要用独立表，还是复用
+            <code class="inline">conversations</code> 加 kind 字段？
+          </p>
+          <label class="opt">
+            <input
+              type="radio"
+              name="data-model"
+              value="separate table"
+              checked
+            />
+            <span>
+              <span class="name">separate table (option a)</span>
+              <div class="desc">
+                新建 <code class="inline">pre_trades</code>，
+                conversations.transactionId 放开为 nullable + 加
+                preTradeId。干净可扩展。
+              </div>
+            </span>
+          </label>
+          <label class="opt">
+            <input
+              type="radio"
+              name="data-model"
+              value="discriminator column"
+            />
+            <span>
+              <span class="name">discriminator column (option b)</span>
+              <div class="desc">
+                conversations 表加 kind + 直接把 pre-trade
+                字段挂上去。改动小但架构污染。
+              </div>
+            </span>
+          </label>
+          <div class="submit-row">
+            <span class="hint">queues one prompt on submit</span>
+            <button type="submit">queue answer</button>
+          </div>
+        </form>
+
+        <!-- Q2: persistence of drafts before send -->
+        <form
+          class="decision"
+          data-lavish-question="draft-persistence"
+          onsubmit="
+            event.preventDefault();
+            const v = new FormData(event.currentTarget).get(
+              'draft-persistence'
+            );
+            if (v)
+              window.lavish.queuePrompt('draft persistence: ' + v, {
+                tag: 'decision',
+                text: 'draft persistence → ' + v,
+                element: event.currentTarget,
+                data: { question: 'draft-persistence', answer: v },
+              });
+          "
+        >
+          <h3>q2 · draft persistence</h3>
+          <p class="rationale">
+            用户 setup 之后未 send，或对话中途关掉页面，怎么处理？
+          </p>
+          <label class="opt">
+            <input
+              type="radio"
+              name="draft-persistence"
+              value="persist on start"
+              checked
+            />
+            <span>
+              <span class="name">persist on "start discussion"</span>
+              <div class="desc">
+                点了「start discussion」才写库；此前 setup 只是 local state。跟
+                review 保持一致。
+              </div>
+            </span>
+          </label>
+          <label class="opt">
+            <input
+              type="radio"
+              name="draft-persistence"
+              value="autosave setup"
+            />
+            <span>
+              <span class="name">autosave setup as draft</span>
+              <div class="desc">
+                setup 每次改动都存
+                <code class="inline">pre_trades.status = 'draft'</code
+                >，允许恢复。多一张表复杂度。
+              </div>
+            </span>
+          </label>
+          <div class="submit-row">
+            <span class="hint">queues one prompt on submit</span>
+            <button type="submit">queue answer</button>
+          </div>
+        </form>
+
+        <!-- Q3: skill catalogue -->
+        <form
+          class="decision"
+          data-lavish-question="skill-catalogue"
+          onsubmit="
+            event.preventDefault();
+            const v = new FormData(event.currentTarget).get('skill-catalogue');
+            if (v)
+              window.lavish.queuePrompt('skill catalogue: ' + v, {
+                tag: 'decision',
+                text: 'skill catalogue → ' + v,
+                element: event.currentTarget,
+                data: { question: 'skill-catalogue', answer: v },
+              });
+          "
+        >
+          <h3>q3 · skill catalogue for pre-trade agent</h3>
+          <p class="rationale">
+            review agent 已经有 8 个 skill（get_klines / web_search /
+            on_chain_snapshot / …）。pre-trade 用哪些？
+          </p>
+          <label class="opt">
+            <input
+              type="radio"
+              name="skill-catalogue"
+              value="reuse all"
+              checked
+            />
+            <span>
+              <span class="name">reuse all 8 · same user allowlist</span>
+              <div class="desc">
+                最省事，pre-trade 用户可能也需要行情结构分析 / web_search /
+                资金费率。
+              </div>
+            </span>
+          </label>
+          <label class="opt">
+            <input
+              type="radio"
+              name="skill-catalogue"
+              value="restricted subset"
+            />
+            <span>
+              <span class="name">restricted subset · trade-only</span>
+              <div class="desc">
+                只开 get_klines / analyze_market_structure / fetch_funding_rates
+                / compare_with_my_baseline。剪掉 web_search /
+                web_fetch，避免决策阶段被外部 narrative 干扰。
+              </div>
+            </span>
+          </label>
+          <label class="opt">
+            <input
+              type="radio"
+              name="skill-catalogue"
+              value="separate allowlist"
+            />
+            <span>
+              <span class="name">separate per-user allowlist</span>
+              <div class="desc">
+                agentSettings 里加
+                <code class="inline">enabledPreTradeSkillIds</code
+                >，让用户单独选。灵活但多一层配置。
+              </div>
+            </span>
+          </label>
+          <div class="submit-row">
+            <span class="hint">queues one prompt on submit</span>
+            <button type="submit">queue answer</button>
+          </div>
+        </form>
+
+        <!-- Q4: multi-tf cap strategy (multi-select) -->
+        <form
+          class="decision"
+          data-lavish-question="tf-config"
+          onsubmit="
+            event.preventDefault();
+            const fd = new FormData(event.currentTarget);
+            const arr = fd.getAll('tf-limit');
+            if (arr.length)
+              window.lavish.queuePrompt(
+                'timeframe config: ' + arr.join(' + '),
+                {
+                  tag: 'decision',
+                  text: 'timeframe config → ' + arr.join(' + '),
+                  element: event.currentTarget,
+                  data: { question: 'tf-config', answers: arr },
+                }
+              );
+          "
+        >
+          <h3>q4 · timeframe config limits (multi-select)</h3>
+          <p class="rationale">关于多 tf 的硬性约束，勾选所有你想要的：</p>
+          <label class="opt">
+            <input
+              type="checkbox"
+              name="tf-limit"
+              value="max 5 timeframes total"
+              checked
+            />
+            <span>
+              <span class="name">max 5 timeframes total</span>
+              <div class="desc">
+                1 primary + 最多 4 context。防止 payload
+                爆炸，也符合多周期分析实际习惯。
+              </div>
+            </span>
+          </label>
+          <label class="opt">
+            <input
+              type="checkbox"
+              name="tf-limit"
+              value="candle count 20-500 per tf"
+              checked
+            />
+            <span>
+              <span class="name">candle count clamp: 20 – 500 per tf</span>
+              <div class="desc">
+                默认 100，用户可上下调。低于 20 意义不大，超过 500 会被 CoinAnk
+                分页 &amp; 拖慢首屏。
+              </div>
+            </span>
+          </label>
+          <label class="opt">
+            <input
+              type="checkbox"
+              name="tf-limit"
+              value="context tfs must be higher or lower than primary, no duplicates"
+              checked
+            />
+            <span>
+              <span class="name"
+                >no duplicate tf · context tfs unique from primary</span
+              >
+              <div class="desc">
+                每个 tf 只出现一次，primary 不允许出现在 context 列表。
+              </div>
+            </span>
+          </label>
+          <label class="opt">
+            <input
+              type="checkbox"
+              name="tf-limit"
+              value="warn on payload size > 12k"
+            />
+            <span>
+              <span class="name">warn when preview > 12kb</span>
+              <div class="desc">
+                setup 底部实时显示预计 payload
+                大小，超阈值给红字提示（不阻断）。
+              </div>
+            </span>
+          </label>
+          <div class="submit-row">
+            <span class="hint">queues one prompt with all checked answers</span>
+            <button type="submit">queue answer</button>
+          </div>
+        </form>
+
+        <!-- Q5: “convert to transaction” now or later -->
+        <form
+          class="decision"
+          data-lavish-question="convert-flow"
+          onsubmit="
+            event.preventDefault();
+            const v = new FormData(event.currentTarget).get('convert-flow');
+            if (v)
+              window.lavish.queuePrompt('convert-to-transaction flow: ' + v, {
+                tag: 'decision',
+                text: 'convert flow → ' + v,
+                element: event.currentTarget,
+                data: { question: 'convert-flow', answer: v },
+              });
+          "
+        >
+          <h3>q5 · "convert to transaction" cta</h3>
+          <p class="rationale">
+            讨论完想开单时，能不能一键从 pre-trade 拉起 NewTransaction
+            表单，预填标的 / 方向 / tf？
+          </p>
+          <label class="opt">
+            <input
+              type="radio"
+              name="convert-flow"
+              value="in phase 5"
+              checked
+            />
+            <span>
+              <span class="name">yes · phase 5 · pre-fill only</span>
+              <div class="desc">
+                pre_trades → NewTransaction 表单预填
+                pair/direction/primaryTf；不自动关联，保留松耦合。
+              </div>
+            </span>
+          </label>
+          <label class="opt">
+            <input
+              type="radio"
+              name="convert-flow"
+              value="in phase 5 with link"
+            />
+            <span>
+              <span class="name">yes · phase 5 · with fk link</span>
+              <div class="desc">
+                transactions 表加
+                <code class="inline">preTradeId</code
+                >，交易详情能反查当时的讨论。
+              </div>
+            </span>
+          </label>
+          <label class="opt">
+            <input type="radio" name="convert-flow" value="later" />
+            <span>
+              <span class="name">defer · ship v1 without conversion</span>
+              <div class="desc">
+                先做纯讨论工具，用户自己复制/粘贴信息去开单。等真用起来再看。
+              </div>
+            </span>
+          </label>
+          <div class="submit-row">
+            <span class="hint">queues one prompt on submit</span>
+            <button type="submit">queue answer</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- ────────── 10 · risks ────────── -->
+      <section class="block">
+        <h2 class="label">
+          <span>10 · risks & failure modes</span
+          ><span class="aside">what could go wrong</span>
+        </h2>
+        <div class="grid-2">
+          <div class="state">
+            <div class="tag">payload bloat</div>
+            <div class="now">5 tf × 500 candles ≈ 40kb → 上下文吃紧</div>
+            <ul>
+              <li>维持 12k char cap，按 context-first 顺序降级</li>
+              <li>setup 底部实时显示 payload size</li>
+            </ul>
+          </div>
+          <div class="state">
+            <div class="tag">provider drift</div>
+            <div class="now">锁 provider 才能保证长对话一致</div>
+            <ul>
+              <li>
+                复用 review 的
+                <code class="inline">lockedProviderId</code> pattern
+              </li>
+              <li>一旦第一条 assistant 回复完成即锁定</li>
+            </ul>
+          </div>
+          <div class="state">
+            <div class="tag">coinank rate limit</div>
+            <div class="now">一次点击 5 个 tf 并发拉取</div>
+            <ul>
+              <li>
+                用 <code class="inline">Promise.allSettled</code>，单 tf
+                失败降级不阻断
+              </li>
+              <li>失败 tf 在 payload 里显式注明"unavailable"</li>
+            </ul>
+          </div>
+          <div class="state">
+            <div class="tag">nullable transactionId</div>
+            <div class="now">历史数据兼容 · migration 顺序敏感</div>
+            <ul>
+              <li>
+                alter nullable + 加 preTradeId + check constraint 单次迁移完成
+              </li>
+              <li>server test 覆盖 review 抽屉不回归</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <footer class="doc-foot">
+        <div>bench notebook · pre-trade agent proposal · v1</div>
+        <div>ready to queue decisions above ↑</div>
+      </footer>
+    </main>
+  </body>
+</html>

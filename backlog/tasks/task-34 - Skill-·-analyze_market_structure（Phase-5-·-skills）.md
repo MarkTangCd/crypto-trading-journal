@@ -3,9 +3,9 @@ id: TASK-34
 title: Skill · analyze_market_structure（Phase 5 · skills）
 status: Done
 assignee:
-  - '@myself'
-created_date: '2026-06-26 13:28'
-updated_date: '2026-06-28 01:42'
+  - "@myself"
+created_date: "2026-06-26 13:28"
+updated_date: "2026-06-28 01:42"
 labels:
   - ai-agent
   - phase-5
@@ -29,6 +29,7 @@ ordinal: 34000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
+
 ## Why
 
 Plan "Skill 扩展机制" 段 `analyze_market_structure`：`输入一段 K 线，输出 swing high/low、趋势段、支撑阻力，让 agent 用结构化语言代替"我觉得是个突破"`。这是 Phase 5 已决议的 4 个 future skill 之一，纯算法不联外网。
@@ -90,7 +91,9 @@ z.object({
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
+
 <!-- AC:BEGIN -->
+
 - [x] #1 server/agents/skills/analyzeMarketStructure.ts 落地，注册 id = 'analyze_market_structure'，category = 'analysis'
 - [x] #2 参数 zod schema 覆盖 symbol / interval / lookback / anchorMs；interval enum 与 get_klines 一致；lookback 30–500
 - [x] #3 调内部 helper 从 K 线提 swing、输出 recentTrend、supportZones、resistanceZones 三部分，格式与 Why 段描述一致
@@ -101,11 +104,10 @@ z.object({
 - [x] #8 npm run check + format + test 全绿；烟测：启用后试 BTCUSDT 1h 是否返出可判读的 swings + S/R
 <!-- AC:END -->
 
-
-
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
+
 ## Summary
 
 Adds `analyze_market_structure` skill (Phase 5) — pure-algorithm structural analysis over a CoinAnk candle window so the review agent can speak in structured terms (HH/HL, S/R zones) instead of vague phrases.
@@ -123,7 +125,7 @@ Adds `analyze_market_structure` skill (Phase 5) — pure-algorithm structural an
 ## Verification
 
 - `npm run check` ✓
-- `npm run format` ✓ (backlog/*.md reverted per CLAUDE.md guardrail)
+- `npm run format` ✓ (backlog/\*.md reverted per CLAUDE.md guardrail)
 - `npm run test` ✓ 304/304 (baseline 285 + 19 new)
 - AC #8 浏览器烟测：由用户在 review 会话中以 BTCUSDT 1H 验收。
 

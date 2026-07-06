@@ -3,9 +3,9 @@ id: TASK-32
 title: Skill registry + 迁移现有工具 + enabledSkillIds 过滤（Phase 5 · platform）
 status: Done
 assignee:
-  - '@myself'
-created_date: '2026-06-26 13:26'
-updated_date: '2026-06-27 02:04'
+  - "@myself"
+created_date: "2026-06-26 13:26"
+updated_date: "2026-06-27 02:04"
 labels:
   - ai-agent
   - phase-5
@@ -40,6 +40,7 @@ ordinal: 32000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
+
 ## Why
 
 Phase 5 plan：`SkillRegistry boot-time 扫描 server/agents/skills/*；Settings 勾选启用；先迁移现有内部工具到 skill 形态；为后续 analyze_market_structure 等留口`。本任务是 Phase 5 的 platform 单切片：把抽象层 + 迁移 + 过滤一并落地，**不**含 Settings UI（留给 TASK-33）。
@@ -93,7 +94,9 @@ Phase 5 plan：`SkillRegistry boot-time 扫描 server/agents/skills/*；Settings
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
+
 <!-- AC:BEGIN -->
+
 - [x] #1 server/agents/skills/ 下 4 个 skill 文件落地（迁自 tools/），原 tools/{getKlines,getRecentTrades,webSearch,webFetch}.ts 删除，其他引用处跟随更新
 - [x] #2 skillRegistry 提供 register / getSkill / listSkills / listEnabledSkillDeclarations(enabledSkillIds) 公开 API，保留 register / getTool / listTools / listToolDeclarations 作为兼容 alias
 - [x] #3 listEnabledSkillDeclarations: 空数组 → 返全部 skill；非空 → 仅返 id 在列表中的 skill；未知 id 静默忽略（不报错）
@@ -107,6 +110,7 @@ Phase 5 plan：`SkillRegistry boot-time 扫描 server/agents/skills/*；Settings
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
+
 ## 设计要点
 
 1. **Skill = Tool + 元数据**：在 `skillRegistry.ts` 里定义 `Skill` 接口，继承 `Tool { name, description, parameters, run }`，新增**必填** `id: string`（语义上与 name 同义，作为 UI 稳定枚举键）+ 可选 `category: "internal" | "network" | "analysis"`。`register()` 内部断言 `skill.id === skill.name`，REGISTRY 仍按 `name` 索引（不引第二把钥匙）。
@@ -165,6 +169,7 @@ Settings UI（TASK-33）、新 skill 实现（TASK-34/35/36/37）、动态文件
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
+
 ## 改动
 
 - `server/agents/skillRegistry.{ts,test.ts}` 新建：定义 `Skill = Tool + 可选 category`（id 即 name，文档约定）。导出 `register / getSkill / listSkills / listEnabledSkillDeclarations / runSkill / unregisterForTest`，保留 `getTool / listTools / listToolDeclarations / runTool / registerSkill` 作 alias。`listEnabledSkillDeclarations([])` 返全部、非空按 `name` 过滤、未知 id 静默忽略。

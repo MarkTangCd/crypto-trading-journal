@@ -3,8 +3,8 @@ id: TASK-35
 title: Skill · fetch_funding_rates（Phase 5 · skills）
 status: Done
 assignee: []
-created_date: '2026-06-26 13:28'
-updated_date: '2026-06-28 02:27'
+created_date: "2026-06-26 13:28"
+updated_date: "2026-06-28 02:27"
 labels:
   - ai-agent
   - phase-5
@@ -34,6 +34,7 @@ ordinal: 35000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
+
 ## Why
 
 Plan "Skill 扩展机制" 段 `fetch_funding_rates`：`拉 coinank funding rates，对照进出场时段，判断是否在极端 funding 时段做反向`。Phase 5 已决议 4 skill 之一。
@@ -95,7 +96,9 @@ z.object({
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
+
 <!-- AC:BEGIN -->
+
 - [x] #1 server/agents/skills/fetchFundingRates.ts 落地，注册 id = 'fetch_funding_rates'，category = 'network'
 - [x] #2 参数 zod schema：symbol 必填、lookbackHours 24–720 默认 168
 - [x] #3 复用现有 coinank fetch helper / auth（如有）；不复用也要抽到 fundingBackends/coinank.ts 作为 SearchBackend 同型 adapter
@@ -108,6 +111,7 @@ z.object({
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
+
 ## Summary
 
 Adds `fetch_funding_rates` skill (Phase 5) — perp funding-rate history + current value + extreme tags so review can check whether a trade was opened/held during one-sided crowding.
@@ -125,7 +129,7 @@ CoinAnk's funding endpoint is gated (`/api/fundingRate/*` returns 403 across all
 ## Verification
 
 - `npm run check` ✓
-- `npm run format` ✓ (backlog/*.md reverted per CLAUDE.md guardrail)
+- `npm run format` ✓ (backlog/\*.md reverted per CLAUDE.md guardrail)
 - `npm run test` ✓ 315/315 (baseline 304 + 11 new)
 - AC #7 浏览器烟测：等用户在 review 会话里 BTCUSDT 验收 history + extremes。
 
@@ -144,4 +148,5 @@ Smoke test surfaced two issues:
 2. **Proxy not honored** — Node's native fetch doesn't read `HTTPS_PROXY`, so users behind GFW with Clash/Surge couldn't reach `fapi.binance.com` even with VPN on. Added `undici` as a direct dep and wired `setGlobalDispatcher(new EnvHttpProxyAgent())` early in `server/_core/index.ts` (right after `dotenv/config`). Honors `HTTPS_PROXY` / `HTTP_PROXY` + `NO_PROXY`; no-op when env vars are unset. All future skills' outbound fetch benefit automatically.
 
 User confirmed smoke test passed after setting `HTTPS_PROXY=http://127.0.0.1:7890` in `.env`.
+
 <!-- SECTION:FINAL_SUMMARY:END -->

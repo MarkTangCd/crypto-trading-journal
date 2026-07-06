@@ -3,9 +3,9 @@ id: TASK-31
 title: Search backend adapter 化（Phase 4 收尾 · web_search）
 status: Done
 assignee:
-  - '@myself'
-created_date: '2026-06-26 09:37'
-updated_date: '2026-06-26 09:41'
+  - "@myself"
+created_date: "2026-06-26 09:37"
+updated_date: "2026-06-26 09:41"
 labels:
   - ai-agent
   - phase-4
@@ -29,6 +29,7 @@ ordinal: 31000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
+
 ## Why
 
 Plan 把 web_search backend 列为"v1 默认 tavily；适配器化保留切换 Serper / Brave 的能力"（plan 已决议段落），但 TASK-29 落地时是直接把 tavily 的 fetch / 解析内联在 `server/agents/tools/webSearch.ts` 的 `run()` 里，没有 backend 抽象。Phase 4 plan 的 "搜索后端可热替换" 子项实际是半做。
@@ -90,7 +91,9 @@ interface SearchBackend {
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
+
 <!-- AC:BEGIN -->
+
 - [x] #1 server/agents/tools/searchBackends/{types,tavily,index}.ts 三个文件落地，SearchBackend 接口与 v1 接口契约一致
 - [x] #2 webSearch.ts 的 run() 不再含 fetch(tavily) / TAVILY_ENDPOINT 等硬编码，只调 backend.search(...) + 包装结果
 - [x] #3 tavily.ts 的 tavilyBackend 行为与 TASK-29 落地版本完全等价（query / topK / signal / userId 透传，错误分支保留中文 error 文案）
@@ -103,6 +106,7 @@ interface SearchBackend {
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
+
 ## 实现计划
 
 ### 1. 新建 `server/agents/tools/searchBackends/types.ts`
@@ -140,6 +144,7 @@ interface SearchBackend {
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
+
 ## 摘要
 
 把 TASK-29 把 tavily fetch 直接内联在 `webSearch.ts run()` 里的妥协补齐：抽出 `SearchBackend` 接口 + `tavilyBackend` 实现 + `getActiveSearchBackend()` 单点 dispatcher。Phase 4 plan 的"搜索后端可热替换"子项收尾。
@@ -172,4 +177,5 @@ interface SearchBackend {
 ## 下一步
 
 Phase 4 全部子项关闭：tool-calling loop / N 步保护 / UI 气泡 / get_klines / get_recent_trades / web_search / web_fetch / gemini schema 翻译 / **search backend adapter**。可以开 Phase 5。
+
 <!-- SECTION:FINAL_SUMMARY:END -->
