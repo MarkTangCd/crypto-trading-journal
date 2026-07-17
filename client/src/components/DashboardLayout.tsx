@@ -20,6 +20,7 @@ import {
   Sparkles,
   TrendingUp,
   Wallet,
+  Wrench,
 } from "lucide-react";
 import { AccountSwitcher } from "./AccountSwitcher";
 import { CSSProperties, useEffect, useRef, useState } from "react";
@@ -31,6 +32,7 @@ const menuItems = [
   { icon: Plus, label: "New Trade", path: "/transactions/new" },
   { icon: Sparkles, label: "Pre-Trade", path: "/pre-trade" },
   { icon: Wallet, label: "Accounts", path: "/accounts" },
+  { icon: Wrench, label: "Tools", path: "/tools" },
   { icon: Settings, label: "Settings", path: "/settings" },
 ];
 

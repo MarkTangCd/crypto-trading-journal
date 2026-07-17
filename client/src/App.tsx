@@ -12,6 +12,8 @@ import NewTransaction from "./pages/NewTransaction";
 import TransactionDetail from "./pages/TransactionDetail";
 import Accounts from "./pages/Accounts";
 import PreTrade from "./pages/PreTrade";
+import Tools from "./pages/Tools";
+import PositionSizeCalculator from "./pages/PositionSizeCalculator";
 import Settings from "./pages/Settings";
 
 function Router() {
@@ -25,6 +27,8 @@ function Router() {
         <Route path="/accounts" component={Accounts} />
         <Route path="/pre-trade" component={PreTrade} />
         <Route path="/pre-trade/:id" component={PreTrade} />
+        <Route path="/tools" component={Tools} />
+        <Route path="/tools/position-size" component={PositionSizeCalculator} />
         <Route path="/settings" component={Settings} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
