@@ -4,6 +4,7 @@ import {
   CandlestickSeries,
   ColorType,
   LineStyle,
+  TickMarkType,
   createSeriesMarkers,
   type CandlestickData,
   type ISeriesApi,
@@ -13,6 +14,7 @@ import {
   type UTCTimestamp,
   type SeriesMarker,
 } from "lightweight-charts";
+import { formatUtc8DateTime, utc8Parts } from "@shared/time";
 
 export interface CandleClickPayload {
   time: UTCTimestamp;
@@ -30,6 +32,29 @@ interface CandlestickChartProps {
 
 const PLEX_MONO =
   "'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+
+// Chart times arrive as epoch seconds; lightweight-charts renders UTC by
+// default, so both formatters below pin the display to UTC+8 (decision-1)
+// while the underlying data stays true epoch.
+function formatCrosshairTime(time: Time): string {
+  return formatUtc8DateTime((time as number) * 1000).toLowerCase();
+}
+
+function formatTickMark(time: Time, tickMarkType: TickMarkType): string {
+  const p = utc8Parts((time as number) * 1000);
+  switch (tickMarkType) {
+    case TickMarkType.Year:
+      return String(p.year);
+    case TickMarkType.Month:
+      return p.monthName.toLowerCase();
+    case TickMarkType.DayOfMonth:
+      return String(p.day);
+    case TickMarkType.TimeWithSeconds:
+      return p.hhmmss;
+    default:
+      return p.hhmm;
+  }
+}
 
 // lightweight-charts' parser doesn't accept oklch(). Bounce each CSS variable
 // through a 1x1 canvas so the browser resolves it to rgba() before the chart
@@ -121,6 +146,10 @@ export default function CandlestickChart({
         borderColor: palette.mist,
         timeVisible: true,
         secondsVisible: false,
+        tickMarkFormatter: formatTickMark,
+      },
+      localization: {
+        timeFormatter: formatCrosshairTime,
       },
       crosshair: {
         vertLine: {

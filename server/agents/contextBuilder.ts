@@ -10,6 +10,7 @@ import {
   type CandleWindow,
   fetchCandleWindowAround,
 } from "../_core/coinank";
+import { formatUtc8CandleTime, formatUtc8Prompt } from "@shared/time";
 
 const SIMILAR_TRADE_LIMIT = 5;
 const KLINE_HALF_SIZE = 100;
@@ -148,9 +149,7 @@ function formatCandle(
 }
 
 function formatCandleTime(timeSec: number): string {
-  return (
-    new Date(timeSec * 1000).toISOString().replace("T", " ").slice(0, 16) + "Z"
-  );
+  return formatUtc8CandleTime(timeSec);
 }
 
 function pricePrecision(entryPrice: string | null | undefined): number {
@@ -176,7 +175,8 @@ const SYSTEM_PROMPT = `你是一名严格但克制的加密货币交易复盘搭
 1. 始终使用中文。
 2. 用具体数字、具体时间点、具体的"如果当时…会怎样"来表达，避免空泛建议。
 3. 主动提出 1 个最关键的反问，而不是堆砌结论。
-4. 如果信息不足以判断某一点，直接说"我不知道，需要 X 才能判断"。`;
+4. 如果信息不足以判断某一点，直接说"我不知道，需要 X 才能判断"。
+5. 所有时间均为 UTC+8：上下文中给出的时间已经是 UTC+8，你在回复中提及任何时间一律按 UTC+8 表述，不要自行做时区换算。`;
 
 interface RenderInput {
   transaction: Transaction;
@@ -275,6 +275,5 @@ function renderUserContext({
 }
 
 function fmtTime(ms: number): string {
-  const date = new Date(ms);
-  return date.toISOString().replace("T", " ").slice(0, 16) + " UTC";
+  return formatUtc8Prompt(ms);
 }

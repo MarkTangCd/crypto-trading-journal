@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { formatUtc8Date, formatUtc8DateTime } from "@shared/time";
 import type React from "react";
 
 // Bench Notebook shared primitives. Brand-specific layer above shadcn.
@@ -49,11 +49,11 @@ export function fmtRatio(value: number | string | null | undefined): string {
 }
 
 export function fmtDateTime(ts: number | Date): string {
-  return format(ts, "MMM d, yyyy HH:mm").toLowerCase();
+  return formatUtc8DateTime(ts).toLowerCase();
 }
 
 export function fmtDate(ts: number | Date): string {
-  return format(ts, "MMM d, yyyy").toLowerCase();
+  return formatUtc8Date(ts).toLowerCase();
 }
 
 export function fmtDuration(start: number, end: number): string {

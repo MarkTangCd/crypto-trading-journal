@@ -1,6 +1,7 @@
 import type { ClosePreview } from "@/lib/closePreview";
 import { parsePositiveDecimal, previewClose } from "@/lib/closePreview";
 import { trpc } from "@/lib/trpc";
+import { parseDatetimeLocalUtc8, toDatetimeLocalUtc8 } from "@shared/time";
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -54,11 +55,9 @@ export function useCloseTradeForm(
 
   useEffect(() => {
     if (open) {
-      const now = new Date();
-      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
       setFormData({
         ...EMPTY_FORM,
-        endTime: now.toISOString().slice(0, 16),
+        endTime: toDatetimeLocalUtc8(Date.now()),
       });
     }
   }, [open]);
@@ -135,7 +134,7 @@ export function useCloseTradeForm(
       return;
     }
 
-    const endTimestamp = new Date(formData.endTime).getTime();
+    const endTimestamp = parseDatetimeLocalUtc8(formData.endTime);
     if (endTimestamp <= trade.startTime) {
       toast.error("end time must be after start time");
       return;

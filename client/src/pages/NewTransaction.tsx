@@ -15,6 +15,7 @@ import { useAccount } from "@/contexts/AccountContext";
 import { previewPlannedRiskReward } from "@/lib/plannedRiskReward";
 import { trpc } from "@/lib/trpc";
 import { type MarketCycle, type TransactionType } from "@shared/const";
+import { parseDatetimeLocalUtc8 } from "@shared/time";
 import { Loader2 } from "lucide-react";
 import type React from "react";
 import { useMemo, useState } from "react";
@@ -116,7 +117,7 @@ export default function NewTransaction() {
     } = formData;
     createMutation.mutate({
       accountId,
-      startTime: new Date(startTime).getTime(),
+      startTime: parseDatetimeLocalUtc8(startTime),
       direction: direction as "long" | "short",
       marketCycle: marketCycle as MarketCycle,
       transactionType: transactionType as TransactionType,

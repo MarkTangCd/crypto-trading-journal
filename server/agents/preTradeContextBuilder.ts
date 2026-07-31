@@ -1,6 +1,7 @@
 import type { PreTrade } from "../../drizzle/schema";
 import type { ChatMessage } from "./providers/types";
 import { type Candle, fetchCandles } from "../_core/coinank";
+import { formatUtc8CandleTime, formatUtc8Prompt } from "@shared/time";
 
 // Same soft cap as the review agent's kline block. Overflow strategy is
 // different here: (1) drop volume column; (2) shrink furthest context tf;
@@ -100,7 +101,8 @@ const SYSTEM_PROMPT = `你是一名谨慎的加密货币交易前决策搭子。
 2. 明确以 primary 时间框架为主视角，其它 tf 作为对齐/背离参考。
 3. 用具体数字、具体价位、具体时间点说话，不要空泛建议。
 4. 给出 1 条最尖锐的反问（"如果 X 反转，你会怎么办？"）而不是堆结论。
-5. 如果信息不足，直接说"我不知道，需要 X 才能判断"，不要瞎猜。`;
+5. 如果信息不足，直接说"我不知道，需要 X 才能判断"，不要瞎猜。
+6. 所有时间均为 UTC+8：上下文中给出的时间已经是 UTC+8，你在回复中提及任何时间一律按 UTC+8 表述，不要自行做时区换算。`;
 
 interface RenderInput {
   preTrade: PreTrade;
@@ -265,9 +267,7 @@ function formatCandle(
 }
 
 function formatCandleTime(timeSec: number): string {
-  return (
-    new Date(timeSec * 1000).toISOString().replace("T", " ").slice(0, 16) + "Z"
-  );
+  return formatUtc8CandleTime(timeSec);
 }
 
 function pricePrecision(fetched: TimeframeFetch[]): number {
@@ -288,8 +288,7 @@ function fmtPrice(value: number, decimals: number): string {
 }
 
 function fmtTime(ms: number): string {
-  const date = new Date(ms);
-  return date.toISOString().replace("T", " ").slice(0, 16) + " UTC";
+  return formatUtc8Prompt(ms);
 }
 
 export const __testing__ = {

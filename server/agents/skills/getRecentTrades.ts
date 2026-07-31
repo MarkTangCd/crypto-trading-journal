@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { register, type Skill } from "../skillRegistry";
 import { getTransactionsByUserId } from "../../db";
+import { formatUtc8Prompt } from "@shared/time";
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 20;
@@ -34,7 +35,7 @@ export const getRecentTradesSkill: Skill<typeof parameters> = {
   name: "get_recent_trades",
   category: "internal",
   description:
-    "Fetch the user's recent trades, newest-first by start time. Use this to ground review with comparable historical setups (same pair, same direction, similar outcome). Returns a compact field set scoped to the current user.",
+    "Fetch the user's recent trades, newest-first by start time. Use this to ground review with comparable historical setups (same pair, same direction, similar outcome). Returns a compact field set scoped to the current user. startTime/endTime are epoch milliseconds (pass directly as anchorMs to kline tools); startTimeText/endTimeText are the same instants as UTC+8 wall-clock strings — quote these when mentioning times.",
   parameters,
   async run(args, context) {
     // ctx.userId is the ONLY guard against cross-user reads — runTools always
@@ -63,7 +64,9 @@ export const getRecentTradesSkill: Skill<typeof parameters> = {
       riskRewardRatio: row.riskRewardRatio,
       returnAmount: row.returnAmount,
       startTime: row.startTime,
+      startTimeText: formatUtc8Prompt(row.startTime),
       endTime: row.endTime,
+      endTimeText: row.endTime === null ? null : formatUtc8Prompt(row.endTime),
       context: row.context,
     }));
 
