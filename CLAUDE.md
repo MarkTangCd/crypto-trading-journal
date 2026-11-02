@@ -297,3 +297,17 @@ backlog task edit <id> -s Done
 
 For multi-line content, repeat `--append-*` per line, or pass real newlines
 inside double quotes — the CLI does not interpret `\n`.
+
+## Agent skills
+
+### Issue tracker
+
+Issues are Backlog.md tasks under `backlog/tasks/`, managed via the `backlog` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary; each triage role maps to a `backlog` task label of the same name. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` at the repo root plus `docs/adr/`. See `docs/agents/domain.md`.
