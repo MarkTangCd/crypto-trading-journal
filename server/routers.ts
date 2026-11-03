@@ -22,9 +22,15 @@ import {
   getAccountCount,
   // Pre-trade
   listPreTradesByUser,
+  // Goals
+  createGoal,
+  getGoalById,
+  listGoalsByUserId,
+  updateGoal,
+  deleteGoal,
 } from "./db";
 import type { TrpcContext } from "./_core/context";
-import type { Account, Transaction } from "../drizzle/schema";
+import type { Account, Goal, Transaction } from "../drizzle/schema";
 import { add as addFixedPoint } from "./_core/fixedPoint";
 import {
   TradeMathError,
@@ -110,6 +116,31 @@ async function requireOwnedAccount(
     });
   }
   return account;
+}
+
+async function requireOwnedGoal(
+  ctx: TrpcContext,
+  goalId: number
+): Promise<Goal> {
+  const goal = await getGoalById(goalId, ctx.user.id);
+  if (!goal) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Goal not found",
+    });
+  }
+  return goal;
+}
+
+function normalizeGoalText(text: string): string {
+  const trimmed = text.trim();
+  if (trimmed.length === 0) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Goal text cannot be empty",
+    });
+  }
+  return trimmed;
 }
 
 async function requireOwnedTransaction(
@@ -698,6 +729,48 @@ export const appRouter = router({
         }
 
         await deleteAccountWithTransactions(input.id, ctx.user.id);
+        return { success: true };
+      }),
+  }),
+
+  // Trading goals: user-level, free text, status derived from completedAt.
+  goal: router({
+    list: publicProcedure.query(async ({ ctx }) => {
+      return listGoalsByUserId(ctx.user.id);
+    }),
+
+    create: publicProcedure
+      .input(z.object({ text: z.string().max(200) }))
+      .mutation(async ({ ctx, input }) => {
+        return createGoal({
+          userId: ctx.user.id,
+          text: normalizeGoalText(input.text),
+        });
+      }),
+
+    update: publicProcedure
+      .input(z.object({ id: z.number(), text: z.string().max(200) }))
+      .mutation(async ({ ctx, input }) => {
+        await requireOwnedGoal(ctx, input.id);
+        return updateGoal(input.id, ctx.user.id, {
+          text: normalizeGoalText(input.text),
+        });
+      }),
+
+    setDone: publicProcedure
+      .input(z.object({ id: z.number(), done: z.boolean() }))
+      .mutation(async ({ ctx, input }) => {
+        await requireOwnedGoal(ctx, input.id);
+        return updateGoal(input.id, ctx.user.id, {
+          completedAt: input.done ? new Date() : null,
+        });
+      }),
+
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await requireOwnedGoal(ctx, input.id);
+        await deleteGoal(input.id, ctx.user.id);
         return { success: true };
       }),
   }),

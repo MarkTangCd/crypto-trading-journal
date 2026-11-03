@@ -24,6 +24,9 @@ import {
   preTrades,
   type PreTrade,
   type InsertPreTrade,
+  goals,
+  type Goal,
+  type InsertGoal,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { ANONYMOUS_OPEN_ID, ANONYMOUS_USER_NAME } from "@shared/const";
@@ -963,6 +966,67 @@ export async function getAccountCount(userId: number): Promise<number> {
     .where(eq(accounts.userId, userId));
 
   return result[0]?.count ?? 0;
+}
+
+// ============ Goals ============
+
+export async function createGoal(data: InsertGoal): Promise<Goal> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(goals).values(data).returning();
+
+  return result[0];
+}
+
+export async function getGoalById(
+  id: number,
+  userId: number
+): Promise<Goal | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db
+    .select()
+    .from(goals)
+    .where(and(eq(goals.id, id), eq(goals.userId, userId)))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function listGoalsByUserId(userId: number): Promise<Goal[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(goals)
+    .where(eq(goals.userId, userId))
+    .orderBy(asc(goals.createdAt), asc(goals.id));
+}
+
+export async function updateGoal(
+  id: number,
+  userId: number,
+  data: { text?: string; completedAt?: Date | null }
+): Promise<Goal | undefined> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(goals)
+    .set({ ...data, updatedAt: new Date() })
+    .where(and(eq(goals.id, id), eq(goals.userId, userId)));
+
+  return getGoalById(id, userId);
+}
+
+export async function deleteGoal(id: number, userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.delete(goals).where(and(eq(goals.id, id), eq(goals.userId, userId)));
 }
 
 // ============ Review Agent: conversations / messages / settings ============

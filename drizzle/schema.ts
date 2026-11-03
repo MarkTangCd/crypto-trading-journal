@@ -174,6 +174,32 @@ export type Account = typeof accounts.$inferSelect;
 export type InsertAccount = typeof accounts.$inferInsert;
 
 /**
+ * Trading goal: a short free-text intention the trader commits to for the
+ * near term. Belongs to the user, not to an account. Status is derived from
+ * `completedAt`: null = open, non-null = done.
+ */
+export const goals = sqliteTable("goals", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  /** Foreign key to users table */
+  userId: integer("userId").notNull(),
+  /** Goal text, trimmed, 1..200 chars */
+  text: text("text").notNull(),
+  /** When the goal was marked done; null while open */
+  completedAt: integer("completedAt", { mode: "timestamp_ms" }),
+  /** Record creation timestamp */
+  createdAt: integer("createdAt", { mode: "timestamp_ms" })
+    .default(sql`(unixepoch() * 1000)`)
+    .notNull(),
+  /** Record update timestamp */
+  updatedAt: integer("updatedAt", { mode: "timestamp_ms" })
+    .default(sql`(unixepoch() * 1000)`)
+    .notNull(),
+});
+
+export type Goal = typeof goals.$inferSelect;
+export type InsertGoal = typeof goals.$inferInsert;
+
+/**
  * Pre-trade brainstorming session. Written when the user commits to "start
  * discussion" on the /pre-trade page. One row per session; a session may
  * spawn one conversation via `conversations.preTradeId`.

@@ -14,6 +14,7 @@ import { useIsMobile } from "@/hooks/useMobile";
 import {
   BarChart3,
   FileText,
+  Flag,
   PanelLeft,
   Plus,
   Settings,
@@ -28,6 +29,7 @@ import { useLocation } from "wouter";
 
 const menuItems = [
   { icon: BarChart3, label: "Dashboard", path: "/" },
+  { icon: Flag, label: "Goals", path: "/goals" },
   { icon: FileText, label: "Transactions", path: "/transactions" },
   { icon: Plus, label: "New Trade", path: "/transactions/new" },
   { icon: Sparkles, label: "Pre-Trade", path: "/pre-trade" },

@@ -7,6 +7,7 @@ import DashboardLayout from "./components/DashboardLayout";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AccountProvider } from "./contexts/AccountContext";
 import Dashboard from "./pages/Dashboard";
+import Goals from "./pages/Goals";
 import Transactions from "./pages/Transactions";
 import NewTransaction from "./pages/NewTransaction";
 import TransactionDetail from "./pages/TransactionDetail";
@@ -21,6 +22,7 @@ function Router() {
     <DashboardLayout>
       <Switch>
         <Route path="/" component={Dashboard} />
+        <Route path="/goals" component={Goals} />
         <Route path="/transactions" component={Transactions} />
         <Route path="/transactions/new" component={NewTransaction} />
         <Route path="/transactions/:id" component={TransactionDetail} />

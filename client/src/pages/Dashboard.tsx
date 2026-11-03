@@ -1,3 +1,4 @@
+import { OpenGoals } from "@/components/goals/OpenGoals";
 import { Button } from "@/components/ui/button";
 import { SectionHeader, type Tone, fmtMoney, toneClass } from "@/lib/ledger";
 import { trpc } from "@/lib/trpc";
@@ -34,6 +35,18 @@ function Stat({
 }
 
 export default function Dashboard() {
+  return (
+    <div className="space-y-16">
+      <h1 className="sr-only">Dashboard</h1>
+      <OpenGoals />
+      <AccountStats />
+    </div>
+  );
+}
+
+// Per-account performance block. Keeps its own loading / error states so the
+// goals strip above renders regardless of account stats.
+function AccountStats() {
   const [, setLocation] = useLocation();
   const { selectedAccount } = useAccount();
   const accountId = selectedAccount?.id;
@@ -80,8 +93,6 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-16">
-      <h1 className="sr-only">Dashboard</h1>
-
       {/* Hero: the page anchor. One numeral, one delta, one footnote. */}
       <section aria-labelledby="hero-label">
         <p id="hero-label" className="text-label">
