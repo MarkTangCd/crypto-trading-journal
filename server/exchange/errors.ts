@@ -4,7 +4,9 @@ import type { SyncErrorCode } from "@shared/const";
 export class ExchangeError extends Error {
   constructor(
     public readonly code: SyncErrorCode,
-    public readonly detail: string
+    public readonly detail: string,
+    /** Earliest retry time (ms) for `rate_limited`, from `Retry-After`. */
+    public readonly retryAt?: number
   ) {
     super(`${code}: ${detail}`);
     this.name = "ExchangeError";

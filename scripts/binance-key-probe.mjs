@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// Usage: node scripts/binance-key-probe.mjs [--testnet] [--write-probe] [--json]
+// Needs BINANCE_API_KEY / BINANCE_API_SECRET in .local/binance.env or the environment.
 // Read-only probe for a Binance USDⓈ-M futures API key (wayfinder task-48).
 //
 // Reads BINANCE_API_KEY / BINANCE_API_SECRET from .local/binance.env (or the
