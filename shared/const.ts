@@ -35,6 +35,25 @@ export const TIME_FRAMES = [
 
 export type TimeFrame = (typeof TIME_FRAMES)[number];
 
+export const SYNC_ERROR_CODES = [
+  "invalid_key",
+  "permissions_changed",
+  "futures_unreadable",
+  "clock_skew",
+  "rate_limited",
+  "exchange_unavailable",
+  "network",
+  "unknown",
+] as const;
+
+export type SyncErrorCode = (typeof SYNC_ERROR_CODES)[number];
+
+export const TRANSIENT_SYNC_ERROR_CODES = [
+  "rate_limited",
+  "exchange_unavailable",
+  "network",
+] as const satisfies readonly SyncErrorCode[];
+
 export const ALLOWED_TRANSITIONS: Record<TradeStatus, TradeStatus | null> = {
   open: "closed",
   closed: "reviewed",
