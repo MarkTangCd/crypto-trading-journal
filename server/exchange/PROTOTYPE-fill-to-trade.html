@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PROTOTYPE · fill → trade reconstruction</title>
+<style>
+  :root { --ink:#2e2e2e; --paper:#fbfbfb; --mute:#777; --line:#ddd; --accent:#1f5a3a; --loss:#8b2d1e; --win:#1f5a3a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font:14px/1.5 "IBM Plex Mono", ui-monospace, Menlo, monospace; }
+  main { max-width:1180px; margin:0 auto; padding:32px 24px 80px; }
+  h1 { font-size:20px; font-weight:500; margin:0 0 8px; }
+  h2 { font-size:12px; font-weight:500; text-transform:lowercase; color:var(--mute); letter-spacing:.04em; margin:36px 0 12px; border-bottom:1px solid var(--line); padding-bottom:6px; }
+  p { margin:0 0 10px; max-width:860px; }
+  .intro { color:#444; }
+  .warn { color:var(--loss); }
+  table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; font-size:13px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; white-space:nowrap; }
+  th { color:var(--mute); font-weight:500; text-transform:lowercase; }
+  td.num, th.num { text-align:right; }
+  .win { color:var(--win); } .loss { color:var(--loss); } .mute { color:var(--mute); }
+  .tag { display:inline-block; border:1px solid var(--line); padding:0 6px; font-size:11px; color:var(--mute); margin-right:4px; }
+  .tag.flag { border-color:var(--loss); color:var(--loss); }
+  button { font:inherit; background:#fff; color:var(--ink); border:1px solid var(--ink); padding:6px 12px; cursor:pointer; margin:0 8px 8px 0; }
+  button:hover { background:var(--ink); color:#fff; }
+  button.done { border-color:var(--line); color:var(--mute); }
+  button.next { border-color:var(--accent); color:var(--accent); font-weight:500; }
+  button.ghost { border-color:var(--line); color:var(--mute); }
+  .tabs { display:flex; flex-wrap:wrap; gap:0; border-bottom:1px solid var(--line); margin-bottom:16px; }
+  .tabs button { border:none; border-bottom:2px solid transparent; margin:0; padding:8px 12px; }
+  .tabs button:hover { background:none; color:var(--accent); }
+  .tabs button.active { border-bottom-color:var(--accent); color:var(--accent); }
+  .grid { display:grid; grid-template-columns: 1fr 1fr; gap:24px; }
+  .panel { border:1px solid var(--line); padding:12px 14px; }
+  .panel h3 { margin:0 0 8px; font-size:12px; font-weight:500; color:var(--mute); }
+  pre { margin:0; font:12px/1.45 inherit; white-space:pre-wrap; }
+  label { display:inline-block; margin:0 10px 8px 0; font-size:12px; color:var(--mute); }
+  input, select { font:inherit; border:1px solid var(--line); background:#fff; padding:4px 6px; width:120px; }
+  input.short { width:70px; }
+  .log li { margin-bottom:2px; }
+  .log .changed { color:var(--accent); }
+  details { margin-top:8px; }
+  summary { cursor:pointer; color:var(--mute); font-size:12px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>fill → trade reconstruction <span class="tag flag">prototype · throwaway</span></h1>
+  <p class="intro"><strong>Question.</strong> Does "a Trade is one position round-trip on one symbol and one side, scale-ins and partial exits folded into weighted-average entry/exit" survive contact with realistic Binance USDⓈ-M fills? The model under test is a journal state <code>{ fills, seeds, trades, cursors }</code> and one action, <strong>sync</strong>, which takes an exchange snapshot (new fills from <code>userTrades</code>, open positions from <code>positionRisk</code>, conditional orders from <code>openAlgoOrders</code>, a BNBUSDT 1-minute price table) and returns the next journal state. Trades are <em>rebuilt from stored fills on every sync</em>; nothing is accumulated on the trade row itself. Watch for: weighted averages, the flip split, hedge mode, positions that began before the 30-day window, BNB fees, the SL/TP snapshot freezing at close, and re-syncing the same data twice.</p>
+  <p class="intro">Time shown as UTC+8. Window start = 30 days before "now". Numbers are fixtures, not real market data.</p>
+
+  <h2>current state</h2>
+  <div id="trades"></div>
+  <div class="grid" style="margin-top:16px">
+    <div class="panel"><h3>last sync</h3><ul class="log" id="log"></ul></div>
+    <div class="panel"><h3>cursors · seeds · stored fills</h3><pre id="meta"></pre></div>
+  </div>
+
+  <h2>guided walkthroughs</h2>
+  <div class="tabs" id="tabs"></div>
+  <p id="scenario-blurb"></p>
+  <div id="scenario-steps"></div>
+
+  <h2>free play</h2>
+  <p class="mute">Queue fills, set the exchange's open positions / conditional orders, then press <em>sync</em>. Fills are keyed by the id you give them: reuse an id to prove idempotency.</p>
+  <div>
+    <label>symbol <input id="f-symbol" value="BTCUSDT" class="short"></label>
+    <label>positionSide <select id="f-ps"><option>BOTH</option><option>LONG</option><option>SHORT</option></select></label>
+    <label>side <select id="f-side"><option>BUY</option><option>SELL</option></select></label>
+    <label>price <input id="f-price" value="100000" class="short"></label>
+    <label>qty <input id="f-qty" value="0.1" class="short"></label>
+    <label>realizedPnl <input id="f-pnl" value="0" class="short"></label>
+    <label>fee <input id="f-fee" value="2" class="short"></label>
+    <label>asset <select id="f-asset"><option>USDT</option><option>BNB</option></select></label>
+    <label>fill id <input id="f-id" value="900001" class="short"></label>
+    <label>minutes from now <input id="f-min" value="-60" class="short"></label>
+  </div>
+  <button onclick="FP.queueFill()">queue fill</button>
+  <button onclick="FP.setAlgo()">set SL/TP from inputs →</button>
+  <label>SL trigger <input id="a-sl" value="" class="short"></label>
+  <label>TP trigger <input id="a-tp" value="" class="short"></label>
+  <label>for symbol/positionSide above, closePosition=true</label>
+  <br>
+  <button onclick="FP.sync()">sync</button>
+  <button onclick="FP.resync()">re-sync the same snapshot</button>
+  <button class="ghost" onclick="FP.reset()">reset journal</button>
+  <pre id="pending" class="mute"></pre>
+</main>
+
+<script>
+// =====================================================================
+// PURE MODULE — liftable. No DOM below this line until the next banner.
+// Shape: applySync(journal, snapshot) -> journal. Everything derived
+// (trades, cursors) is recomputed from the stored fills + seeds.
+// =====================================================================
+const ExchangeSync = (() => {
+  const DAY = 86400000;
+  const dirOf = side => (side === "BUY" ? 1 : -1);
+  const keyOf = f => `${f.symbol}|${f.positionSide}`;
+  const r8 = n => Math.round(n * 1e8) / 1e8;
+
+  function feeToUsdt(fill, bnbUsdt) {
+    const c = Number(fill.commission);
+    if (fill.commissionAsset === "USDT") return c;
+    if (fill.commissionAsset === "BNB") {
+      const minute = Math.floor(fill.time / 60000) * 60000;
+      const px = bnbUsdt[minute];
+      if (px == null) throw new Error(`no BNBUSDT 1m kline at ${new Date(minute).toISOString()}`);
+      return c * px;
+    }
+    throw new Error(`unsupported fee asset ${fill.commissionAsset}`);
+  }
+
+  function createJournal(now) {
+    return { now, windowStart: now - 30 * DAY, fills: [], seeds: null, trades: [], cursors: {}, syncCount: 0, lastSyncAt: null, log: [] };
+  }
+
+  // A seed is the position that existed at windowStart, per (symbol, positionSide).
+  // startAmt = amtNow - Σ signed window fills. Entry price is back-solved: from the
+  // first reducing fill's realizedPnl if any (exact: Binance computes realizedPnl
+  // against the average entry), else from positionRisk.entryPrice minus window adds.
+  function computeSeeds(fills, positions, windowStart) {
+    const byKey = {};
+    for (const f of fills) (byKey[keyOf(f)] ||= []).push(f);
+    const posByKey = {};
+    for (const p of positions) {
+      const amt = Number(p.positionAmt);
+      const signed = p.positionSide === "SHORT" ? -Math.abs(amt) : p.positionSide === "LONG" ? Math.abs(amt) : amt;
+      posByKey[`${p.symbol}|${p.positionSide}`] = { ...p, signed };
+    }
+    const keys = new Set([...Object.keys(byKey), ...Object.keys(posByKey)]);
+    const seeds = {};
+    for (const key of keys) {
+      const kf = (byKey[key] || []).slice().sort((a, b) => a.time - b.time || a.id - b.id);
+      const pos = posByKey[key];
+      const amtNow = pos ? pos.signed : 0;
+      const sumFills = kf.reduce((s, f) => s + dirOf(f.side) * Number(f.qty), 0);
+      const startAmt = r8(amtNow - sumFills);
+      if (startAmt === 0) continue;
+      const dir = startAmt > 0 ? 1 : -1;
+      const startQty = Math.abs(startAmt);
+      // walk forward until the first fill that reduces the seeded position
+      let addQty = 0, addNotional = 0, entryStart = null, method;
+      for (const f of kf) {
+        const q = Number(f.qty), px = Number(f.price);
+        if (dirOf(f.side) === dir) { addQty += q; addNotional += px * q; continue; }
+        const avgAtReduce = px - dir * Number(f.realizedPnl) / q;          // realizedPnl = dir*(px-avg)*q
+        entryStart = (avgAtReduce * (startQty + addQty) - addNotional) / startQty;
+        method = `back-solved from realizedPnl of fill ${f.id}`;
+        break;
+      }
+      if (entryStart == null && pos) {
+        entryStart = (Number(pos.entryPrice) * Math.abs(amtNow) - addNotional) / startQty;
+        method = "back-solved from positionRisk.entryPrice minus window adds";
+      }
+      const [symbol, positionSide] = key.split("|");
+      seeds[key] = { symbol, positionSide, side: dir > 0 ? "long" : "short", qty: startQty, entryPrice: entryStart, method, openTime: windowStart, updateTime: pos ? pos.updateTime : null };
+    }
+    return seeds;
+  }
+
+  function newTrade(id, symbol, positionSide, side, openTime, approx) {
+    return { id, symbol, positionSide, side, dir: side === "long" ? 1 : -1, status: "open", openTime, openTimeApprox: approx, closeTime: null,
+             entryQty: 0, entryNotional: 0, exitQty: 0, exitNotional: 0, feeUsd: 0, pnlFills: 0, remaining: 0, fillIds: [], sl: null, tp: null, feeUnknownBeforeWindow: approx };
+  }
+
+  function foldKey(key, fills, seed, bnbUsdt, errors) {
+    const trades = [];
+    let t = null;
+    if (seed) {
+      t = newTrade(`${key}#seed@${seed.openTime}`, seed.symbol, seed.positionSide, seed.side, seed.openTime, true);
+      t.entryQty = seed.qty; t.entryNotional = seed.entryPrice * seed.qty; t.remaining = seed.qty;
+    }
+    const sorted = fills.slice().sort((a, b) => a.time - b.time || a.id - b.id);
+    for (const f of sorted) {
+      const fillDir = dirOf(f.side);
+      let qty = Number(f.qty), px = Number(f.price);
+      const feeUsd = feeToUsdt(f, bnbUsdt);
+      if (!t) {
+        if (f.positionSide === "LONG" && fillDir < 0 || f.positionSide === "SHORT" && fillDir > 0) {
+          errors.push(`fill ${f.id}: ${f.side} on ${f.positionSide} with no open position — reduce without position (hedge mode); fill skipped`);
+          continue;
+        }
+        t = newTrade(`${key}#${f.id}`, f.symbol, f.positionSide, fillDir > 0 ? "long" : "short", f.time, false);
+      }
+      if (fillDir === t.dir) {                       // scale-in
+        t.entryQty += qty; t.entryNotional += px * qty; t.remaining += qty; t.feeUsd += feeUsd; t.fillIds.push(f.id);
+        continue;
+      }
+      const closeQty = Math.min(qty, t.remaining);  // reduce / close / flip
+      const share = closeQty / qty;
+      t.exitQty += closeQty; t.exitNotional += px * closeQty; t.remaining = r8(t.remaining - closeQty);
+      t.pnlFills += Number(f.realizedPnl);          // the opening half of a flip has no realizedPnl
+      t.feeUsd += feeUsd * share; t.fillIds.push(f.id);
+      if (t.remaining > 0) continue;
+      t.status = "closed"; t.closeTime = f.time; trades.push(t); t = null;
+      const rest = r8(qty - closeQty);              // r8: float residue (0.3-0.1) must not open a phantom flip; production uses fixed-point strings
+      if (rest > 0) {                               // flip: remainder opens the opposite trade
+        if (f.positionSide !== "BOTH") { errors.push(`fill ${f.id}: over-reduce on ${f.positionSide}; exchange should have rejected this`); continue; }
+        t = newTrade(`${key}#${f.id}+flip`, f.symbol, f.positionSide, fillDir > 0 ? "long" : "short", f.time, false);
+        t.entryQty = rest; t.entryNotional = px * rest; t.remaining = rest; t.feeUsd = feeUsd * (1 - share); t.fillIds.push(f.id);
+      }
+    }
+    if (t) trades.push(t);
+    return trades;
+  }
+
+  // SL/TP snapshot for one open trade from the current openAlgoOrders rows.
+  function pickSlTp(t, algoOrders) {
+    const mine = algoOrders.filter(o => o.algoStatus === "NEW" && o.symbol === t.symbol && o.positionSide === t.positionSide && dirOf(o.side) === -t.dir);
+    const pick = (list, nearest) => {
+      if (!list.length) return null;
+      const full = list.filter(o => o.closePosition);
+      const pool = full.length ? full : list;
+      return pool.map(o => Number(o.triggerPrice)).reduce(nearest);
+    };
+    const sls = mine.filter(o => o.orderType === "STOP_MARKET" || o.orderType === "STOP");
+    const tps = mine.filter(o => o.orderType === "TAKE_PROFIT_MARKET" || o.orderType === "TAKE_PROFIT");
+    return {
+      sl: pick(sls, t.dir > 0 ? (a, b) => Math.max(a, b) : (a, b) => Math.min(a, b)),
+      tp: pick(tps, t.dir > 0 ? (a, b) => Math.min(a, b) : (a, b) => Math.max(a, b)),
+    };
+  }
+
+  function finalize(t) {
+    const entryPrice = t.entryQty ? t.entryNotional / t.entryQty : null;
+    const exitPrice = t.exitQty ? t.exitNotional / t.exitQty : null;
+    const pnlCheck = exitPrice != null ? t.dir * (exitPrice - entryPrice) * t.exitQty : 0;
+    return { ...t, entryPrice, exitPrice, quantity: t.entryQty, positionSizeUsdt: t.entryNotional,
+             realizedPnlUsd: t.pnlFills - t.feeUsd, pnlCheck, pnlDiff: t.pnlFills - pnlCheck };
+  }
+
+  // snapshot = { fills, positions, algoOrders, bnbUsdt, at }
+  function applySync(journal, snapshot) {
+    const log = [], errors = [];
+    const known = new Set(journal.fills.map(f => `${f.symbol}|${f.id}`));
+    const fresh = snapshot.fills.filter(f => !known.has(`${f.symbol}|${f.id}`));
+    const dupes = snapshot.fills.length - fresh.length;
+    const fills = journal.fills.concat(fresh);
+    log.push(`${fresh.length} new fill(s) stored, ${dupes} already known (skipped by fill id)`);
+
+    let seeds = journal.seeds;
+    if (seeds == null) {                             // backfill: first sync only
+      seeds = computeSeeds(fills, snapshot.positions, journal.windowStart);
+      const n = Object.keys(seeds).length;
+      log.push(n ? `backfill: ${n} position(s) existed at window start → seeded with approximate open time` : "backfill: no position predates the window");
+    }
+
+    const byKey = {};
+    for (const f of fills) (byKey[keyOf(f)] ||= []).push(f);
+    for (const k of Object.keys(seeds)) byKey[k] ||= [];
+    const prev = new Map(journal.trades.map(t => [t.id, t]));
+    let trades = [];
+    for (const [key, kf] of Object.entries(byKey)) trades = trades.concat(foldKey(key, kf, seeds[key], snapshot.bnbUsdt, errors));
+    trades.sort((a, b) => a.openTime - b.openTime || a.id.localeCompare(b.id));
+
+    for (const t of trades) {
+      const was = prev.get(t.id);
+      if (t.status === "open") {                     // snapshot now
+        const { sl, tp } = pickSlTp(t, snapshot.algoOrders);
+        if (was && (was.sl !== sl || was.tp !== tp)) log.push(`${t.symbol} ${t.side}: SL/TP refreshed ${fmt(was.sl)}/${fmt(was.tp)} → ${fmt(sl)}/${fmt(tp)}`);
+        t.sl = sl; t.tp = tp;
+      } else {                                        // frozen at close: keep the last snapshot taken while open
+        t.sl = was ? was.sl : null; t.tp = was ? was.tp : null;
+        if (!was) log.push(`${t.symbol} ${t.side} first seen already closed → SL/TP null (hand-editable)`);
+        else if (was.status === "open") log.push(`${t.symbol} ${t.side} closed; SL/TP frozen at ${fmt(t.sl)}/${fmt(t.tp)}`);
+      }
+      if (!was) log.push(`new trade ${t.id} (${t.status})`);
+      else if (was.status === "open" && t.status === "closed") log.push(`trade ${t.id} open → closed`);
+    }
+    for (const p of journal.trades) if (!trades.find(t => t.id === p.id)) log.push(`trade ${p.id} disappeared after rebuild — would orphan its AI conversation`);
+
+    const cursors = {};
+    for (const f of fills) cursors[f.symbol] = Math.max(cursors[f.symbol] || 0, f.time);
+    for (const e of errors) log.push(`ERROR ${e}`);
+    return { ...journal, fills, seeds, trades: trades.map(finalize), cursors, syncCount: journal.syncCount + 1, lastSyncAt: snapshot.at, log };
+  }
+
+  const fmt = v => (v == null ? "—" : String(v));
+  return { createJournal, applySync, DAY };
+})();
+
+// =====================================================================
+// PAGE SHELL — throwaway. Fixtures, scenarios, rendering.
+// =====================================================================
+const NOW = Date.UTC(2026, 10, 4, 12, 0, 0);      // 2026-11-04 20:00 UTC+8
+const D = ExchangeSync.DAY, H = 3600000, M = 60000;
+const T = (daysAgo, minutes = 0) => NOW - daysAgo * D + minutes * M;
+const fmtT = ms => ms == null ? "—" : new Date(ms + 8 * H).toISOString().replace("T", " ").slice(0, 16);
+const fmtN = (v, d = 2) => v == null || Number.isNaN(v) ? "—" : Number(v).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+const fill = (id, symbol, positionSide, side, price, qty, time, realizedPnl = 0, commission = 0, commissionAsset = "USDT") =>
+  ({ id, symbol, positionSide, side, price, qty, time, realizedPnl, commission, commissionAsset });
+const algo = (symbol, positionSide, side, orderType, triggerPrice, closePosition = true, quantity = "0") =>
+  ({ algoId: Math.random() * 1e9 | 0, algoStatus: "NEW", symbol, positionSide, side, orderType, triggerPrice, closePosition, quantity });
+const snap = (fills, positions = [], algoOrders = [], bnbUsdt = {}, at = NOW) => ({ fills, positions, algoOrders, bnbUsdt, at });
+const BNB = {}; // 1-minute BNBUSDT fixture: 600 at every minute of the last 31 days is overkill; fill on demand
+const bnbAt = (time, px) => { BNB[Math.floor(time / M) * M] = px; return BNB; };
+
+const SCENARIOS = [
+  {
+    title: "scale-in, one exit",
+    blurb: "One-way mode. Two buys at different prices, one SL and one TP set on the exchange, then a single sell closes everything. Watch: entry is the weighted average 99 000, the trade stays one row, SL/TP are read while open and stay on the row after close even though the exchange no longer has those orders.",
+    steps: [
+      { label: "sync: BUY 0.1 @100 000, BUY 0.1 @98 000 · SL 95 000 / TP 105 000 live",
+        snap: () => snap([fill(1, "BTCUSDT", "BOTH", "BUY", 100000, 0.1, T(3), 0, 2), fill(2, "BTCUSDT", "BOTH", "BUY", 98000, 0.1, T(3, 30), 0, 1.96)],
+          [{ symbol: "BTCUSDT", positionSide: "BOTH", positionAmt: "0.2", entryPrice: "99000", updateTime: T(3, 30) }],
+          [algo("BTCUSDT", "BOTH", "SELL", "STOP_MARKET", "95000"), algo("BTCUSDT", "BOTH", "SELL", "TAKE_PROFIT_MARKET", "105000")]) },
+      { label: "sync: SELL 0.2 @104 000 (realizedPnl +1 000) · no algo orders left",
+        snap: () => snap([fill(3, "BTCUSDT", "BOTH", "SELL", 104000, 0.2, T(2), 1000, 4.16)], [], []) },
+    ],
+  },
+  {
+    title: "partial exits",
+    blurb: "Buy 0.3, sell 0.1 then 0.2. Watch: exit price becomes the weighted average 101 333.33, and the PnL check (dir × (exit − entry) × exitQty) equals Σ realizedPnl from fills to the cent. The exchange computes each fill's realizedPnl against the average entry, so the two agree whenever the trade is a full round-trip.",
+    steps: [
+      { label: "sync: BUY 0.3 @100 000", snap: () => snap([fill(11, "ETHUSDT", "BOTH", "BUY", 100000, 0.3, T(5), 0, 6)], [{ symbol: "ETHUSDT", positionSide: "BOTH", positionAmt: "0.3", entryPrice: "100000", updateTime: T(5) }]) },
+      { label: "sync: SELL 0.1 @102 000 (+200)", snap: () => snap([fill(12, "ETHUSDT", "BOTH", "SELL", 102000, 0.1, T(4), 200, 2.04)], [{ symbol: "ETHUSDT", positionSide: "BOTH", positionAmt: "0.2", entryPrice: "100000", updateTime: T(5) }]) },
+      { label: "sync: SELL 0.2 @101 000 (+200)", snap: () => snap([fill(13, "ETHUSDT", "BOTH", "SELL", 101000, 0.2, T(3), 200, 4.04)]) },
+    ],
+  },
+  {
+    title: "flip",
+    blurb: "Long 0.1, then one SELL of 0.3 flips to short 0.2. (Try the free-play variant: run the first step without a positionRisk row and the backfill wrongly seeds a pre-window short — the seed needs positionRisk taken in the same pass as the fills.) Watch: that one fill appears in two trades. The closing part takes all of the fill's realizedPnl (the opening part has none) and 1/3 of its fee; the new short takes 2/3 of the fee and starts at the fill price. Fee is 3 USDT total.",
+    steps: [
+      { label: "sync: BUY 0.1 @100 000 · positionRisk long 0.1", snap: () => snap([fill(21, "BTCUSDT", "BOTH", "BUY", 100000, 0.1, T(6), 0, 2)], [{ symbol: "BTCUSDT", positionSide: "BOTH", positionAmt: "0.1", entryPrice: "100000", updateTime: T(6) }]) },
+      { label: "sync: SELL 0.3 @101 000 (+100, fee 3)", snap: () => snap([fill(22, "BTCUSDT", "BOTH", "SELL", 101000, 0.3, T(5), 100, 3)], [{ symbol: "BTCUSDT", positionSide: "BOTH", positionAmt: "-0.2", entryPrice: "101000", updateTime: T(5) }], [algo("BTCUSDT", "BOTH", "BUY", "STOP_MARKET", "103000")]) },
+      { label: "sync: BUY 0.2 @99 000 (+400) closes the short", snap: () => snap([fill(23, "BTCUSDT", "BOTH", "BUY", 99000, 0.2, T(4), 400, 3.96)]) },
+    ],
+  },
+  {
+    title: "hedge mode",
+    blurb: "Same symbol, LONG and SHORT held at once (positionSide LONG / SHORT instead of BOTH). Watch: two independent trades keyed by (symbol, positionSide). A SELL on the LONG leg reduces the long; a SELL on the SHORT leg opens or adds to the short. Over-reducing a hedge leg cannot flip; the prototype reports it as an error.",
+    steps: [
+      { label: "sync: BUY LONG 0.1 @100 000 · SELL SHORT 0.1 @100 500", snap: () => snap([fill(31, "BTCUSDT", "LONG", "BUY", 100000, 0.1, T(2), 0, 2), fill(32, "BTCUSDT", "SHORT", "SELL", 100500, 0.1, T(2, 5), 0, 2.01)],
+          [{ symbol: "BTCUSDT", positionSide: "LONG", positionAmt: "0.1", entryPrice: "100000", updateTime: T(2) }, { symbol: "BTCUSDT", positionSide: "SHORT", positionAmt: "-0.1", entryPrice: "100500", updateTime: T(2, 5) }],
+          [algo("BTCUSDT", "LONG", "SELL", "STOP_MARKET", "97000"), algo("BTCUSDT", "SHORT", "BUY", "STOP_MARKET", "103000")]) },
+      { label: "sync: SELL LONG 0.1 @101 000 (+100) · BUY SHORT 0.1 @99 500 (+100)", snap: () => snap([fill(33, "BTCUSDT", "LONG", "SELL", 101000, 0.1, T(1), 100, 2.02), fill(34, "BTCUSDT", "SHORT", "BUY", 99500, 0.1, T(1, 10), 100, 1.99)]) },
+    ],
+  },
+  {
+    title: "position older than the window",
+    blurb: "positionRisk reports ETHUSDT long 2.0 at average entry 3 500, but the 30-day window only contains one BUY of 1.0 @3 600. So 1.0 existed before the window at entry (3 500×2 − 3 600)/1 = 3 400. Watch: the seeded trade has openTime = window start with the approximate flag, and its fee before the window is unknown. Then the whole 2.0 is sold; realizedPnl (3 700 − 3 500)×2 = 400 matches the check.",
+    steps: [
+      { label: "backfill: BUY 1.0 @3 600 · positionRisk long 2.0 @3 500", snap: () => snap([fill(41, "ETHUSDT", "BOTH", "BUY", 3600, 1.0, T(10), 0, 1.8)],
+          [{ symbol: "ETHUSDT", positionSide: "BOTH", positionAmt: "2.0", entryPrice: "3500", updateTime: T(10) }], [algo("ETHUSDT", "BOTH", "SELL", "STOP_MARKET", "3300")]) },
+      { label: "sync: SELL 2.0 @3 700 (+400)", snap: () => snap([fill(42, "ETHUSDT", "BOTH", "SELL", 3700, 2.0, T(1), 400, 3.7)]) },
+    ],
+  },
+  {
+    title: "opened before the window, closed inside it",
+    blurb: "No positionRisk row (the position is gone), only a SELL 0.5 @2 000 with realizedPnl −50 in the window. Σ fills = −0.5 and the position now is 0, so 0.5 long existed at window start. Entry is recovered from the exchange's own realizedPnl: 2 000 − (−50)/0.5 = 2 100. Watch: a closed trade with approximate open time and null SL/TP (first seen closed → hand-editable).",
+    steps: [
+      { label: "backfill: SELL 0.5 @2 000 (−50), no open position", snap: () => snap([fill(51, "SOLUSDT", "BOTH", "SELL", 2000, 0.5, T(20), -50, 1)]) },
+    ],
+  },
+  {
+    title: "fee paid in BNB",
+    blurb: "Commission 0.005 BNB on the buy while BNBUSDT was 600, 0.004 BNB on the sell while it was 650. Watch: feeUsd = 3.00 + 2.60, converted inside the adapter from the 1-minute kline at each fill's minute; realizedPnlUsd is net of that.",
+    steps: [
+      { label: "sync: BUY 0.1 @100 000, fee 0.005 BNB (BNB=600)", snap: () => snap([fill(61, "BTCUSDT", "BOTH", "BUY", 100000, 0.1, T(2), 0, 0.005, "BNB")], [{ symbol: "BTCUSDT", positionSide: "BOTH", positionAmt: "0.1", entryPrice: "100000", updateTime: T(2) }], [], bnbAt(T(2), 600)) },
+      { label: "sync: SELL 0.1 @100 500 (+50), fee 0.004 BNB (BNB=650)", snap: () => snap([fill(62, "BTCUSDT", "BOTH", "SELL", 100500, 0.1, T(1), 50, 0.004, "BNB")], [], [], bnbAt(T(1), 650)) },
+    ],
+  },
+  {
+    title: "re-sync with overlap (idempotency)",
+    blurb: "Incremental sync asks for fills from the cursor minus an overlap, so the same fills come back. Watch: the second sync stores 0 new fills, trades are byte-for-byte the same, the trade id (symbol|positionSide#first fill id) does not change, and the cursor stays at the last fill time. Then a moved stop shows the SL refreshing on an open trade.",
+    steps: [
+      { label: "sync: BUY 0.1 @100 000 · SL 95 000", snap: () => snap([fill(71, "BTCUSDT", "BOTH", "BUY", 100000, 0.1, T(1))], [{ symbol: "BTCUSDT", positionSide: "BOTH", positionAmt: "0.1", entryPrice: "100000", updateTime: T(1) }], [algo("BTCUSDT", "BOTH", "SELL", "STOP_MARKET", "95000")]) },
+      { label: "sync again: identical fills · SL 95 000", snap: () => snap([fill(71, "BTCUSDT", "BOTH", "BUY", 100000, 0.1, T(1))], [{ symbol: "BTCUSDT", positionSide: "BOTH", positionAmt: "0.1", entryPrice: "100000", updateTime: T(1) }], [algo("BTCUSDT", "BOTH", "SELL", "STOP_MARKET", "95000")]) },
+      { label: "sync again: identical fills · SL moved to 98 000 + partial TP ladder 103 000 (0.05) / 106 000 (0.05)", snap: () => snap([fill(71, "BTCUSDT", "BOTH", "BUY", 100000, 0.1, T(1))], [{ symbol: "BTCUSDT", positionSide: "BOTH", positionAmt: "0.1", entryPrice: "100000", updateTime: T(1) }],
+          [algo("BTCUSDT", "BOTH", "SELL", "STOP_MARKET", "98000"), algo("BTCUSDT", "BOTH", "SELL", "TAKE_PROFIT_MARKET", "103000", false, "0.05"), algo("BTCUSDT", "BOTH", "SELL", "TAKE_PROFIT_MARKET", "106000", false, "0.05")]) },
+    ],
+  },
+];
+
+let journal = ExchangeSync.createJournal(NOW);
+let activeScenario = 0, stepIndex = 0, lastSnapshot = null;
+
+function render() {
+  const rows = journal.trades.map(t => {
+    const pnl = t.status === "closed" ? t.realizedPnlUsd : null;
+    const tone = pnl == null ? "" : pnl > 0 ? "win" : pnl < 0 ? "loss" : "";
+    const flags = [t.openTimeApprox ? '<span class="tag flag">open time approx.</span>' : "", t.feeUnknownBeforeWindow ? '<span class="tag flag">pre-window fee unknown</span>' : "",
+                   Math.abs(t.pnlDiff) > 0.005 ? `<span class="tag flag">pnl check off by ${fmtN(t.pnlDiff)}</span>` : ""].join("");
+    return `<tr>
+      <td class="mute">${t.id}</td><td>${t.symbol}${t.positionSide !== "BOTH" ? ` <span class="tag">${t.positionSide}</span>` : ""}</td>
+      <td>${t.side}</td><td>${t.status}${t.status === "open" ? ` <span class="mute">(${fmtN(t.remaining, 4)} left)</span>` : ""}</td>
+      <td>${fmtT(t.openTime)}</td><td>${fmtT(t.closeTime)}</td>
+      <td class="num">${fmtN(t.entryPrice)}</td><td class="num">${fmtN(t.exitPrice)}</td><td class="num">${fmtN(t.quantity, 4)}</td>
+      <td class="num">${fmtN(t.positionSizeUsdt)}</td><td class="num">${fmtN(t.feeUsd)}</td>
+      <td class="num ${tone}">${pnl == null ? "—" : (pnl >= 0 ? "+" : "") + fmtN(pnl)}</td>
+      <td class="num mute">${t.exitQty ? fmtN(t.pnlFills) + " / " + fmtN(t.pnlCheck) : "—"}</td>
+      <td class="num">${fmtN(t.sl)}</td><td class="num">${fmtN(t.tp)}</td><td>${flags}<span class="mute">fills ${t.fillIds.join(",")}</span></td></tr>`;
+  }).join("");
+  document.getElementById("trades").innerHTML = journal.trades.length
+    ? `<table><thead><tr><th>trade id</th><th>symbol</th><th>side</th><th>status</th><th>open (utc+8)</th><th>close</th><th class="num">entry</th><th class="num">exit</th><th class="num">qty</th><th class="num">size usdt</th><th class="num">fee usd</th><th class="num">pnl net</th><th class="num">Σ fill pnl / check</th><th class="num">sl</th><th class="num">tp</th><th>notes</th></tr></thead><tbody>${rows}</tbody></table>`
+    : `<p class="mute">no trades yet — ${journal.syncCount ? "synced, but no fills" : "never synced"}.</p>`;
+  document.getElementById("log").innerHTML = journal.log.length ? journal.log.map(l => `<li class="${/new trade|→|frozen|refreshed|ERROR|seeded|disappeared/.test(l) ? "changed" : ""}">${l}</li>`).join("") : "<li class='mute'>—</li>";
+  const seeds = journal.seeds ? Object.values(journal.seeds).map(s => `  ${s.symbol}|${s.positionSide} ${s.side} ${fmtN(s.qty, 4)} @ ${fmtN(s.entryPrice)} (${s.method}); positionRisk.updateTime=${fmtT(s.updateTime)}`).join("\n") : "  (backfill not run)";
+  document.getElementById("meta").textContent =
+    `syncs: ${journal.syncCount}   last: ${fmtT(journal.lastSyncAt)}   window start: ${fmtT(journal.windowStart)}\n` +
+    `cursors (max fill time per symbol):\n${Object.entries(journal.cursors).map(([s, t]) => `  ${s}: ${fmtT(t)}`).join("\n") || "  —"}\n` +
+    `seeds (position at window start):\n${seeds || "  none"}\n` +
+    `stored fills: ${journal.fills.length}`;
+  renderScenario();
+}
+
+function renderScenario() {
+  document.getElementById("tabs").innerHTML = SCENARIOS.map((s, i) => `<button class="${i === activeScenario ? "active" : ""}" onclick="pickScenario(${i})">${s.title}</button>`).join("");
+  const s = SCENARIOS[activeScenario];
+  document.getElementById("scenario-blurb").textContent = s.blurb;
+  document.getElementById("scenario-steps").innerHTML =
+    `<button class="ghost" onclick="startScenario()">start over (resets the journal)</button><br>` +
+    s.steps.map((st, i) => `<button class="${i < stepIndex ? "done" : i === stepIndex ? "next" : ""}" onclick="runStep(${i})">${i + 1}. ${st.label}</button>`).join("<br>");
+}
+function pickScenario(i) { activeScenario = i; startScenario(); }
+function startScenario() { journal = ExchangeSync.createJournal(NOW); stepIndex = 0; render(); }
+function runStep(i) {
+  const s = SCENARIOS[activeScenario].steps[i];
+  apply(s.snap()); stepIndex = Math.max(stepIndex, i + 1); render();
+}
+function apply(snapshot) {
+  lastSnapshot = snapshot;
+  try { journal = ExchangeSync.applySync(journal, snapshot); }
+  catch (e) { journal = { ...journal, log: [`ERROR ${e.message}`] }; }
+}
+
+const FP = (() => {
+  let pending = { fills: [], algoOrders: [], positions: [] };
+  const v = id => document.getElementById(id).value;
+  const show = () => { document.getElementById("pending").textContent = `pending snapshot: ${pending.fills.length} fill(s), ${pending.algoOrders.length} algo order(s)\n` + pending.fills.map(f => `  #${f.id} ${f.symbol} ${f.positionSide} ${f.side} ${f.qty} @ ${f.price} pnl ${f.realizedPnl} fee ${f.commission} ${f.commissionAsset} ${fmtT(f.time)}`).join("\n"); };
+  return {
+    queueFill() {
+      const time = NOW + Number(v("f-min")) * M;
+      pending.fills.push(fill(Number(v("f-id")), v("f-symbol").toUpperCase(), v("f-ps"), v("f-side"), Number(v("f-price")), Number(v("f-qty")), time, Number(v("f-pnl")), Number(v("f-fee")), v("f-asset")));
+      bnbAt(time, 600); document.getElementById("f-id").value = Number(v("f-id")) + 1; show();
+    },
+    setAlgo() {
+      const sym = v("f-symbol").toUpperCase(), ps = v("f-ps");
+      pending.algoOrders = pending.algoOrders.filter(o => !(o.symbol === sym && o.positionSide === ps));
+      const longish = ps === "LONG" || ps === "BOTH"; // free play assumes BOTH means a long is being protected unless side says otherwise
+      if (v("a-sl")) pending.algoOrders.push(algo(sym, ps, longish ? "SELL" : "BUY", "STOP_MARKET", v("a-sl")));
+      if (v("a-tp")) pending.algoOrders.push(algo(sym, ps, longish ? "SELL" : "BUY", "TAKE_PROFIT_MARKET", v("a-tp")));
+      show();
+    },
+    sync() { apply(snap(pending.fills, pending.positions, pending.algoOrders, BNB)); pending = { fills: [], algoOrders: pending.algoOrders, positions: [] }; show(); render(); },
+    resync() { if (lastSnapshot) { apply(lastSnapshot); render(); } },
+    reset() { journal = ExchangeSync.createJournal(NOW); pending = { fills: [], algoOrders: [], positions: [] }; stepIndex = 0; show(); render(); },
+  };
+})();
+
+render();
+</script>
+</body>
+</html>
