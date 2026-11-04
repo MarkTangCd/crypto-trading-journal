@@ -115,3 +115,6 @@ test-results/
 
 # Local-only state (agent master key, etc.)
 .local/
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
