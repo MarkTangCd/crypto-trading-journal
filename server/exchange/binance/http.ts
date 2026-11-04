@@ -72,7 +72,6 @@ export async function signedGet(
   params: Record<string, string> = {},
   options: BinanceHttpOptions = {}
 ): Promise<unknown> {
-  const doFetch = options.fetch ?? fetch;
   const now = options.now ?? Date.now;
   const query = new URLSearchParams({
     ...params,
@@ -80,12 +79,34 @@ export async function signedGet(
     timestamp: String(now()),
   }).toString();
   const url = `${base}${path}?${query}&signature=${sign(query, c.apiSecret)}`;
+  return send(url, path, { "X-MBX-APIKEY": c.apiKey }, options);
+}
+
+/** Unsigned public market-data GET (klines). */
+export async function publicGet(
+  base: string,
+  path: string,
+  params: Record<string, string>,
+  options: BinanceHttpOptions = {}
+): Promise<unknown> {
+  const url = `${base}${path}?${new URLSearchParams(params).toString()}`;
+  return send(url, path, {}, options);
+}
+
+async function send(
+  url: string,
+  path: string,
+  headers: Record<string, string>,
+  options: BinanceHttpOptions
+): Promise<unknown> {
+  const doFetch = options.fetch ?? fetch;
+  const now = options.now ?? Date.now;
 
   let res: Response;
   try {
     res = await doFetch(url, {
       method: "GET",
-      headers: { "X-MBX-APIKEY": c.apiKey },
+      headers,
       signal: AbortSignal.timeout(options.timeoutMs ?? REQUEST_TIMEOUT_MS),
     });
   } catch (error) {

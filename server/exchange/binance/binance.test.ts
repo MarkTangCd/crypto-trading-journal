@@ -320,11 +320,361 @@ describe("createBinanceAdapter.fetchBalance", () => {
   });
 });
 
-describe("createBinanceAdapter unimplemented methods", () => {
-  it("throws not implemented", async () => {
-    const adapter = createBinanceAdapter(options(fakeFetch()));
-    await expect(adapter.fetchPositions(CREDS)).rejects.toThrow(
-      /not implemented/
+const DAY = 24 * 60 * 60 * 1000;
+const T0 = 1_760_000_000_000 - (1_760_000_000_000 % 60_000);
+
+const routeFetch = (routes: Record<string, (url: URL) => unknown>) =>
+  vi.fn<typeof fetch>(async input => {
+    const url = new URL(String(input));
+    const handler = routes[url.pathname];
+    if (!handler) throw new Error(`unexpected ${url.pathname}`);
+    return json(handler(url));
+  });
+
+const requested = (fetchImpl: ReturnType<typeof routeFetch>, path: string) =>
+  fetchImpl.mock.calls
+    .map(([input]) => new URL(String(input)))
+    .filter(url => url.pathname === path)
+    .map(url => Object.fromEntries(url.searchParams));
+
+const incomeRow = (
+  tranId: number,
+  incomeType: string,
+  symbol: string,
+  time: number
+) => ({
+  symbol,
+  incomeType,
+  income: "-0.01000000",
+  asset: "USDT",
+  info: "",
+  time,
+  tranId,
+  tradeId: symbol ? String(tranId) : "",
+});
+
+const tradeRow = (
+  id: number,
+  time: number,
+  commissionAsset = "USDT",
+  commission = "0.04000000"
+) => ({
+  buyer: true,
+  commission,
+  commissionAsset,
+  id,
+  maker: false,
+  orderId: 8_000_000 + id,
+  price: "65000.10",
+  qty: "0.010",
+  quoteQty: "650.001",
+  realizedPnl: "0",
+  side: "BUY",
+  positionSide: "BOTH",
+  symbol: "BTCUSDT",
+  time,
+});
+
+describe("createBinanceAdapter.discoverSymbols", () => {
+  it("pages within a window, crosses the 7-day window boundary and keeps trade-related symbols", async () => {
+    const windowEnd = T0 + 7 * DAY - 1;
+    const fullPage = Array.from({ length: 1000 }, (_, i) =>
+      incomeRow(i + 1, "FUNDING_FEE", "BTCUSDT", T0 + i)
     );
+    const fetchImpl = routeFetch({
+      "/fapi/v1/income": url => {
+        const startTime = Number(url.searchParams.get("startTime"));
+        if (startTime === T0) return fullPage;
+        if (startTime === T0 + 999) {
+          return [
+            incomeRow(1000, "FUNDING_FEE", "BTCUSDT", T0 + 999), // overlap
+            incomeRow(2001, "COMMISSION", "ETHUSDT", T0 + 2 * DAY),
+            incomeRow(2002, "TRANSFER", "", T0 + 3 * DAY),
+            incomeRow(2003, "INSURANCE_CLEAR", "XRPUSDT", T0 + 4 * DAY),
+          ];
+        }
+        return [incomeRow(3001, "REALIZED_PNL", "SOLUSDT", T0 + 7 * DAY + 5)];
+      },
+    });
+    const adapter = createBinanceAdapter(options(fetchImpl));
+
+    const result = await adapter.discoverSymbols(CREDS, T0, T0 + 8 * DAY);
+
+    expect(result.symbols.sort()).toEqual(["BTCUSDT", "ETHUSDT", "SOLUSDT"]);
+    expect(result.maxTime).toBe(T0 + 7 * DAY + 5);
+    expect(
+      requested(fetchImpl, "/fapi/v1/income").map(q => ({
+        startTime: Number(q.startTime),
+        endTime: Number(q.endTime),
+        limit: q.limit,
+        symbol: q.symbol,
+        incomeType: q.incomeType,
+      }))
+    ).toEqual([
+      { startTime: T0, endTime: windowEnd, limit: "1000" },
+      { startTime: T0 + 999, endTime: windowEnd, limit: "1000" },
+      { startTime: T0 + 7 * DAY, endTime: T0 + 8 * DAY, limit: "1000" },
+    ]);
+  });
+
+  it("returns maxTime 0 when there is no income", async () => {
+    const adapter = createBinanceAdapter(
+      options(routeFetch({ "/fapi/v1/income": () => [] }))
+    );
+    expect(await adapter.discoverSymbols(CREDS, T0, T0 + DAY)).toEqual({
+      symbols: [],
+      maxTime: 0,
+    });
+  });
+});
+
+describe("createBinanceAdapter.fetchFills", () => {
+  it("pages by startTime = last time across a window boundary, dedupes by id and maps every field", async () => {
+    const fullPage = Array.from({ length: 1000 }, (_, i) =>
+      tradeRow(i + 1, T0 + i)
+    );
+    const fetchImpl = routeFetch({
+      "/fapi/v1/userTrades": url => {
+        const startTime = Number(url.searchParams.get("startTime"));
+        if (startTime === T0) return fullPage;
+        if (startTime === T0 + 999) return [tradeRow(1000, T0 + 999)];
+        return [tradeRow(5000, T0 + 7 * DAY + 1)];
+      },
+    });
+    const adapter = createBinanceAdapter(options(fetchImpl));
+
+    const fills = await adapter.fetchFills(CREDS, "BTCUSDT", T0, T0 + 8 * DAY);
+
+    expect(fills).toHaveLength(1001);
+    expect(new Set(fills.map(f => f.fillId)).size).toBe(1001);
+    expect(fills[0]).toEqual({
+      fillId: "1",
+      orderId: "8000001",
+      symbol: "BTCUSDT",
+      positionSide: "BOTH",
+      side: "BUY",
+      price: "65000.10",
+      qty: "0.010",
+      realizedPnl: "0",
+      commission: "0.04000000",
+      commissionAsset: "USDT",
+      feeUsd: "0.04000000",
+      time: T0,
+    });
+    expect(
+      requested(fetchImpl, "/fapi/v1/userTrades").map(q => [
+        q.symbol,
+        Number(q.startTime),
+        Number(q.endTime),
+        q.limit,
+      ])
+    ).toEqual([
+      ["BTCUSDT", T0, T0 + 7 * DAY - 1, "1000"],
+      ["BTCUSDT", T0 + 999, T0 + 7 * DAY - 1, "1000"],
+      ["BTCUSDT", T0 + 7 * DAY, T0 + 8 * DAY, "1000"],
+    ]);
+  });
+
+  it("converts BNB commission with the 1m close at the fill's minute and caches per (asset, minute)", async () => {
+    const fetchImpl = routeFetch({
+      "/fapi/v1/userTrades": () => [
+        tradeRow(1, T0 + 1_000, "BNB", "0.00010000"),
+        tradeRow(2, T0 + 59_000, "BNB", "0.00020000"),
+        tradeRow(3, T0 + 61_000, "BNB", "0.00010000"),
+      ],
+      "/fapi/v1/klines": url => {
+        const openTime = Number(url.searchParams.get("startTime"));
+        const close = openTime === T0 ? "600.50" : "601.00";
+        return [
+          [
+            openTime,
+            "600.00",
+            "602.00",
+            "599.00",
+            close,
+            "1234.5",
+            openTime + 59_999,
+            "740000.0",
+            300,
+            "600.0",
+            "360000.0",
+            "0",
+          ],
+        ];
+      },
+    });
+    const adapter = createBinanceAdapter(options(fetchImpl));
+
+    const fills = await adapter.fetchFills(CREDS, "BTCUSDT", T0, T0 + DAY);
+
+    expect(fills.map(f => f.feeUsd)).toEqual(["0.06005", "0.1201", "0.0601"]);
+    expect(requested(fetchImpl, "/fapi/v1/klines")).toEqual([
+      {
+        symbol: "BNBUSDT",
+        interval: "1m",
+        startTime: String(T0),
+        endTime: String(T0 + 59_999),
+        limit: "1",
+      },
+      {
+        symbol: "BNBUSDT",
+        interval: "1m",
+        startTime: String(T0 + 60_000),
+        endTime: String(T0 + 119_999),
+        limit: "1",
+      },
+    ]);
+  });
+
+  it("throws unknown when no kline exists for the fill's minute", async () => {
+    const adapter = createBinanceAdapter(
+      options(
+        routeFetch({
+          "/fapi/v1/userTrades": () => [tradeRow(1, T0, "BNB", "0.0001")],
+          "/fapi/v1/klines": () => [],
+        })
+      )
+    );
+    await expect(
+      adapter.fetchFills(CREDS, "BTCUSDT", T0, T0 + DAY)
+    ).rejects.toMatchObject({ code: "unknown" });
+  });
+});
+
+describe("createBinanceAdapter.fetchPositions", () => {
+  it("keeps non-zero rows with positionAmt signed as reported", async () => {
+    const position = (
+      symbol: string,
+      positionSide: string,
+      positionAmt: string
+    ) => ({
+      symbol,
+      positionSide,
+      positionAmt,
+      entryPrice: "65000.0",
+      breakEvenPrice: "65026.0",
+      markPrice: "65100.0",
+      unRealizedProfit: "1.00",
+      liquidationPrice: "0",
+      isolatedMargin: "0",
+      notional: positionAmt.startsWith("-") ? "-651.00" : "651.00",
+      marginAsset: "USDT",
+      isolatedWallet: "0",
+      initialMargin: "65.1",
+      maintMargin: "2.6",
+      positionInitialMargin: "65.1",
+      openOrderInitialMargin: "0",
+      adl: 1,
+      bidNotional: "0",
+      askNotional: "0",
+      updateTime: T0,
+    });
+    const adapter = createBinanceAdapter(
+      options(
+        routeFetch({
+          "/fapi/v3/positionRisk": () => [
+            position("BTCUSDT", "BOTH", "-0.010"),
+            position("ETHUSDT", "BOTH", "0.000"),
+            position("SOLUSDT", "LONG", "2"),
+          ],
+        })
+      )
+    );
+
+    expect(await adapter.fetchPositions(CREDS)).toEqual([
+      {
+        symbol: "BTCUSDT",
+        positionSide: "BOTH",
+        positionAmt: "-0.010",
+        entryPrice: "65000.0",
+        notional: "-651.00",
+        updateTime: T0,
+      },
+      {
+        symbol: "SOLUSDT",
+        positionSide: "LONG",
+        positionAmt: "2",
+        entryPrice: "65000.0",
+        notional: "651.00",
+        updateTime: T0,
+      },
+    ]);
+  });
+});
+
+describe("createBinanceAdapter.fetchConditionalOrders", () => {
+  it("keeps NEW stop / take-profit orders by triggerPrice and drops trailing stops", async () => {
+    const algo = (
+      algoId: number,
+      orderType: string,
+      overrides: Record<string, unknown> = {}
+    ) => ({
+      algoId,
+      clientAlgoId: `c${algoId}`,
+      algoType: "CONDITIONAL",
+      orderType,
+      symbol: "BTCUSDT",
+      side: "SELL",
+      positionSide: "BOTH",
+      timeInForce: "GTC",
+      quantity: "0.010",
+      algoStatus: "NEW",
+      actualOrderId: "",
+      actualPrice: "0.00000",
+      triggerPrice: "60000.00",
+      price: "59900.00",
+      icebergQuantity: null,
+      selfTradePreventionMode: "EXPIRE_MAKER",
+      workingType: "CONTRACT_PRICE",
+      priceMatch: "NONE",
+      closePosition: false,
+      priceProtect: false,
+      reduceOnly: true,
+      createTime: T0,
+      updateTime: T0,
+      triggerTime: 0,
+      goodTillDate: 0,
+      ...overrides,
+    });
+    const fetchImpl = routeFetch({
+      "/fapi/v1/openAlgoOrders": () => [
+        algo(1, "STOP", { triggerPrice: "60000.00" }),
+        algo(2, "STOP_MARKET", {
+          triggerPrice: "59500.00",
+          closePosition: true,
+          quantity: "0",
+        }),
+        algo(3, "TAKE_PROFIT", { triggerPrice: "70000.00" }),
+        algo(4, "TAKE_PROFIT_MARKET", { triggerPrice: "71000.00" }),
+        algo(5, "TRAILING_STOP_MARKET"),
+        algo(6, "STOP_MARKET", { algoStatus: "TRIGGERING" }),
+      ],
+    });
+    const adapter = createBinanceAdapter(options(fetchImpl));
+
+    const orders = await adapter.fetchConditionalOrders(CREDS, "BTCUSDT");
+
+    expect(requested(fetchImpl, "/fapi/v1/openAlgoOrders")[0].symbol).toBe(
+      "BTCUSDT"
+    );
+    const base = {
+      symbol: "BTCUSDT",
+      positionSide: "BOTH",
+      side: "SELL",
+      closePosition: false,
+      quantity: "0.010",
+    };
+    expect(orders).toEqual([
+      { ...base, kind: "stop", triggerPrice: "60000.00" },
+      {
+        ...base,
+        kind: "stop",
+        triggerPrice: "59500.00",
+        closePosition: true,
+        quantity: "0",
+      },
+      { ...base, kind: "takeProfit", triggerPrice: "70000.00" },
+      { ...base, kind: "takeProfit", triggerPrice: "71000.00" },
+    ]);
   });
 });
