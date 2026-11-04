@@ -16,6 +16,8 @@ import PreTrade from "./pages/PreTrade";
 import Tools from "./pages/Tools";
 import PositionSizeCalculator from "./pages/PositionSizeCalculator";
 import Settings from "./pages/Settings";
+// PROTOTYPE (task-47): dev-only route, remove with the prototype.
+import PrototypeExchangeSync from "./pages/PrototypeExchangeSync";
 
 function Router() {
   return (
@@ -32,6 +34,12 @@ function Router() {
         <Route path="/tools" component={Tools} />
         <Route path="/tools/position-size" component={PositionSizeCalculator} />
         <Route path="/settings" component={Settings} />
+        {import.meta.env.DEV && (
+          <Route
+            path="/prototype/exchange-sync"
+            component={PrototypeExchangeSync}
+          />
+        )}
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>
