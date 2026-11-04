@@ -10,29 +10,34 @@ A solo crypto trader (the project owner). The journal is used in two distinct
 contexts, and the UI must respect both:
 
 - **At the desk, mid-decision** — a position is open or about to open. The
-  trader needs the current account balance, recent consecutive losses, active
-  trading system, win rate, and a fast path to record the new trade. Cognitive
-  load is already high; the interface must subtract from it.
+  trader needs the current account balance, recent consecutive losses, win
+  rate, open exposure, and one press to bring the exchange's facts up to
+  date. Cognitive load is already high; the interface must subtract from it.
 - **Off-market, in review** — the trader is reading their own past trades and
-  writing reflections. The interface should slow the user down, make the
-  numbers undeniable, and reward honest reflection over speed.
+  reflecting on them with the AI review. The interface should slow the user
+  down, make the numbers undeniable, and reward honest reflection over speed.
 
 There is no second persona to design for. The interface can be opinionated to
 the point of being illegible to anyone else; that is a feature.
 
 ## Product Purpose
 
-A crypto trading journal that records each trade with the rule-set (trading
-system + tagged elements) that produced it, then surfaces the resulting
-statistics (win rate, streaks, balance curve, per-system performance) so the
-trader can audit which rules actually work.
+A crypto trading journal that pulls every trade from the exchange through a
+read-only API key, folds the fills into one record per position round-trip,
+and surfaces the resulting statistics (balance, net PnL, win rate, streaks,
+open exposure) so the trader can audit their own behaviour against facts
+they did not type. Nothing about a trade is entered by hand; manual entry,
+rule-set tagging and written reviews were removed deliberately (see
+`backlog/decisions/decision-2`). Reflection happens in the per-trade AI
+review conversation and in Pre-trade.
 
 Success is not "more trades logged." Success is:
 
 1. The trader trusts the numbers on the dashboard enough to act on them
-   (close a losing system, double down on a winning one).
-2. New-trade entry is fast enough that the journal does not lose to "I'll
-   record it later" (which means it is never recorded).
+   (cut size after a streak, stop trading a symbol that bleeds).
+2. Sync is cheap and boring enough that the journal is always current: one
+   press, or simply opening the trade list, and the exchange's facts are
+   on the page.
 3. Reviewing a past trade feels like reading a clear primary source, not
    archaeology through a generic table.
 
@@ -100,6 +105,6 @@ failed.
   crossfade alternative, and the giant-number entrance is suppressed.
 - Win / loss / breakeven must remain distinguishable without color (label,
   position, or shape — color carries the _vibe_, not the _meaning_).
-- Keyboard-complete: new-trade form, review form, and navigation must all be
-  fully operable without a pointer. This trader will reach for the keyboard
-  mid-position.
+- Keyboard-complete: link-account form, sync, the stop / target hand-edit,
+  the AI review conversation, and navigation must all be fully operable
+  without a pointer. This trader will reach for the keyboard mid-position.
