@@ -27,6 +27,11 @@ import {
   goals,
   type Goal,
   type InsertGoal,
+  fills,
+  type Fill,
+  type InsertFill,
+  trades,
+  type Trade,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { ANONYMOUS_OPEN_ID, ANONYMOUS_USER_NAME } from "@shared/const";
@@ -35,6 +40,10 @@ import {
   compare as compareFixedPoint,
   normalize as normalizeFixedPoint,
 } from "./_core/fixedPoint";
+import * as decimal from "./_core/decimal";
+import { decrypt } from "./agents/secrets";
+import type { TradeRecord } from "./exchange/reconstruct";
+import type { SyncErrorCode } from "@shared/const";
 
 const ZERO_DECIMAL = "0.00";
 const CLOSED_TRADE_STATUSES = ["closed", "reviewed"] as const;
@@ -966,6 +975,420 @@ export async function getAccountCount(userId: number): Promise<number> {
     .where(eq(accounts.userId, userId));
 
   return result[0]?.count ?? 0;
+}
+
+export type PublicAccount = Omit<Account, "apiKey" | "apiSecret"> & {
+  apiKeyTail: string | null;
+};
+
+/** Strip key ciphertexts; expose only the last 4 characters of the key. */
+export function toPublicAccount(row: Account): PublicAccount {
+  const { apiKey, apiSecret: _apiSecret, ...rest } = row;
+  return {
+    ...rest,
+    apiKeyTail: apiKey === null ? null : decrypt(apiKey).slice(-4),
+  };
+}
+
+/**
+ * Delete an account with its fills, trades, the trades' conversations and
+ * their messages, atomically.
+ */
+export async function deleteAccountCascade(
+  id: number,
+  userId: number
+): Promise<void> {
+  await runInSqliteTransaction(async db => {
+    const accountTradeIds = db
+      .select({ id: trades.id })
+      .from(trades)
+      .where(and(eq(trades.accountId, id), eq(trades.userId, userId)));
+    const tradeConversationIds = db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.userId, userId),
+          inArray(conversations.tradeId, accountTradeIds)
+        )
+      );
+
+    await db
+      .delete(messages)
+      .where(inArray(messages.conversationId, tradeConversationIds));
+    await db
+      .delete(conversations)
+      .where(
+        and(
+          eq(conversations.userId, userId),
+          inArray(conversations.tradeId, accountTradeIds)
+        )
+      );
+    await db
+      .delete(trades)
+      .where(and(eq(trades.accountId, id), eq(trades.userId, userId)));
+    await db
+      .delete(fills)
+      .where(and(eq(fills.accountId, id), eq(fills.userId, userId)));
+    await db
+      .delete(accounts)
+      .where(and(eq(accounts.id, id), eq(accounts.userId, userId)));
+  });
+}
+
+// ============ Sync state ============
+// Single-statement writes on the shared handle. They open no transaction of
+// their own, so a call made inside runInSqliteTransaction joins it.
+
+export async function writeSyncAttempt(
+  accountId: number,
+  at: number
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(accounts)
+    .set({ lastSyncAttemptAt: at })
+    .where(eq(accounts.id, accountId));
+}
+
+export async function writeSyncFailure(
+  accountId: number,
+  code: SyncErrorCode,
+  retryAt?: number
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(accounts)
+    .set({ lastSyncErrorCode: code, lastSyncRetryAt: retryAt ?? null })
+    .where(eq(accounts.id, accountId));
+}
+
+export async function writeSyncSuccess(
+  accountId: number,
+  data: {
+    balanceUsdt: string;
+    unrealizedPnlUsdt: string;
+    /** Set only by the first backfill. */
+    backfillStart?: number;
+    incomeCursorAt: number;
+    at: number;
+  }
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(accounts)
+    .set({
+      balanceUsdt: data.balanceUsdt,
+      unrealizedPnlUsdt: data.unrealizedPnlUsdt,
+      ...(data.backfillStart === undefined
+        ? {}
+        : { backfillStart: data.backfillStart }),
+      incomeCursorAt: data.incomeCursorAt,
+      lastSyncedAt: data.at,
+      keyVerifiedAt: data.at,
+      lastSyncErrorCode: null,
+      lastSyncRetryAt: null,
+    })
+    .where(eq(accounts.id, accountId));
+}
+
+// ============ Fills ============
+
+/** Insert fills, skipping rows already stored on (accountId, symbol, fillId). */
+export async function insertFills(rows: InsertFill[]): Promise<void> {
+  if (rows.length === 0) return;
+
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.insert(fills).values(rows).onConflictDoNothing();
+}
+
+export async function listFillsByAccount(
+  accountId: number,
+  userId: number
+): Promise<Fill[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(fills)
+    .where(and(eq(fills.accountId, accountId), eq(fills.userId, userId)))
+    .orderBy(asc(fills.time), asc(fills.id));
+}
+
+/** Max stored fill time per symbol; the incremental fetch cursor. */
+export async function getFillCursors(
+  accountId: number
+): Promise<Map<string, number>> {
+  const db = await getDb();
+  if (!db) return new Map();
+
+  const rows = await db
+    .select({ symbol: fills.symbol, time: sql<number>`max(${fills.time})` })
+    .from(fills)
+    .where(eq(fills.accountId, accountId))
+    .groupBy(fills.symbol);
+
+  return new Map(rows.map(row => [row.symbol, row.time]));
+}
+
+// ============ Trades ============
+
+export class TradeEditError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TradeEditError";
+  }
+}
+
+/**
+ * Merge rebuilt trades into the table by tradeKey (spec doc-4 rebuild merge
+ * rules). Rows are never deleted, so conversations keep their tradeId.
+ * Must run inside the caller's runInSqliteTransaction.
+ */
+export async function upsertTradesByTradeKey(
+  accountId: number,
+  userId: number,
+  records: TradeRecord[],
+  syncedAt: number
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const existing = await db
+    .select({ id: trades.id, tradeKey: trades.tradeKey })
+    .from(trades)
+    .where(and(eq(trades.accountId, accountId), eq(trades.userId, userId)));
+  const idByKey = new Map(existing.map(row => [row.tradeKey, row.id]));
+
+  for (const record of records) {
+    const id = idByKey.get(record.tradeKey);
+    if (id === undefined) {
+      await db
+        .insert(trades)
+        .values({ ...record, userId, accountId, syncedAt });
+      continue;
+    }
+
+    idByKey.delete(record.tradeKey);
+    const {
+      openTime: _openTime,
+      openTimeApprox: _openTimeApprox,
+      stopLossPrice,
+      takeProfitPrice,
+      ...rest
+    } = record;
+    // SL/TP follow the live snapshot only while open; a closed record leaves
+    // the stored values alone (frozen at close, or hand-edited since).
+    await db
+      .update(trades)
+      .set({
+        ...rest,
+        ...(record.status === "open" ? { stopLossPrice, takeProfitPrice } : {}),
+        syncedAt,
+      })
+      .where(eq(trades.id, id));
+  }
+
+  for (const tradeKey of Array.from(idByKey.keys())) {
+    console.warn(
+      `[Sync] ${accountId} stored trade ${tradeKey} missing from rebuild; left in place`
+    );
+  }
+}
+
+export async function getTradeById(
+  id: number,
+  userId: number
+): Promise<Trade | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db
+    .select()
+    .from(trades)
+    .where(and(eq(trades.id, id), eq(trades.userId, userId)))
+    .limit(1);
+
+  return result[0];
+}
+
+/** Open trades first, then newest openTime first. */
+export async function listTrades(
+  accountId: number,
+  userId: number,
+  status?: "open" | "closed"
+): Promise<Trade[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(trades)
+    .where(
+      and(
+        eq(trades.accountId, accountId),
+        eq(trades.userId, userId),
+        status === undefined ? undefined : eq(trades.status, status)
+      )
+    )
+    .orderBy(
+      desc(sql`${trades.status} = 'open'`),
+      desc(trades.openTime),
+      desc(trades.id)
+    );
+}
+
+export async function listOpenTradeSymbols(
+  accountId: number
+): Promise<string[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = await db
+    .selectDistinct({ exchangeSymbol: trades.exchangeSymbol })
+    .from(trades)
+    .where(and(eq(trades.accountId, accountId), eq(trades.status, "open")));
+
+  return rows.map(row => row.exchangeSymbol);
+}
+
+/**
+ * Hand edits: SL/TP only on closed trades, openTime only while
+ * openTimeApprox (and it then becomes exact). Throws TradeEditError
+ * otherwise; returns undefined when the trade does not exist.
+ */
+export async function updateTradeByHand(
+  id: number,
+  userId: number,
+  patch: {
+    stopLossPrice?: string | null;
+    takeProfitPrice?: string | null;
+    openTime?: number;
+  }
+): Promise<Trade | undefined> {
+  const trade = await getTradeById(id, userId);
+  if (!trade) return undefined;
+
+  const editsLevels =
+    patch.stopLossPrice !== undefined || patch.takeProfitPrice !== undefined;
+  if (editsLevels && trade.status !== "closed") {
+    throw new TradeEditError(
+      "Stop loss / take profit are editable only once closed"
+    );
+  }
+  if (patch.openTime !== undefined && !trade.openTimeApprox) {
+    throw new TradeEditError("Open time is editable only while approximate");
+  }
+
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(trades)
+    .set({
+      ...patch,
+      ...(patch.openTime === undefined ? {} : { openTimeApprox: false }),
+      updatedAt: new Date(),
+    })
+    .where(and(eq(trades.id, id), eq(trades.userId, userId)));
+
+  return getTradeById(id, userId);
+}
+
+const RATIO_SCALE = 4;
+const MONEY_SCALE = 2;
+
+export interface TradeStats {
+  closedCount: number;
+  winCount: number;
+  lossCount: number;
+  breakevenCount: number;
+  /** wins / closed; null with no closed trades */
+  winRate: string | null;
+  /** gross profit / gross loss; null with no losses */
+  profitFactor: string | null;
+  /** mean realizedPnlUsd per closed trade; null with no closed trades */
+  expectancyUsd: string | null;
+  /** closed trades newest-first by closeTime until the first non-loss */
+  losingStreak: number;
+  /** all trades, open rows included (partial exits, fees) */
+  realizedPnlUsd: string;
+  feeUsd: string;
+  openCount: number;
+  /** Σ positionSizeUsdt of open trades */
+  openExposureUsdt: string;
+  /** openExposureUsdt / balanceUsdt; null when balance is null or zero */
+  exposureRatio: string | null;
+}
+
+/** Per-account stats derived from trades; outcome from realizedPnlUsd sign. */
+export async function getTradeStats(
+  accountId: number,
+  userId: number
+): Promise<TradeStats> {
+  const account = await getAccountById(accountId, userId);
+  const rows = await listTrades(accountId, userId);
+
+  const closed = rows
+    .filter(row => row.status === "closed")
+    .sort((a, b) => (b.closeTime ?? 0) - (a.closeTime ?? 0) || b.id - a.id);
+  const open = rows.filter(row => row.status === "open");
+
+  const wins = closed.filter(
+    row => decimal.compare(row.realizedPnlUsd, "0") > 0
+  );
+  const losses = closed.filter(row => decimal.isNegative(row.realizedPnlUsd));
+  const grossProfit = decimal.add(wins.map(row => row.realizedPnlUsd));
+  const grossLoss = decimal.abs(
+    decimal.add(losses.map(row => row.realizedPnlUsd))
+  );
+  const closedPnl = decimal.add(closed.map(row => row.realizedPnlUsd));
+
+  let losingStreak = 0;
+  for (const row of closed) {
+    if (!decimal.isNegative(row.realizedPnlUsd)) break;
+    losingStreak += 1;
+  }
+
+  const openExposureUsdt = decimal.add(open.map(row => row.positionSizeUsdt));
+  const balance = account?.balanceUsdt ?? null;
+
+  return {
+    closedCount: closed.length,
+    winCount: wins.length,
+    lossCount: losses.length,
+    breakevenCount: closed.length - wins.length - losses.length,
+    winRate:
+      closed.length === 0
+        ? null
+        : decimal.div(String(wins.length), String(closed.length), RATIO_SCALE),
+    profitFactor:
+      losses.length === 0
+        ? null
+        : decimal.div(grossProfit, grossLoss, RATIO_SCALE),
+    expectancyUsd:
+      closed.length === 0
+        ? null
+        : decimal.div(closedPnl, String(closed.length), MONEY_SCALE),
+    losingStreak,
+    realizedPnlUsd: decimal.add(rows.map(row => row.realizedPnlUsd)),
+    feeUsd: decimal.add(rows.map(row => row.feeUsd)),
+    openCount: open.length,
+    openExposureUsdt,
+    exposureRatio:
+      balance === null || decimal.isZero(balance)
+        ? null
+        : decimal.div(openExposureUsdt, balance, RATIO_SCALE),
+  };
 }
 
 // ============ Goals ============
