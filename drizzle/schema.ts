@@ -5,6 +5,7 @@ import {
   integer,
   sqliteTable,
   text,
+  uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
 /**
@@ -150,28 +151,217 @@ export type InsertTransaction = typeof transactions.$inferInsert;
 /**
  * Trading accounts - users can have multiple accounts with separate balances and transactions
  */
-export const accounts = sqliteTable("accounts", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  /** Foreign key to users table */
-  userId: integer("userId").notNull(),
-  /** Account nickname e.g., "Main Account", "Swing Trading" */
-  name: text("name").notNull(),
-  /** Optional notes/description */
-  notes: text("notes"),
-  /** Initial balance for this account */
-  initialBalance: text("initialBalance").notNull().default("0"),
-  /** Record creation timestamp */
-  createdAt: integer("createdAt", { mode: "timestamp_ms" })
-    .default(sql`(unixepoch() * 1000)`)
-    .notNull(),
-  /** Record update timestamp */
-  updatedAt: integer("updatedAt", { mode: "timestamp_ms" })
-    .default(sql`(unixepoch() * 1000)`)
-    .notNull(),
-});
+export const accounts = sqliteTable(
+  "accounts",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** Foreign key to users table */
+    userId: integer("userId").notNull(),
+    /** Account nickname e.g., "Main Account", "Swing Trading" */
+    name: text("name").notNull(),
+    /** Optional notes/description */
+    notes: text("notes"),
+    /** Initial balance for this account */
+    initialBalance: text("initialBalance").notNull().default("0"),
+    /** Exchange the account is linked to; v1 always binance */
+    exchange: text("exchange").$type<"binance">().notNull().default("binance"),
+    /** API key ciphertext from encrypt() in server/agents/secrets.ts */
+    apiKey: text("apiKey"),
+    /** API secret ciphertext, same */
+    apiSecret: text("apiSecret"),
+    /** Last key verification pass - ms timestamp */
+    keyVerifiedAt: integer("keyVerifiedAt", { mode: "number" }),
+    /** USDT wallet balance - text decimal; null until first sync */
+    balanceUsdt: text("balanceUsdt"),
+    /** USDT cross unrealized PnL - text decimal; null until first sync */
+    unrealizedPnlUsdt: text("unrealizedPnlUsdt"),
+    /** Window start of the first backfill - ms; null until first sync */
+    backfillStart: integer("backfillStart", { mode: "number" }),
+    /** Max income time seen, cursor for new-symbol discovery - ms */
+    incomeCursorAt: integer("incomeCursorAt", { mode: "number" }),
+    /** End of the last successful sync - ms */
+    lastSyncedAt: integer("lastSyncedAt", { mode: "number" }),
+    /** Start of the last sync run, success or not - ms */
+    lastSyncAttemptAt: integer("lastSyncAttemptAt", { mode: "number" }),
+    /** Sync error code of the last run; cleared on success */
+    lastSyncErrorCode: text("lastSyncErrorCode"),
+    /** Earliest retry time from Retry-After on rate_limited - ms */
+    lastSyncRetryAt: integer("lastSyncRetryAt", { mode: "number" }),
+    /** Record creation timestamp */
+    createdAt: integer("createdAt", { mode: "timestamp_ms" })
+      .default(sql`(unixepoch() * 1000)`)
+      .notNull(),
+    /** Record update timestamp */
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" })
+      .default(sql`(unixepoch() * 1000)`)
+      .notNull(),
+  },
+  table => [
+    check("accounts_exchange_check", sql`${table.exchange} in ('binance')`),
+  ]
+);
 
 export type Account = typeof accounts.$inferSelect;
 export type InsertAccount = typeof accounts.$inferInsert;
+
+/**
+ * Raw exchange fills plus synthetic seed rows (the position that existed at
+ * backfillStart, per symbol + positionSide). Append-only; trades are rebuilt
+ * from these on every sync.
+ */
+export const fills = sqliteTable(
+  "fills",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** Foreign key to users table */
+    userId: integer("userId").notNull(),
+    /** Foreign key to accounts */
+    accountId: integer("accountId").notNull(),
+    /** exchange = fetched fill, seed = synthetic opening position */
+    source: text("source").$type<"exchange" | "seed">().notNull(),
+    /** Binance userTrades.id as text; seeds use seed@<backfillStart> */
+    fillId: text("fillId").notNull(),
+    /** Binance orderId; null on seeds */
+    orderId: text("orderId"),
+    /** Exchange symbol e.g., BTCUSDT */
+    symbol: text("symbol").notNull(),
+    positionSide: text("positionSide")
+      .$type<"BOTH" | "LONG" | "SHORT">()
+      .notNull(),
+    side: text("side").$type<"BUY" | "SELL">().notNull(),
+    /** Fill price - text decimal */
+    price: text("price").notNull(),
+    /** Base asset quantity - text decimal */
+    qty: text("qty").notNull(),
+    /** Binance realizedPnl - text decimal; 0 on opening fills and seeds */
+    realizedPnl: text("realizedPnl").notNull(),
+    /** Raw commission in commissionAsset - text decimal; 0 on seeds */
+    commission: text("commission").notNull(),
+    /** USDT, BNB, ...; USDT on seeds */
+    commissionAsset: text("commissionAsset").notNull(),
+    /** Commission converted to USDT at fetch time - text decimal */
+    feeUsd: text("feeUsd").notNull(),
+    /** Fill time - ms; seeds use backfillStart */
+    time: integer("time", { mode: "number" }).notNull(),
+    /** Record creation timestamp */
+    createdAt: integer("createdAt", { mode: "timestamp_ms" })
+      .default(sql`(unixepoch() * 1000)`)
+      .notNull(),
+    /** Record update timestamp */
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" })
+      .default(sql`(unixepoch() * 1000)`)
+      .notNull(),
+  },
+  table => [
+    check("fills_source_check", sql`${table.source} in ('exchange', 'seed')`),
+    check(
+      "fills_position_side_check",
+      sql`${table.positionSide} in ('BOTH', 'LONG', 'SHORT')`
+    ),
+    check("fills_side_check", sql`${table.side} in ('BUY', 'SELL')`),
+    uniqueIndex("fills_account_symbol_fill_unique").on(
+      table.accountId,
+      table.symbol,
+      table.fillId
+    ),
+    // Per-symbol fold walks fills in time order.
+    index("fills_account_symbol_time_idx").on(
+      table.accountId,
+      table.symbol,
+      table.time
+    ),
+    index("fills_account_time_idx").on(table.accountId, table.time),
+  ]
+);
+
+export type Fill = typeof fills.$inferSelect;
+export type InsertFill = typeof fills.$inferInsert;
+
+/**
+ * Trades rebuilt from fills on every sync. Rows are matched by tradeKey and
+ * updated in place, never deleted and reinserted, so conversations.tradeId
+ * stays valid.
+ */
+export const trades = sqliteTable(
+  "trades",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** Foreign key to users table */
+    userId: integer("userId").notNull(),
+    /** Foreign key to accounts */
+    accountId: integer("accountId").notNull(),
+    /**
+     * <symbol>|<positionSide>#<firstOpeningFillId>, ...#seed@<backfillStart>
+     * or ...#<fillId>+flip. Unique per account.
+     */
+    tradeKey: text("tradeKey").notNull(),
+    /** Copied from the account */
+    exchange: text("exchange").notNull(),
+    /** Exchange symbol e.g., BTCUSDT */
+    exchangeSymbol: text("exchangeSymbol").notNull(),
+    /** Display pair, uppercase; v1 equals exchangeSymbol */
+    symbol: text("symbol").notNull(),
+    positionSide: text("positionSide")
+      .$type<"BOTH" | "LONG" | "SHORT">()
+      .notNull(),
+    side: text("side").$type<"long" | "short">().notNull(),
+    status: text("status").$type<"open" | "closed">().notNull(),
+    /** First opening fill time - ms; written on insert only */
+    openTime: integer("openTime", { mode: "number" }).notNull(),
+    /** True on seeded trades until the trader edits openTime */
+    openTimeApprox: integer("openTimeApprox", { mode: "boolean" }).notNull(),
+    /** Time of the fill that returned the position to 0 - ms */
+    closeTime: integer("closeTime", { mode: "number" }),
+    /** Volume-weighted opening price - text decimal */
+    entryPrice: text("entryPrice").notNull(),
+    /** Volume-weighted closing price - text decimal; null while nothing closed */
+    exitPrice: text("exitPrice"),
+    /** Sum of opening qty (base asset) - text decimal */
+    quantity: text("quantity").notNull(),
+    /** Sum of opening price x qty - text decimal */
+    positionSizeUsdt: text("positionSizeUsdt").notNull(),
+    /** Sum of fill feeUsd - text decimal */
+    feeUsd: text("feeUsd").notNull(),
+    /** Sum of fill realizedPnl minus feeUsd - text decimal */
+    realizedPnlUsd: text("realizedPnlUsd").notNull(),
+    /** From Algo orders while open; frozen at close - text decimal */
+    stopLossPrice: text("stopLossPrice"),
+    /** Same as stopLossPrice */
+    takeProfitPrice: text("takeProfitPrice"),
+    /** Last sync that touched the row - ms */
+    syncedAt: integer("syncedAt", { mode: "number" }).notNull(),
+    /** Record creation timestamp */
+    createdAt: integer("createdAt", { mode: "timestamp_ms" })
+      .default(sql`(unixepoch() * 1000)`)
+      .notNull(),
+    /** Record update timestamp */
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" })
+      .default(sql`(unixepoch() * 1000)`)
+      .notNull(),
+  },
+  table => [
+    check("trades_side_check", sql`${table.side} in ('long', 'short')`),
+    check("trades_status_check", sql`${table.status} in ('open', 'closed')`),
+    uniqueIndex("trades_account_trade_key_unique").on(
+      table.accountId,
+      table.tradeKey
+    ),
+    // Hot path: list/stats are scoped by account + status.
+    index("trades_account_status_idx").on(table.accountId, table.status),
+    // List view orders by openTime (reverse scan for DESC).
+    index("trades_account_open_idx").on(table.accountId, table.openTime),
+    // Account snapshot walks closed trades newest-first by closeTime,
+    // breaking ties on id.
+    index("trades_account_close_id_idx").on(
+      table.accountId,
+      table.closeTime,
+      table.id
+    ),
+  ]
+);
+
+export type Trade = typeof trades.$inferSelect;
+export type InsertTrade = typeof trades.$inferInsert;
 
 /**
  * Trading goal: a short free-text intention the trader commits to for the
@@ -243,8 +433,8 @@ export type InsertPreTrade = typeof preTrades.$inferInsert;
 
 /**
  * AI conversation — either per-trade (review) or per-pre-trade (planning).
- * Exactly one of `transactionId` / `preTradeId` is set; the check constraint
- * enforces XOR so a row can never be orphaned or double-attached.
+ * Exactly one of `transactionId` / `preTradeId` / `tradeId` is set; the check
+ * constraint enforces it so a row can never be orphaned or double-attached.
  */
 export const conversations = sqliteTable(
   "conversations",
@@ -256,6 +446,8 @@ export const conversations = sqliteTable(
     transactionId: integer("transactionId"),
     /** Foreign key to pre_trades table. Null when this is a review thread. */
     preTradeId: integer("preTradeId"),
+    /** Foreign key to trades table. Null unless this is a synced-trade review. */
+    tradeId: integer("tradeId"),
     /** Provider id, e.g. "deepseek" */
     providerId: text("providerId").notNull(),
     /** Model name passed to the provider, e.g. "deepseek-chat" */
@@ -268,10 +460,10 @@ export const conversations = sqliteTable(
       .notNull(),
   },
   table => [
-    // XOR: exactly one attachment id must be non-null on every row.
+    // Exactly one attachment id must be non-null on every row.
     check(
       "conversations_attachment_xor_check",
-      sql`(${table.transactionId} is not null) <> (${table.preTradeId} is not null)`
+      sql`(${table.transactionId} is not null) + (${table.preTradeId} is not null) + (${table.tradeId} is not null) = 1`
     ),
     // Lookup: open/get-or-create scans by (userId, transactionId).
     index("conversations_user_transaction_idx").on(
@@ -283,6 +475,8 @@ export const conversations = sqliteTable(
       table.userId,
       table.preTradeId
     ),
+    // Lookup: open/get-or-create scans by (userId, tradeId).
+    index("conversations_user_trade_idx").on(table.userId, table.tradeId),
   ]
 );
 
