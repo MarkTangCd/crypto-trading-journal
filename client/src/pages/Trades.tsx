@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { SyncLine } from "@/components/sync/SyncLine";
 import { useAccount } from "@/contexts/AccountContext";
-import { useSyncAccount } from "@/hooks/useSyncAccount";
+import { useAutoSync, useSyncAccount } from "@/hooks/useSyncAccount";
 import {
   SectionHeader,
   fmtDate,
@@ -15,8 +15,6 @@ import { cn } from "@/lib/utils";
 import { utc8Parts } from "@shared/time";
 import type { Trade } from "@shared/types";
 import { Loader2 } from "lucide-react";
-import { useEffect } from "react";
-import { toast } from "sonner";
 import { Link } from "wouter";
 
 const hhmm = (ts: number) => fmtDateTime(ts).slice(-5);
@@ -83,23 +81,8 @@ function groupByCloseDay(closed: Trade[]): [string, Trade[]][] {
 
 export default function Trades() {
   const { selectedAccount, isLoading: isAccountLoading } = useAccount();
-  const utils = trpc.useUtils();
   const sync = useSyncAccount();
-
-  const { mutate: runAutoSync } = trpc.account.autoSync.useMutation({
-    onSuccess: () => {
-      utils.account.invalidate();
-      utils.trade.invalidate();
-      utils.stats.invalidate();
-    },
-    onError: error => {
-      toast.error(error.message || "auto sync failed");
-    },
-  });
-
-  useEffect(() => {
-    runAutoSync();
-  }, [runAutoSync]);
+  useAutoSync();
 
   const { data: trades, isLoading: isTradesLoading } = trpc.trade.list.useQuery(
     { accountId: selectedAccount?.id ?? 0 },

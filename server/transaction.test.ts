@@ -62,21 +62,6 @@ vi.mock("./db", () => ({
   })),
   deleteTransactionWithElements: vi.fn().mockResolvedValue(undefined),
   getUniqueTradingPairs: vi.fn().mockResolvedValue(["BTCUSDT", "ETHUSDT"]),
-  getStatistics: vi.fn().mockResolvedValue({
-    winCount: 5,
-    lossCount: 3,
-    breakevenCount: 1,
-    winRate: 55.56,
-    totalTrades: 9,
-    avgProfit: 150,
-    avgLoss: 75,
-    totalProfit: 750,
-    totalLoss: 225,
-    totalReward: 525,
-    losingStreak: 2,
-    originalBalance: 10000,
-    latestBalance: 10525,
-  }),
 }));
 
 function createAuthContext(): TrpcContext {
@@ -586,28 +571,5 @@ describe("transaction procedures", () => {
       expect(result).toContain("BTCUSDT");
       expect(result).toContain("ETHUSDT");
     });
-  });
-});
-
-describe("stats procedures", () => {
-  it("returns trading statistics", async () => {
-    const ctx = createAuthContext();
-    const caller = appRouter.createCaller(ctx);
-
-    const result = await caller.stats.get({ accountId: 1 });
-
-    expect(result).toBeDefined();
-    expect(result.winCount).toBe(5);
-    expect(result.lossCount).toBe(3);
-    expect(result.breakevenCount).toBe(1);
-    expect(result.winRate).toBe(55.56);
-    expect(result.totalTrades).toBe(9);
-    expect(result.avgProfit).toBe(150);
-    expect(result.avgLoss).toBe(75);
-    expect(result.totalProfit).toBe(750);
-    expect(result.totalReward).toBe(525);
-    expect(result.losingStreak).toBe(2);
-    expect(result.originalBalance).toBe(10000);
-    expect(result.latestBalance).toBe(10525);
   });
 });

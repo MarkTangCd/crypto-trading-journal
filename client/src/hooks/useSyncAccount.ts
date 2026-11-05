@@ -1,5 +1,6 @@
 import { syncErrorReason } from "@/lib/syncErrors";
 import { trpc } from "@/lib/trpc";
+import { useEffect } from "react";
 import { toast } from "sonner";
 
 /** account.sync with the shared cache refresh and toasts. */
@@ -22,4 +23,23 @@ export function useSyncAccount() {
       toast.error(syncErrorReason(error.message) ?? error.message);
     },
   });
+}
+
+/** account.autoSync once on mount, then refresh what a sync can change. */
+export function useAutoSync() {
+  const utils = trpc.useUtils();
+  const { mutate } = trpc.account.autoSync.useMutation({
+    onSuccess: () => {
+      utils.account.invalidate();
+      utils.trade.invalidate();
+      utils.stats.invalidate();
+    },
+    onError: error => {
+      toast.error(error.message || "auto sync failed");
+    },
+  });
+
+  useEffect(() => {
+    mutate();
+  }, [mutate]);
 }

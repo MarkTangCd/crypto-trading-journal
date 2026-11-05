@@ -8,6 +8,7 @@ vi.mock("./db", () => ({
   TradeEditError: class TradeEditError extends Error {},
   getAccountById: vi.fn(),
   getTradeById: vi.fn(),
+  getTradeStats: vi.fn(),
   listTrades: vi.fn(),
   updateTradeByHand: vi.fn(),
 }));
@@ -170,6 +171,53 @@ describe("Trade Router", () => {
       await expect(
         caller.trade.update({ id: 999, stopLossPrice: "1" })
       ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    });
+  });
+
+  describe("stats.get", () => {
+    const tradeStats: db.TradeStats = {
+      closedCount: 3,
+      winCount: 2,
+      lossCount: 1,
+      breakevenCount: 0,
+      winRate: "0.6667",
+      profitFactor: "3.0000",
+      expectancyUsd: "6.67",
+      losingStreak: 1,
+      realizedPnlUsd: "18.5",
+      feeUsd: "1.5",
+      openCount: 1,
+      openExposureUsdt: "500",
+      exposureRatio: "0.0500",
+    };
+
+    it("returns trade stats with the account's synced balance fields", async () => {
+      vi.mocked(db.getAccountById).mockResolvedValueOnce({
+        id: 1,
+        balanceUsdt: "10000",
+        unrealizedPnlUsdt: "-12.3",
+        lastSyncedAt: 1_700_000_900_000,
+      } as Awaited<ReturnType<typeof db.getAccountById>>);
+      vi.mocked(db.getTradeStats).mockResolvedValueOnce(tradeStats);
+
+      const result = await caller.stats.get({ accountId: 1 });
+
+      expect(db.getTradeStats).toHaveBeenCalledWith(1, 1);
+      expect(result).toEqual({
+        ...tradeStats,
+        balanceUsdt: "10000",
+        unrealizedPnlUsdt: "-12.3",
+        lastSyncedAt: 1_700_000_900_000,
+      });
+    });
+
+    it("rejects an account the user does not own", async () => {
+      vi.mocked(db.getAccountById).mockResolvedValueOnce(undefined);
+
+      await expect(caller.stats.get({ accountId: 2 })).rejects.toMatchObject({
+        code: "FORBIDDEN",
+      });
+      expect(db.getTradeStats).not.toHaveBeenCalled();
     });
   });
 });

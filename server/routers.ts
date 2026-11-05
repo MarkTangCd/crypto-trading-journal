@@ -10,7 +10,6 @@ import {
   closeOpenTransaction,
   deleteTransactionWithElements,
   getAccountSnapshot,
-  getStatistics,
   getUniqueTradingPairs,
   runInSqliteTransaction,
   // Accounts
@@ -24,6 +23,7 @@ import {
   // Trades
   TradeEditError,
   getTradeById,
+  getTradeStats,
   listTrades,
   updateTradeByHand,
   // Pre-trade
@@ -731,7 +731,13 @@ export const appRouter = router({
       .input(z.object({ accountId: z.number() }))
       .query(async ({ ctx, input }) => {
         const account = await requireOwnedAccount(ctx, input.accountId);
-        return getStatistics(account.id, account.initialBalance);
+        const stats = await getTradeStats(account.id, ctx.user.id);
+        return {
+          ...stats,
+          balanceUsdt: account.balanceUsdt,
+          unrealizedPnlUsdt: account.unrealizedPnlUsdt,
+          lastSyncedAt: account.lastSyncedAt,
+        };
       }),
   }),
 

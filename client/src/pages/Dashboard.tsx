@@ -1,11 +1,12 @@
 import { OpenGoals } from "@/components/goals/OpenGoals";
-import { Button } from "@/components/ui/button";
+import { SyncLine } from "@/components/sync/SyncLine";
 import { SectionHeader, type Tone, fmtMoney, toneClass } from "@/lib/ledger";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { useAccount } from "@/contexts/AccountContext";
+import { useAutoSync, useSyncAccount } from "@/hooks/useSyncAccount";
 import { Loader2 } from "lucide-react";
-import { useLocation } from "wouter";
+import { Link } from "wouter";
 
 function Stat({
   label,
@@ -44,19 +45,23 @@ export default function Dashboard() {
   );
 }
 
-// Per-account performance block. Keeps its own loading / error states so the
-// goals strip above renders regardless of account stats.
+const signed = (v: number) => `${v >= 0 ? "+" : "-"}$${fmtMoney(Math.abs(v))}`;
+const pnlTone = (v: number): Tone =>
+  v > 0 ? "win" : v < 0 ? "loss" : undefined;
+
+// Per-account ledger. Keeps its own loading / empty states so the goals strip
+// above renders regardless of account stats.
 function AccountStats() {
-  const [, setLocation] = useLocation();
-  const { selectedAccount } = useAccount();
-  const accountId = selectedAccount?.id;
+  const { selectedAccount, isLoading: isAccountLoading } = useAccount();
+  const sync = useSyncAccount();
+  useAutoSync();
 
   const { data: stats, isLoading } = trpc.stats.get.useQuery(
-    { accountId: accountId! },
-    { enabled: !!accountId }
+    { accountId: selectedAccount?.id ?? 0 },
+    { enabled: selectedAccount !== null }
   );
 
-  if (isLoading) {
+  if (isAccountLoading || (selectedAccount !== null && isLoading)) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Loader2
@@ -64,6 +69,17 @@ function AccountStats() {
           aria-label="loading"
         />
       </div>
+    );
+  }
+
+  if (!selectedAccount) {
+    return (
+      <p className="text-sm text-muted-foreground border-t border-border pt-16">
+        no linked account.{" "}
+        <Link href="/accounts" className="underline underline-offset-4">
+          link one →
+        </Link>
+      </p>
     );
   }
 
@@ -75,104 +91,126 @@ function AccountStats() {
     );
   }
 
-  const balanceChange = stats.latestBalance - stats.originalBalance;
-  const balanceChangePercent =
-    stats.originalBalance > 0
-      ? (balanceChange / stats.originalBalance) * 100
-      : 0;
-
-  const balanceTone: Tone =
-    balanceChange > 0 ? "win" : balanceChange < 0 ? "loss" : undefined;
-
-  // Profit factor uses absolute totals to avoid the asymmetry of avg-based ratios.
-  const profitFactor =
-    stats.totalLoss > 0 ? stats.totalProfit / stats.totalLoss : null;
-
+  const neverSynced = stats.lastSyncedAt === null;
+  const unrealized = parseFloat(stats.unrealizedPnlUsdt ?? "0");
+  const realized = parseFloat(stats.realizedPnlUsd);
+  const winRate =
+    stats.winRate === null ? null : parseFloat(stats.winRate) * 100;
   const expectancy =
-    stats.totalTrades > 0 ? stats.totalReward / stats.totalTrades : 0;
+    stats.expectancyUsd === null ? null : parseFloat(stats.expectancyUsd);
 
   return (
     <div className="space-y-16">
-      {/* Hero: the page anchor. One numeral, one delta, one footnote. */}
+      {/* Hero: the page anchor. Wallet balance as last synced. */}
       <section aria-labelledby="hero-label">
         <p id="hero-label" className="text-label">
           balance
         </p>
-        <p className="text-display mt-2 tabular-nums">
-          ${fmtMoney(stats.latestBalance)}
+        {/* Not cn(): tailwind-merge drops text-display next to a text-* color. */}
+        <p
+          className={`text-display mt-2 tabular-nums ${neverSynced || stats.balanceUsdt === null ? "text-muted-foreground" : ""}`}
+        >
+          {neverSynced || stats.balanceUsdt === null
+            ? "—"
+            : `$${fmtMoney(stats.balanceUsdt)}`}
         </p>
-        {stats.totalTrades > 0 && (
+        {!neverSynced && stats.openCount > 0 && (
           <p
             className={cn(
               "mt-3 text-2xl font-medium tabular-nums",
-              toneClass(balanceTone)
+              toneClass(pnlTone(unrealized))
             )}
           >
-            <span>
-              {balanceChange >= 0 ? "+" : "-"}$
-              {fmtMoney(Math.abs(balanceChange))}
-            </span>
-            <span className="text-muted-foreground mx-3" aria-hidden="true">
-              ·
-            </span>
-            <span>
-              {balanceChangePercent >= 0 ? "+" : ""}
-              {balanceChangePercent.toFixed(2)}%
-            </span>
+            {signed(unrealized)} <span className="text-label">unrealized</span>
           </p>
         )}
-        <p className="text-label mt-4">
-          since ${fmtMoney(stats.originalBalance)}
-        </p>
+        <div className="mt-4">
+          <SyncLine
+            account={selectedAccount}
+            onSync={() => sync.mutate({ id: selectedAccount.id })}
+            isSyncing={sync.isPending}
+          />
+        </div>
       </section>
 
-      {/* Performance ledger: four headline metrics, bracketed by hairlines. */}
-      {stats.totalTrades > 0 && (
-        <section aria-labelledby="perf-label">
-          <SectionHeader id="perf-label">performance</SectionHeader>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-10 pt-8 pb-8 border-b border-border">
-            <Stat
-              label="win rate"
-              value={`${stats.winRate.toFixed(1)}%`}
-              tone={stats.winRate >= 50 ? "win" : "loss"}
-              note={`${stats.winCount} of ${stats.totalTrades}`}
-            />
-            <Stat
-              label="profit factor"
-              value={profitFactor !== null ? profitFactor.toFixed(2) : "n/a"}
-              note="gross profit ÷ gross loss"
-            />
-            <Stat
-              label="expectancy"
-              value={`$${fmtMoney(expectancy)}`}
-              tone={expectancy >= 0 ? "win" : "loss"}
-              note="per trade"
-            />
-            <Stat
-              label="losing streak"
-              value={`${stats.losingStreak}`}
-              tone={stats.losingStreak > 5 ? "loss" : undefined}
-              note="max consecutive"
-            />
-          </div>
-        </section>
-      )}
+      {!neverSynced && (
+        <>
+          <section aria-labelledby="realized-label">
+            <SectionHeader id="realized-label">
+              realized · synced trades
+            </SectionHeader>
+            <p
+              className={cn(
+                "mt-6 text-2xl font-medium tabular-nums",
+                toneClass(pnlTone(realized))
+              )}
+            >
+              {signed(realized)}{" "}
+              <span className="text-label">
+                · fees ${fmtMoney(stats.feeUsd)}
+              </span>
+            </p>
+          </section>
 
-      {/* Empty: no trades at all. */}
-      {stats.totalTrades === 0 && (
-        <section className="border-t border-border pt-16 text-center">
-          <p>no trades recorded.</p>
-          <p className="text-sm text-muted-foreground mt-2">
-            log a trade to start the journal.
-          </p>
-          <Button
-            variant="outline"
-            className="mt-6"
-            onClick={() => setLocation("/transactions/new")}
-          >
-            log a trade
-          </Button>
-        </section>
+          {/* Performance ledger: four headline metrics, bracketed by hairlines. */}
+          <section aria-labelledby="perf-label">
+            <SectionHeader id="perf-label">performance</SectionHeader>
+            {stats.closedCount === 0 ? (
+              <p className="text-sm text-muted-foreground pt-8">
+                no closed trades in the last 30 days.
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-10 pt-8 pb-8 border-b border-border">
+                <Stat
+                  label="win rate"
+                  value={winRate === null ? "n/a" : `${winRate.toFixed(1)}%`}
+                  tone={
+                    winRate === null
+                      ? undefined
+                      : winRate >= 50
+                        ? "win"
+                        : "loss"
+                  }
+                  note={`${stats.winCount} of ${stats.closedCount}`}
+                />
+                <Stat
+                  label="profit factor"
+                  value={
+                    stats.profitFactor === null
+                      ? "n/a"
+                      : parseFloat(stats.profitFactor).toFixed(2)
+                  }
+                  note="gross profit ÷ gross loss"
+                />
+                <Stat
+                  label="expectancy"
+                  value={expectancy === null ? "n/a" : signed(expectancy)}
+                  tone={expectancy === null ? undefined : pnlTone(expectancy)}
+                  note="per trade"
+                />
+                <Stat
+                  label="losing streak"
+                  value={`${stats.losingStreak}`}
+                  tone={stats.losingStreak > 5 ? "loss" : undefined}
+                  note="current"
+                />
+              </div>
+            )}
+          </section>
+
+          {stats.openCount > 0 && (
+            <section aria-labelledby="open-label">
+              <SectionHeader id="open-label">open</SectionHeader>
+              <p className="mt-6 text-sm tabular-nums">
+                {stats.openCount}{" "}
+                {stats.openCount === 1 ? "position" : "positions"} · $
+                {fmtMoney(stats.openExposureUsdt)} exposure
+                {stats.exposureRatio !== null &&
+                  ` · ${parseFloat(stats.exposureRatio).toFixed(2)}× balance`}
+              </p>
+            </section>
+          )}
+        </>
       )}
     </div>
   );
