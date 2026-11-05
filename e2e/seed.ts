@@ -1,10 +1,16 @@
+import { encrypt } from "../server/agents/secrets";
 import { createAccount, getOrCreateAnonymousUser } from "../server/db";
 
-// Seeds the e2e database with one never-synced account. apiKey stays null so
-// the account is ineligible for auto-sync and the smoke never hits Binance.
+// Seeds the e2e database with one never-synced account. The keys are dummies;
+// the smoke stubs account.autoSync so nothing ever reaches Binance.
 async function seed() {
   const user = await getOrCreateAnonymousUser();
-  await createAccount({ userId: user.id, name: "smoke" });
+  await createAccount({
+    userId: user.id,
+    name: "smoke",
+    apiKey: encrypt("e2e-api-key"),
+    apiSecret: encrypt("e2e-api-secret"),
+  });
 }
 
 seed().then(

@@ -1,9 +1,8 @@
-// Mirrors server-side calculatePlannedRiskRewardRatio in server/_core/tradeMath.ts.
-// Keep the two implementations aligned if the server formula changes.
+// Planned risk/reward math for the position size calculator. Client-side only.
 
 export type Direction = "long" | "short" | "";
 
-// Decimal input pattern matching the server's tradeMath parser.
+// Plain positive decimal input, e.g. "0.5" or "42000".
 export const DECIMAL_PATTERN = /^\d+(?:\.\d+)?$/;
 
 export function parsePositiveDecimal(input: string): number | null {

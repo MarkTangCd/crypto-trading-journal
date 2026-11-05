@@ -25,8 +25,7 @@ function runNodeEval(script: string, databaseUrl: string): string {
 function bootstrapSqlite(databaseUrl: string): void {
   const schemaSql =
     "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, openId TEXT NOT NULL UNIQUE, name TEXT, email TEXT, loginMethod TEXT, role TEXT NOT NULL DEFAULT 'user', createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), lastSignedIn INTEGER NOT NULL DEFAULT (unixepoch() * 1000)); " +
-    "CREATE TABLE IF NOT EXISTS accounts (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, notes TEXT, initialBalance TEXT NOT NULL DEFAULT '0', exchange TEXT NOT NULL DEFAULT 'binance', apiKey TEXT, apiSecret TEXT, keyVerifiedAt INTEGER, balanceUsdt TEXT, unrealizedPnlUsdt TEXT, backfillStart INTEGER, incomeCursorAt INTEGER, lastSyncedAt INTEGER, lastSyncAttemptAt INTEGER, lastSyncErrorCode TEXT, lastSyncRetryAt INTEGER, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000)); " +
-    "CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, context TEXT NOT NULL DEFAULT '', tradeItems TEXT NOT NULL DEFAULT '[]', outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, entryPrice TEXT, positionSizeUsdt TEXT, plannedStopLossPrice TEXT, plannedTakeProfitPrice TEXT, plannedRiskRewardRatio TEXT, exitPrice TEXT, tvUrl TEXT, marketCycle TEXT, transactionType TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));";
+    "CREATE TABLE IF NOT EXISTS accounts (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, notes TEXT, exchange TEXT NOT NULL DEFAULT 'binance', apiKey TEXT NOT NULL, apiSecret TEXT NOT NULL, keyVerifiedAt INTEGER, balanceUsdt TEXT, unrealizedPnlUsdt TEXT, backfillStart INTEGER, incomeCursorAt INTEGER, lastSyncedAt INTEGER, lastSyncAttemptAt INTEGER, lastSyncErrorCode TEXT, lastSyncRetryAt INTEGER, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000));";
 
   runNodeEval(
     `const { DatabaseSync } = await import('node:sqlite'); const db = new DatabaseSync(process.env.DATABASE_URL); db.exec(${JSON.stringify(schemaSql)}); db.close(); console.log('bootstrapped');`,
@@ -66,7 +65,7 @@ describe("SQLite Integration Tests", () => {
         JSON.parse(result).filter(
           (table: string) => table !== "sqlite_sequence"
         )
-      ).toEqual(["accounts", "transactions", "users"]);
+      ).toEqual(["accounts", "users"]);
     });
   });
 
@@ -106,7 +105,7 @@ if (!user || user.openId !== "anonymous-user") {
   throw new Error("anonymous-user-not-created");
 }
 
-if (!accountColumns.some(column => column.name === "initialBalance")) {
+if (!accountColumns.some(column => column.name === "apiKey" && column.notnull === 1)) {
   throw new Error("accounts-table-not-migrated");
 }
 
@@ -119,27 +118,39 @@ console.log(JSON.stringify(tables.map(table => table.name)));
       expect(tables).toContain("accounts");
       expect(tables).toContain("users");
       expect(tables).toContain("__drizzle_migrations");
+      expect(tables).not.toContain("transactions");
     });
 
-    it("runs pending migrations when an existing sqlite file is behind", () => {
-      const tempDbPath = join(tmpDir, "task7-existing-migrate.sqlite");
+    it("drops manual-entry data and keyless accounts when migrating past 0012", () => {
+      const tempDbPath = join(tmpDir, "task68-migrate.sqlite");
       if (existsSync(tempDbPath)) {
         rmSync(tempDbPath);
       }
 
-      const legacySchemaSql =
-        "CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, openId TEXT NOT NULL UNIQUE, name TEXT, email TEXT, loginMethod TEXT, role TEXT NOT NULL DEFAULT 'user', createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), lastSignedIn INTEGER NOT NULL DEFAULT (unixepoch() * 1000), initialBalance TEXT DEFAULT '0'); " +
-        "CREATE TABLE accounts (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, notes TEXT, initialBalance TEXT NOT NULL DEFAULT '0', createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000)); " +
-        "CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, accountId INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'open', accountBalance TEXT, tradingPair TEXT NOT NULL, timeFrame TEXT NOT NULL, startTime INTEGER NOT NULL, endTime INTEGER, direction TEXT NOT NULL, tradingLogic TEXT NOT NULL, outcome TEXT, consecutiveLosses INTEGER DEFAULT 0, riskRewardRatio TEXT, returnAmount TEXT, entryPrice TEXT, positionSizeUsdt TEXT, plannedStopLossPrice TEXT, plannedTakeProfitPrice TEXT, plannedRiskRewardRatio TEXT, exitPrice TEXT, tvUrl TEXT, marketCycle TEXT, transactionType TEXT, reviewFeedback TEXT, reviewChartUrl TEXT, createdAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000), updatedAt INTEGER NOT NULL DEFAULT (unixepoch() * 1000)); " +
-        "CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, hash TEXT NOT NULL, created_at NUMERIC);";
-
       const script = `
 const { DatabaseSync } = await import("node:sqlite");
+const { readFileSync } = await import("node:fs");
+
+// Rebuild the schema as of migration 0012, recorded the way the migrator does.
+const journal = JSON.parse(readFileSync("drizzle/meta/_journal.json", "utf-8"));
 const sqlite = new DatabaseSync(process.env.DATABASE_URL);
-sqlite.exec(${JSON.stringify(legacySchemaSql)});
-sqlite.prepare("INSERT INTO users (id, openId, name, loginMethod, role) VALUES (1, 'legacy-user', 'Legacy User', 'anonymous', 'user')").run();
-sqlite.prepare("INSERT INTO transactions (id, userId, accountId, status, tradingPair, timeFrame, startTime, direction, tradingLogic, createdAt, updatedAt) VALUES (1, 1, 1, 'open', 'BTCUSDT', '1H', 1000, 'long', 'legacy thesis', 1000, 1000)").run();
-sqlite.prepare("INSERT INTO __drizzle_migrations (hash, created_at) VALUES ('0005', 1781009465740)").run();
+sqlite.exec("CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, hash TEXT NOT NULL, created_at NUMERIC)");
+for (const entry of journal.entries.filter(entry => entry.idx <= 12)) {
+  const statements = readFileSync("drizzle/" + entry.tag + ".sql", "utf-8").split("--> statement-breakpoint");
+  for (const statement of statements) {
+    if (statement.trim()) sqlite.exec(statement);
+  }
+  sqlite.prepare("INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)").run(entry.tag, entry.when);
+}
+
+sqlite.prepare("INSERT INTO users (id, openId, name, loginMethod) VALUES (1, 'anonymous-user', 'Anonymous User', 'anonymous')").run();
+sqlite.prepare("INSERT INTO accounts (id, userId, name) VALUES (1, 1, 'legacy')").run();
+sqlite.prepare("INSERT INTO accounts (id, userId, name, apiKey, apiSecret) VALUES (2, 1, 'linked', 'key-ct', 'secret-ct')").run();
+sqlite.prepare("INSERT INTO goals (userId, text) VALUES (1, 'size down after two losses')").run();
+sqlite.prepare("INSERT INTO pre_trades (id, userId, tradingPair, primaryTimeFrame, idea) VALUES (1, 1, 'BTCUSDT', '1H', 'range fade')").run();
+sqlite.prepare("INSERT INTO conversations (id, userId, preTradeId, providerId, model) VALUES (1, 1, 1, 'deepseek', 'deepseek-chat')").run();
+sqlite.prepare("INSERT INTO conversations (id, userId, tradeId, providerId, model) VALUES (2, 1, 7, 'deepseek', 'deepseek-chat')").run();
+sqlite.prepare("INSERT INTO messages (conversationId, role, content) VALUES (1, 'user', 'plan'), (2, 'user', 'review')").run();
 sqlite.close();
 
 const { getOrCreateAnonymousUser, closeDb } = await import("./server/db.ts");
@@ -147,22 +158,49 @@ await getOrCreateAnonymousUser();
 closeDb();
 
 const verified = new DatabaseSync(process.env.DATABASE_URL);
-const columns = verified.prepare("PRAGMA table_info(transactions)").all();
-const row = verified.prepare("SELECT context, tradeItems FROM transactions WHERE id = 1").get();
+const names = sql => verified.prepare(sql).all().map(row => row.name);
+const tables = names("select name from sqlite_master where type = 'table'");
+const accountColumns = verified.prepare("PRAGMA table_info(accounts)").all();
+const conversationColumns = names("PRAGMA table_info(conversations)");
+const accountIds = verified.prepare("select id from accounts order by id").all().map(row => row.id);
+const counts = verified.prepare("select (select count(*) from goals) as goals, (select count(*) from pre_trades) as preTrades, (select count(*) from messages) as messages").get();
+const attachments = verified.prepare("select preTradeId, tradeId from conversations order by id").all();
+let unattachedRejected = false;
+try {
+  verified.prepare("INSERT INTO conversations (userId, providerId, model) VALUES (1, 'deepseek', 'deepseek-chat')").run();
+} catch {
+  unattachedRejected = true;
+}
 verified.close();
 
-if (!columns.some(column => column.name === "context")) throw new Error("missing-context-column");
-if (!columns.some(column => column.name === "tradeItems")) throw new Error("missing-tradeItems-column");
-if (!row || row.context !== "legacy thesis" || row.tradeItems !== "[]") {
-  throw new Error("legacy-row-not-backfilled:" + JSON.stringify(row));
-}
-
-console.log("ok");
+console.log(JSON.stringify({
+  hasTransactions: tables.includes("transactions"),
+  hasInitialBalance: accountColumns.some(column => column.name === "initialBalance"),
+  keysNotNull: accountColumns.filter(column => column.name === "apiKey" || column.name === "apiSecret").every(column => column.notnull === 1),
+  hasTransactionId: conversationColumns.includes("transactionId"),
+  accountIds,
+  counts,
+  attachments,
+  unattachedRejected,
+}));
 `;
 
-      const result = runNodeEval(script, tempDbPath);
+      const result = JSON.parse(runNodeEval(script, tempDbPath).trim());
+      rmSync(tempDbPath);
 
-      expect(result).toContain("ok");
+      expect(result).toEqual({
+        hasTransactions: false,
+        hasInitialBalance: false,
+        keysNotNull: true,
+        hasTransactionId: false,
+        accountIds: [2],
+        counts: { goals: 1, preTrades: 1, messages: 2 },
+        attachments: [
+          { preTradeId: 1, tradeId: null },
+          { preTradeId: null, tradeId: 7 },
+        ],
+        unattachedRejected: true,
+      });
     });
   });
 
@@ -259,504 +297,6 @@ console.log("ok");`;
 
       const result = runNodeEval(script, tempDbPath);
 
-      expect(result).toContain("ok");
-    });
-  });
-
-  describe("creates and deletes transactions atomically", () => {
-    const tempDbPath = join(tmpDir, "task5-atomic.sqlite");
-
-    beforeAll(() => {
-      if (!existsSync(tmpDir)) {
-        mkdirSync(tmpDir, { recursive: true });
-      }
-      if (existsSync(tempDbPath)) {
-        rmSync(tempDbPath);
-      }
-      bootstrapSqlite(tempDbPath);
-    });
-
-    afterAll(() => {
-      if (existsSync(tempDbPath)) {
-        rmSync(tempDbPath);
-      }
-    });
-
-    it("creates and deletes transactions", () => {
-      const script = `
-const {
-  upsertUser,
-  createTransactionWithElements,
-  getTransactionById,
-  deleteTransactionWithElements,
-  closeDb,
-} = await import("./server/db.ts");
-const { DatabaseSync } = await import("node:sqlite");
-
-await upsertUser({ openId: "oid-atomic", name: "Atomic User", loginMethod: "oidc" });
-closeDb();
-
-const userLookupDb = new DatabaseSync(process.env.DATABASE_URL);
-const userRow = userLookupDb.prepare("select id from users where openId = ?").get("oid-atomic");
-userLookupDb.close();
-if (!userRow || typeof userRow.id !== "number") throw new Error("missing-user");
-
-const seedAccountsDb = new DatabaseSync(process.env.DATABASE_URL);
-const insertAccount = seedAccountsDb.prepare("insert into accounts (userId, name, notes, initialBalance) values (?, ?, ?, ?)");
-const accountResult = insertAccount.run(userRow.id, "Atomic Account", null, "1000.00");
-seedAccountsDb.close();
-const accountId = Number(accountResult.lastInsertRowid);
-
-await createTransactionWithElements({
-  userId: userRow.id,
-  accountId,
-  accountBalance: "1005.00",
-  tradingPair: "BTCUSD",
-  timeFrame: "1h",
-  startTime: 1700000000000,
-  endTime: 1700003600000,
-  direction: "long",
-  tradingLogic: "test logic",
-  context: "macro compression near range high",
-  tradeItems: ["range high", "failed breakdown", "strong close"],
-  marketCycle: "Trading Range",
-  transactionType: "Trend",
-  outcome: "win",
-  consecutiveLosses: 0,
-  riskRewardRatio: "2.00",
-  returnAmount: "5.00",
-  tvUrl: null,
-});
-
-await createTransactionWithElements({
-  userId: userRow.id,
-  accountId,
-  accountBalance: "1002.50",
-  tradingPair: "ETHUSD",
-  timeFrame: "4h",
-  startTime: 1700007200000,
-  endTime: 1700010800000,
-  direction: "short",
-  tradingLogic: "test logic 2",
-  marketCycle: "Trading Range",
-  transactionType: "Trend",
-  outcome: "breakeven",
-  consecutiveLosses: 0,
-  riskRewardRatio: "1.00",
-  returnAmount: "0.00",
-  tvUrl: null,
-});
-
-closeDb();
-
-const sqlite = new DatabaseSync(process.env.DATABASE_URL);
-const txOne = sqlite.prepare("select id from transactions where userId = ? and tradingPair = ?").get(userRow.id, "BTCUSD");
-const txTwo = sqlite.prepare("select id from transactions where userId = ? and tradingPair = ?").get(userRow.id, "ETHUSD");
-if (!txOne || !txTwo) {
-  sqlite.close();
-  throw new Error("missing-transactions");
-}
-
-const txOneId = Number(txOne.id);
-const txTwoId = Number(txTwo.id);
-if (!Number.isFinite(txOneId) || !Number.isFinite(txTwoId)) {
-  sqlite.close();
-  throw new Error("invalid-transaction-ids");
-}
-sqlite.close();
-
-const reloaded = await getTransactionById(txOneId, userRow.id, accountId);
-if (!reloaded || reloaded.context !== "macro compression near range high") {
-  throw new Error("context-not-persisted");
-}
-if (JSON.stringify(reloaded.tradeItems) !== JSON.stringify(["range high", "failed breakdown", "strong close"])) {
-  throw new Error("trade-items-not-ordered:" + JSON.stringify(reloaded?.tradeItems));
-}
-
-await deleteTransactionWithElements(txOneId, userRow.id);
-await deleteTransactionWithElements(txTwoId, userRow.id);
-closeDb();
-
-const sqliteAfter = new DatabaseSync(process.env.DATABASE_URL);
-const txRows = sqliteAfter.prepare("select count(*) as count from transactions where id in (?, ?)").get(txOneId, txTwoId);
-sqliteAfter.close();
-
-if (!txRows || txRows.count !== 0) throw new Error("transactions-not-deleted");
-console.log("ok");`;
-
-      const result = runNodeEval(script, tempDbPath);
-
-      expect(result).toContain("ok");
-    });
-  });
-
-  describe("task 6 decimal and timestamp behavior", () => {
-    const tempDbPath = join(tmpDir, "task6-behavior.sqlite");
-
-    beforeAll(() => {
-      if (!existsSync(tmpDir)) {
-        mkdirSync(tmpDir, { recursive: true });
-      }
-      if (existsSync(tempDbPath)) {
-        rmSync(tempDbPath);
-      }
-      bootstrapSqlite(tempDbPath);
-    });
-
-    afterAll(() => {
-      if (existsSync(tempDbPath)) {
-        rmSync(tempDbPath);
-      }
-    });
-
-    it("sorts returnAmount numerically", () => {
-      const script = `
-const {
-  upsertUser,
-  createTransactionWithElements,
-  getTransactionsByUserId,
-  closeDb,
-} = await import("./server/db.ts");
-const { DatabaseSync } = await import("node:sqlite");
-
-await upsertUser({ openId: "oid-task6-sort", name: "Sort User", loginMethod: "oidc" });
-closeDb();
-
-const sqlite = new DatabaseSync(process.env.DATABASE_URL);
-const user = sqlite.prepare("select id from users where openId = ?").get("oid-task6-sort");
-const accountSeed = sqlite.prepare("insert into accounts (userId, name, notes, initialBalance) values (?, ?, ?, ?)").run(user.id, "Sort Account", null, "1000.00");
-const accountId = Number(accountSeed.lastInsertRowid);
-sqlite.close();
-
-if (!user || typeof user.id !== "number") throw new Error("missing-user");
-
-const rows = ["2.00", "10.00", "-1.00", "100.00", "20.00"];
-for (const [index, returnAmount] of rows.entries()) {
-  await createTransactionWithElements({
-    userId: user.id,
-    accountId,
-    accountBalance: "1000.00",
-    tradingPair: "PAIR" + index,
-    timeFrame: "1h",
-    startTime: 1700000000000 + index,
-    endTime: 1700000001000 + index,
-    direction: "long",
-    tradingLogic: "sort-test",
-    marketCycle: "Trading Range",
-    transactionType: "Trend",
-    status: "closed",
-    outcome: "win",
-    consecutiveLosses: 0,
-    riskRewardRatio: "1.00",
-    returnAmount,
-    tvUrl: null,
-  });
-}
-
-const asc = await getTransactionsByUserId(user.id, {
-  sortBy: "returnAmount",
-  sortOrder: "asc",
-});
-const desc = await getTransactionsByUserId(user.id, {
-  sortBy: "returnAmount",
-  sortOrder: "desc",
-});
-closeDb();
-
-const ascReturns = asc.map(row => row.returnAmount).join(",");
-const descReturns = desc.map(row => row.returnAmount).join(",");
-
-if (ascReturns !== "-1.00,2.00,10.00,20.00,100.00") {
-  throw new Error("bad-asc-order:" + ascReturns);
-}
-if (descReturns !== "100.00,20.00,10.00,2.00,-1.00") {
-  throw new Error("bad-desc-order:" + descReturns);
-}
-
-console.log("ok");`;
-
-      const result = runNodeEval(script, tempDbPath);
-      expect(result).toContain("ok");
-    });
-
-    it("computes current balance and stats exactly from text decimals", () => {
-      const script = `
-const {
-  upsertUser,
-  createTransactionWithElements,
-  getAccountSnapshot,
-  getStatistics,
-  closeDb,
-} = await import("./server/db.ts");
-const { DatabaseSync } = await import("node:sqlite");
-
-await upsertUser({ openId: "oid-task6-stats", name: "Stats User", loginMethod: "oidc" });
-closeDb();
-
-const sqlite = new DatabaseSync(process.env.DATABASE_URL);
-const user = sqlite.prepare("select id from users where openId = ?").get("oid-task6-stats");
-const accountSeed = sqlite.prepare("insert into accounts (userId, name, notes, initialBalance) values (?, ?, ?, ?)").run(user.id, "Stats Account", null, "1000.10");
-const accountId = Number(accountSeed.lastInsertRowid);
-sqlite.close();
-if (!user || typeof user.id !== "number") throw new Error("missing-user");
-
-const trades = [
-  { amount: "0.10", outcome: "win" },
-  { amount: "0.20", outcome: "win" },
-  { amount: "-0.30", outcome: "loss" },
-  { amount: "1.11", outcome: "win" },
-];
-
-for (const [index, trade] of trades.entries()) {
-  await createTransactionWithElements({
-    userId: user.id,
-    accountId,
-    accountBalance: "1000.00",
-    tradingPair: "STAT" + index,
-    timeFrame: "1h",
-    startTime: 1710000000000 + index,
-    endTime: 1710000001000 + index,
-    direction: "long",
-    tradingLogic: "stats-test",
-    marketCycle: "Trading Range",
-    transactionType: "Trend",
-    status: "closed",
-    outcome: trade.outcome,
-    consecutiveLosses: 0,
-    riskRewardRatio: "1.00",
-    returnAmount: trade.amount,
-    tvUrl: null,
-  });
-}
-
-const snapshot = await getAccountSnapshot(accountId, "1000.10");
-const currentBalance = snapshot.currentBalance;
-const stats = await getStatistics(accountId, "1000.10");
-closeDb();
-
-if (currentBalance !== "1001.21") throw new Error("bad-current-balance:" + currentBalance);
-
-if (
-  stats.winCount !== 3 ||
-  stats.lossCount !== 1 ||
-  stats.totalTrades !== 4 ||
-  stats.totalProfit !== 1.41 ||
-  stats.totalReward !== 1.11 ||
-  stats.avgProfit !== 0.47 ||
-  stats.avgLoss !== 0.3 ||
-  stats.originalBalance !== 1000.1 ||
-  stats.latestBalance !== 1001.21
-) {
-  throw new Error("bad-stats:" + JSON.stringify(stats));
-}
-
-console.log("ok");`;
-
-      const result = runNodeEval(script, tempDbPath);
-      expect(result).toContain("ok");
-    });
-
-    it("updates updatedAt on mutable writes", () => {
-      const script = `
-const {
-  upsertUser,
-  createTransactionWithElements,
-  updateTransaction,
-  closeDb,
-} = await import("./server/db.ts");
-const { DatabaseSync } = await import("node:sqlite");
-
-await upsertUser({ openId: "oid-task6-updated", name: "Updated User", loginMethod: "oidc" });
-closeDb();
-
-const sqlite = new DatabaseSync(process.env.DATABASE_URL);
-const user = sqlite.prepare("select id from users where openId = ?").get("oid-task6-updated");
-const accountSeed = sqlite.prepare("insert into accounts (userId, name, notes, initialBalance) values (?, ?, ?, ?)").run(user.id, "Updated Account", null, "1000.00");
-const accountId = Number(accountSeed.lastInsertRowid);
-sqlite.close();
-if (!user || typeof user.id !== "number") throw new Error("missing-user");
-
-const transaction = await createTransactionWithElements({
-  userId: user.id,
-  accountId,
-  accountBalance: "1000.00",
-  tradingPair: "UPD",
-  timeFrame: "1h",
-  startTime: 1720000000000,
-  endTime: 1720000001000,
-  direction: "long",
-  tradingLogic: "updatedAt-test",
-  marketCycle: "Trading Range",
-  transactionType: "Trend",
-  status: "closed",
-  outcome: "win",
-  consecutiveLosses: 0,
-  riskRewardRatio: "1.00",
-  returnAmount: "1.00",
-  tvUrl: null,
-});
-closeDb();
-
-const seed = new DatabaseSync(process.env.DATABASE_URL);
-seed.prepare("update users set updatedAt = 1 where id = ?").run(user.id);
-seed.prepare("update transactions set updatedAt = 1 where id = ?").run(transaction.id);
-seed.close();
-
-await upsertUser({ openId: "oid-task6-updated", name: "Updated User Again", loginMethod: "oidc" });
-await updateTransaction(transaction.id, user.id, { reviewFeedback: "looks good" });
-closeDb();
-
-const verify = new DatabaseSync(process.env.DATABASE_URL);
-const userUpdated = verify.prepare("select updatedAt from users where id = ?").get(user.id);
-const transactionUpdated = verify.prepare("select updatedAt from transactions where id = ?").get(transaction.id);
-verify.close();
-
-if (!userUpdated || userUpdated.updatedAt <= 1) throw new Error("user-updatedAt-not-updated");
-if (!transactionUpdated || transactionUpdated.updatedAt <= 1) throw new Error("transaction-updatedAt-not-updated");
-
-console.log("ok");`;
-
-      const result = runNodeEval(script, tempDbPath);
-      expect(result).toContain("ok");
-    });
-  });
-
-  describe("createTransactionWithElements honors selected account", () => {
-    const tempDbPath = join(tmpDir, "account-routing.sqlite");
-
-    beforeAll(() => {
-      if (!existsSync(tmpDir)) {
-        mkdirSync(tmpDir, { recursive: true });
-      }
-      if (existsSync(tempDbPath)) {
-        rmSync(tempDbPath);
-      }
-      bootstrapSqlite(tempDbPath);
-    });
-
-    afterAll(() => {
-      if (existsSync(tempDbPath)) {
-        rmSync(tempDbPath);
-      }
-    });
-
-    it("persists transactions under the explicit accountId, not userId", () => {
-      const script = `
-const {
-  upsertUser,
-  createAccount,
-  createTransactionWithElements,
-  getTransactionsByUserId,
-  closeDb,
-} = await import("./server/db.ts");
-const { DatabaseSync } = await import("node:sqlite");
-
-await upsertUser({ openId: "oid-account-routing", name: "Routing User", loginMethod: "oidc" });
-closeDb();
-
-const sqlite = new DatabaseSync(process.env.DATABASE_URL);
-const user = sqlite.prepare("select id from users where openId = ?").get("oid-account-routing");
-sqlite.close();
-if (!user || typeof user.id !== "number" || user.id !== 1) {
-  throw new Error("expected-userId-1:" + JSON.stringify(user));
-}
-
-const firstAccount = await createAccount({ userId: user.id, name: "Primary", notes: null, initialBalance: "1000.00" });
-const secondAccount = await createAccount({ userId: user.id, name: "Swing", notes: null, initialBalance: "2000.00" });
-if (firstAccount.id !== 1 || secondAccount.id !== 2) {
-  throw new Error("unexpected-account-ids:" + JSON.stringify({ firstAccount, secondAccount }));
-}
-
-await createTransactionWithElements({
-  userId: user.id,
-  accountId: secondAccount.id,
-  accountBalance: "2000.00",
-  tradingPair: "BTCUSDT",
-  timeFrame: "4H",
-  startTime: 1700000000000,
-  endTime: null,
-  direction: "long",
-  tradingLogic: "switched-account",
-  marketCycle: "Trading Range",
-  transactionType: "Trend",
-  status: "open",
-  outcome: null,
-  consecutiveLosses: 0,
-  riskRewardRatio: null,
-  returnAmount: null,
-  tvUrl: null,
-});
-
-const verifyDb = new DatabaseSync(process.env.DATABASE_URL);
-const persisted = verifyDb.prepare("select id, userId, accountId from transactions where tradingPair = ?").get("BTCUSDT");
-verifyDb.close();
-if (!persisted || persisted.accountId !== 2) {
-  throw new Error("wrong-accountId-persisted:" + JSON.stringify(persisted));
-}
-if (persisted.userId !== 1) {
-  throw new Error("wrong-userId-persisted:" + JSON.stringify(persisted));
-}
-
-const onSecondAccount = await getTransactionsByUserId(user.id, { accountId: secondAccount.id });
-const onFirstAccount = await getTransactionsByUserId(user.id, { accountId: firstAccount.id });
-closeDb();
-
-if (onSecondAccount.length !== 1 || onFirstAccount.length !== 0) {
-  throw new Error("bad-list-isolation:" + JSON.stringify({ onSecondAccount, onFirstAccount }));
-}
-
-console.log("ok");`;
-
-      const result = runNodeEval(script, tempDbPath);
-      expect(result).toContain("ok");
-    });
-
-    it("rejects createTransactionWithElements when accountId is missing", () => {
-      const script = `
-const {
-  upsertUser,
-  createTransactionWithElements,
-  closeDb,
-} = await import("./server/db.ts");
-const { DatabaseSync } = await import("node:sqlite");
-
-await upsertUser({ openId: "oid-account-missing", name: "Missing Account User", loginMethod: "oidc" });
-closeDb();
-
-const sqlite = new DatabaseSync(process.env.DATABASE_URL);
-const user = sqlite.prepare("select id from users where openId = ?").get("oid-account-missing");
-sqlite.close();
-if (!user || typeof user.id !== "number") throw new Error("missing-user");
-
-let threw = false;
-try {
-  await createTransactionWithElements({
-    userId: user.id,
-    accountBalance: "1000.00",
-    tradingPair: "ETHUSDT",
-    timeFrame: "1H",
-    startTime: 1700000000000,
-    endTime: null,
-    direction: "short",
-    tradingLogic: "should-fail",
-    marketCycle: "Trading Range",
-    transactionType: "Trend",
-    status: "open",
-    outcome: null,
-    consecutiveLosses: 0,
-    riskRewardRatio: null,
-    returnAmount: null,
-    tvUrl: null,
-  });
-} catch (err) {
-  threw = true;
-}
-closeDb();
-
-if (!threw) throw new Error("expected-guard-to-throw");
-console.log("ok");`;
-
-      const result = runNodeEval(script, tempDbPath);
       expect(result).toContain("ok");
     });
   });

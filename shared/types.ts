@@ -6,9 +6,8 @@
 import type { Account } from "../drizzle/schema";
 
 export type * from "../drizzle/schema";
-export type { TradeStatus } from "./const";
 
 /** Account as returned by tRPC: key ciphertexts stripped, key tail added. */
 export type PublicAccount = Omit<Account, "apiKey" | "apiSecret"> & {
-  apiKeyTail: string | null;
+  apiKeyTail: string;
 };

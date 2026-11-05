@@ -60,7 +60,7 @@ Two equivalent invocation styles — pick whichever is cleaner per call site:
 ```bash
 # Run a single command in the env (best for one-shot agent calls)
 devbox run -- npm run check
-devbox run -- npx vitest run server/transaction.test.ts
+devbox run -- npx vitest run server/trade.test.ts
 
 # Use predefined devbox script aliases (see devbox.json `shell.scripts`)
 devbox run check
@@ -100,7 +100,7 @@ npm run format       # Prettier format all files
 
 # Tests
 npm run test         # Run all tests with Vitest
-npx vitest run server/transaction.test.ts  # Run one test file
+npx vitest run server/trade.test.ts  # Run one test file
 npm run test:e2e     # Playwright smoke (requires `npx playwright install chromium` once)
 
 # Database
@@ -146,19 +146,20 @@ without adding real auth first. If auth is reintroduced, prefer
 
 - SQLite is the active database. Use SQLite-compatible SQL only.
 - Drizzle schema source of truth: `drizzle/schema.ts`.
-- Main tables: `users`, `accounts`, `transactions`.
-- Time fields (`startTime`, `endTime`) are millisecond timestamps.
+- Main tables: `users`, `accounts`, `fills`, `trades` (trades are rebuilt from
+  exchange fills on sync; there is no manual entry).
+- Time fields (`openTime`, `closeTime`, ...) are millisecond timestamps.
 - User-scoped queries must keep filtering by `userId`, even with one anonymous user.
 - Reads and writes belong in `server/db.ts`, not directly in routers.
 - `server/db.ts` uses plain exported functions, not repository classes.
 - DB handle is a lazy singleton via `getDb()`.
 - Reads may return `undefined` or `[]`; writes should throw on unavailable writes.
 
-Preserve current calculated-field behavior:
+Preserve current derived-value behavior (computed on read in `server/db.ts`):
 
-- `getCurrentBalance(accountId, initialBalance)`.
-- `getConsecutiveLosses(accountId)`.
-- `calculateConfidenceLevel()`.
+- Outcome of a closed trade from the sign of `realizedPnlUsd`.
+- Losing streak: closed trades newest-first by `closeTime`, counted until the
+  first non-loss (`getTradeStats`).
 - Trading pairs are normalized to uppercase.
 
 SQLite transactions go through `runInSqliteTransaction(fn)`, which wraps the
@@ -189,7 +190,7 @@ Prettier is the source of truth: semicolons required, double quotes, print width
 - Vitest config: `vitest.config.ts`. Include: `server/**/*.test.ts` and `*.spec.ts`.
 - Test environment: Node.
 - Server tests use `appRouter.createCaller(ctx)` to exercise tRPC procedures
-  directly. See `server/transaction.test.ts` for the main `vi.mock` pattern.
+  directly. See `server/trade.test.ts` for the main `vi.mock` pattern.
 - `tsconfig.json` excludes `**/*.test.ts`, so `npm run check` skips tests.
 - When changing tested server behavior, run both `npm run check` and `npm run test`.
 
@@ -234,10 +235,8 @@ iterate visually.
 
 ## Error Handling
 
-- In tRPC procedures and middleware, throw `TRPCError`. Validation
-  failures from `server/_core/tradeMath.ts` (`TradeMathError`) are
-  translated to `TRPCError({ code: "BAD_REQUEST" })` by the
-  `runTradeMath` wrapper in `server/routers.ts`.
+- In tRPC procedures and middleware, throw `TRPCError`; input validation
+  failures are `BAD_REQUEST`.
 - Client mutations surface failures with toasts.
 - No empty catch blocks. If a catch intentionally swallows, document why, keep narrow.
 - Logging uses scoped prefixes (`[Database]`, `[API Query Error]`); keep similar.

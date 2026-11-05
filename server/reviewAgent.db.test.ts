@@ -56,7 +56,7 @@ const other = await db.getOrCreateConversation({
   userId: 1, tradeId: 43, providerId: "deepseek", model: "deepseek-chat",
 });
 if (other.id === first.id) throw new Error("convo-not-scoped-by-trade");
-if (first.tradeId !== 42 || first.transactionId !== null) throw new Error("convo-not-keyed-by-trade");
+if (first.tradeId !== 42 || first.preTradeId !== null) throw new Error("convo-not-keyed-by-trade");
 if ((await db.getConversationByTrade(1, 43))?.id !== other.id) throw new Error("lookup-by-trade");
 if ((await db.getConversationByTrade(999, 43)) !== undefined) throw new Error("lookup-user-scope-leak");
 

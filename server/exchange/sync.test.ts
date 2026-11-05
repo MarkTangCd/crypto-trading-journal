@@ -263,7 +263,6 @@ const ids = {
   network: await make("network", { lastSyncErrorCode: "network" }),
   unknown: await make("unknown", { lastSyncErrorCode: "unknown" }),
 };
-await db.createAccount({ userId: 1, name: "unlinked" });
 
 const outcomes = await autoSync(1, { adapter: createFakeAdapter().adapter });
 const synced = outcomes.map(o => o.accountId).sort((a, b) => a - b);

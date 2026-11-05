@@ -43,7 +43,7 @@ const trade = (tradeKey, over = {}) => ({
   feeUsd: "0.1", realizedPnlUsd: "-0.1", stopLossPrice: null, takeProfitPrice: null,
   ...over,
 });
-const account = await db.createAccount({ userId: 1, name: "Main" });
+const account = await db.createAccount({ userId: 1, name: "Main", apiKey: "key-ct", apiSecret: "secret-ct" });
 ${body}
 db.closeDb();
 console.log("ok");
@@ -205,11 +205,10 @@ check(JSON.stringify(stats) === JSON.stringify(expected), "stats", stats);
 const { encrypt } = await import("./server/agents/secrets.ts");
 const { conversations, messages } = await import("./drizzle/schema.ts");
 const handle = await db.getDb();
-const other = await db.createAccount({ userId: 1, name: "Other" });
+const other = await db.createAccount({ userId: 1, name: "Other", apiKey: encrypt("k"), apiSecret: encrypt("s") });
 
 const pub = db.toPublicAccount(await db.updateAccount(account.id, 1, { apiKey: encrypt("abcdWXYZ1234"), apiSecret: encrypt("s") }));
 check(pub.apiKeyTail === "1234" && !("apiKey" in pub) && !("apiSecret" in pub), "public", pub);
-check(db.toPublicAccount(other).apiKeyTail === null, "no-key-tail");
 
 for (const acc of [account, other]) {
   await db.insertFills([{ userId: 1, accountId: acc.id, source: "seed", fillId: "seed@1", orderId: null,

@@ -79,7 +79,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
 
       // Invalidate all account-scoped queries
       utils.account.list.invalidate();
-      utils.transaction.list.invalidate();
+      utils.trade.list.invalidate();
       utils.stats.get.invalidate();
     },
     [utils]

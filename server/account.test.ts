@@ -30,7 +30,6 @@ function accountRow(overrides: Partial<Account> = {}): Account {
     userId: 1,
     name: "Test Account",
     notes: "Test notes",
-    initialBalance: "0",
     exchange: "binance",
     apiKey: "enc:key-abcd1234",
     apiSecret: "enc:secret-xyz",

@@ -255,7 +255,6 @@ export async function runSync(
 }
 
 function isAutoSyncEligible(account: Account, now: number): boolean {
-  if (account.apiKey === null) return false;
   if (account.lastSyncedAt !== null && now - account.lastSyncedAt < STALE_MS) {
     return false;
   }

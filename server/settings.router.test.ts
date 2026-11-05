@@ -3,10 +3,7 @@ import type { TrpcContext } from "./_core/context";
 
 vi.mock("./db", () => ({
   // unused by settings router but required by the broader appRouter graph
-  getTransactionById: vi.fn(),
   getAccountById: vi.fn(),
-  getAccountSnapshot: vi.fn(),
-  getTransactionsByUserId: vi.fn(),
   getOrCreateConversation: vi.fn(),
   appendMessage: vi.fn(),
   listMessages: vi.fn(),
@@ -16,17 +13,6 @@ vi.mock("./db", () => ({
   getAccountsByUserId: vi.fn(),
   updateAccount: vi.fn(),
   getAccountCount: vi.fn(),
-  createTransactionWithElements: vi.fn(),
-  updateTransaction: vi.fn(),
-  closeOpenTransaction: vi.fn(),
-  deleteTransactionWithElements: vi.fn(),
-  getStatistics: vi.fn(),
-  getUniqueTradingPairs: vi.fn(),
-  runInSqliteTransaction: vi
-    .fn()
-    .mockImplementation(async (op: (db: unknown) => Promise<unknown>) =>
-      op(undefined)
-    ),
 }));
 
 vi.mock("./agents/secrets", () => ({

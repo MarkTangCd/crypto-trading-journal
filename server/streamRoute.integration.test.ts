@@ -28,7 +28,8 @@ vi.mock("./db", () => ({
   getConversationById: vi.fn().mockResolvedValue({
     id: 99,
     userId: 1,
-    transactionId: 42,
+    preTradeId: null,
+    tradeId: 42,
     providerId: "deepseek",
     model: "deepseek-chat",
     createdAt: new Date(),

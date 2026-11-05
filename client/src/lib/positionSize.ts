@@ -1,9 +1,7 @@
 // Fixed-percentage-risk position sizing for the Tools calculator.
 //
 // Notional position = risk amount / stop-loss distance (as a fraction).
-// This scratchpad math runs client-side only; nothing is persisted. The
-// direction/price validation mirrors server/_core/tradeMath.ts so the output
-// can be copied straight into the New Trade form's "position size (usdt)".
+// This scratchpad math runs client-side only; nothing is persisted.
 
 import { type Direction, parsePositiveDecimal } from "@/lib/plannedRiskReward";
 
