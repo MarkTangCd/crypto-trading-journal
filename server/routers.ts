@@ -21,6 +21,11 @@ import {
   deleteAccountCascade,
   getAccountCount,
   toPublicAccount,
+  // Trades
+  TradeEditError,
+  getTradeById,
+  listTrades,
+  updateTradeByHand,
   // Pre-trade
   listPreTradesByUser,
   // Goals
@@ -33,6 +38,7 @@ import {
 import type { TrpcContext } from "./_core/context";
 import type { Account, Goal, Transaction } from "../drizzle/schema";
 import { add as addFixedPoint } from "./_core/fixedPoint";
+import { normalize as normalizeDecimal } from "./_core/decimal";
 import {
   TradeMathError,
   calculateActualRiskRewardRatio,
@@ -106,6 +112,14 @@ function runTradeMath<T>(operation: () => T): T {
 }
 
 const decimalString = z.string().min(1);
+
+// Hand-entered price level: a positive plain decimal, stored normalized.
+const priceLevel = z
+  .string()
+  .trim()
+  .regex(/^\d+(?:\.\d+)?$/, "Invalid price")
+  .refine(value => /[1-9]/.test(value), "Price must be positive")
+  .transform(normalizeDecimal);
 
 /**
  * Key verification at link time: any failure, returned or thrown by the
@@ -642,6 +656,72 @@ export const appRouter = router({
       .query(async ({ ctx, input }) => {
         await requireOwnedAccount(ctx, input.accountId);
         return getUniqueTradingPairs(ctx.user.id, input.accountId);
+      }),
+  }),
+
+  // Trades reconstructed from exchange fills; only a few fields are hand-edited.
+  trade: router({
+    list: publicProcedure
+      .input(
+        z.object({
+          accountId: z.number(),
+          status: z.enum(["open", "closed"]).optional(),
+        })
+      )
+      .query(async ({ ctx, input }) => {
+        await requireOwnedAccount(ctx, input.accountId);
+        return listTrades(input.accountId, ctx.user.id, input.status);
+      }),
+
+    get: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const trade = await getTradeById(input.id, ctx.user.id);
+        if (!trade) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Trade not found",
+          });
+        }
+        return trade;
+      }),
+
+    update: publicProcedure
+      .input(
+        z
+          .object({
+            id: z.number(),
+            stopLossPrice: priceLevel.nullable().optional(),
+            takeProfitPrice: priceLevel.nullable().optional(),
+            openTime: z.number().int().positive().optional(),
+          })
+          .refine(
+            ({ id: _id, ...patch }) =>
+              Object.values(patch).some(value => value !== undefined),
+            "Nothing to update"
+          )
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { id, ...patch } = input;
+        let trade;
+        try {
+          trade = await updateTradeByHand(id, ctx.user.id, patch);
+        } catch (error) {
+          if (error instanceof TradeEditError) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: error.message,
+            });
+          }
+          throw error;
+        }
+        if (!trade) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Trade not found",
+          });
+        }
+        return trade;
       }),
   }),
 
