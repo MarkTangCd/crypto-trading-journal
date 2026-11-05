@@ -16,7 +16,6 @@ import {
   FileText,
   Flag,
   PanelLeft,
-  Plus,
   Settings,
   Sparkles,
   TrendingUp,
@@ -30,8 +29,7 @@ import { useLocation } from "wouter";
 const menuItems = [
   { icon: BarChart3, label: "Dashboard", path: "/" },
   { icon: Flag, label: "Goals", path: "/goals" },
-  { icon: FileText, label: "Transactions", path: "/transactions" },
-  { icon: Plus, label: "New Trade", path: "/transactions/new" },
+  { icon: FileText, label: "Trades", path: "/trades" },
   { icon: Sparkles, label: "Pre-Trade", path: "/pre-trade" },
   { icon: Wallet, label: "Accounts", path: "/accounts" },
   { icon: Wrench, label: "Tools", path: "/tools" },
@@ -87,9 +85,7 @@ function DashboardLayoutContent({
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   // Pick the menu item whose path is the longest prefix of the current
-  // location. Avoids `/transactions/new` activating both Transactions and
-  // New Trade, while still letting Transactions stay active on detail pages
-  // like `/transactions/:id`.
+  // location, so Trades stays active on detail pages like `/trades/:id`.
   const activeMenuItem = menuItems
     .filter(item =>
       item.path === "/"

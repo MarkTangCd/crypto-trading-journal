@@ -8,7 +8,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { AccountProvider } from "./contexts/AccountContext";
 import Dashboard from "./pages/Dashboard";
 import Goals from "./pages/Goals";
-import Transactions from "./pages/Transactions";
+import Trades from "./pages/Trades";
 import NewTransaction from "./pages/NewTransaction";
 import TransactionDetail from "./pages/TransactionDetail";
 import Accounts from "./pages/Accounts";
@@ -23,7 +23,7 @@ function Router() {
       <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/goals" component={Goals} />
-        <Route path="/transactions" component={Transactions} />
+        <Route path="/trades" component={Trades} />
         <Route path="/transactions/new" component={NewTransaction} />
         <Route path="/transactions/:id" component={TransactionDetail} />
         <Route path="/accounts" component={Accounts} />
