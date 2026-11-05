@@ -129,12 +129,6 @@ function PreTradeSession({ preTradeId }: SessionProps) {
           )
           .join(" · ");
 
-  const convertQuery = new URLSearchParams({
-    pair: preTrade.tradingPair,
-    tf: preTrade.primaryTimeFrame,
-    ...(preTrade.direction ? { direction: preTrade.direction } : {}),
-  }).toString();
-
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-16">
       <header className="space-y-2 pb-4 border-b border-border">
@@ -147,12 +141,6 @@ function PreTradeSession({ preTradeId }: SessionProps) {
             {preTrade.tradingPair.toLowerCase()} · {directionLabel} · #
             {preTrade.id}
           </h1>
-          <Link
-            href={`/transactions/new?${convertQuery}`}
-            className="text-xs lowercase tracking-wide px-3 py-1.5 border border-border hover:border-foreground hover:bg-accent/40 transition-colors"
-          >
-            convert to transaction →
-          </Link>
         </div>
         <p className="text-xs text-muted-foreground lowercase tabular-nums">
           using {providerId} · primary {preTrade.primaryTimeFrame} ×{" "}

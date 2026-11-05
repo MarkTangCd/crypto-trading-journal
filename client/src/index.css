@@ -234,7 +234,7 @@
   }
 
   /* Legacy hierarchy utilities, retuned to the Bench Notebook system.
-     Consumed by Dashboard / Settings / Transactions / NewTransaction page headers. */
+     Consumed by Dashboard / Settings / Trades / Accounts page headers. */
   .text-title {
     font-size: 2rem;
     line-height: 1.1;

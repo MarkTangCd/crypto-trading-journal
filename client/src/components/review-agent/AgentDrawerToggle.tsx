@@ -7,7 +7,7 @@ interface Props {
 }
 
 /**
- * Floating control rendered inside TransactionDetail. Owns the open/closed
+ * Floating control rendered inside TradeDetail. Owns the open/closed
  * state of the AgentDrawer so the parent page doesn't need to thread it.
  */
 export function AgentDrawerToggle({ tradeId }: Props) {

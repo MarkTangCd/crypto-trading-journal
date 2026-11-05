@@ -8,7 +8,6 @@ import {
 } from "@/lib/ledger";
 import type { Direction } from "@/lib/plannedRiskReward";
 import { previewPositionSize } from "@/lib/positionSize";
-import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
@@ -17,13 +16,7 @@ const RISK_KEY = "positionSize.risk";
 
 export default function PositionSizeCalculator() {
   const { selectedAccount } = useAccount();
-  const accountId = selectedAccount?.id;
-
-  const { data: defaults } = trpc.transaction.getFormDefaults.useQuery(
-    { accountId: accountId! },
-    { enabled: !!accountId }
-  );
-  const balance = defaults?.currentBalance;
+  const balance = selectedAccount?.balanceUsdt ?? null;
 
   const [direction, setDirection] = useState<Direction>("");
   const [risk, setRisk] = useState(
@@ -133,7 +126,7 @@ export default function PositionSizeCalculator() {
             id="capital"
             type="text"
             inputMode="decimal"
-            placeholder="0.00"
+            placeholder={balance === null ? "—" : "0.00"}
             value={capital}
             onChange={e => {
               setCapitalTouched(true);

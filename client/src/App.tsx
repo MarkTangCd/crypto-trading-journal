@@ -10,8 +10,6 @@ import Dashboard from "./pages/Dashboard";
 import Goals from "./pages/Goals";
 import Trades from "./pages/Trades";
 import TradeDetail from "./pages/TradeDetail";
-import NewTransaction from "./pages/NewTransaction";
-import TransactionDetail from "./pages/TransactionDetail";
 import Accounts from "./pages/Accounts";
 import PreTrade from "./pages/PreTrade";
 import Tools from "./pages/Tools";
@@ -26,8 +24,6 @@ function Router() {
         <Route path="/goals" component={Goals} />
         <Route path="/trades" component={Trades} />
         <Route path="/trades/:id" component={TradeDetail} />
-        <Route path="/transactions/new" component={NewTransaction} />
-        <Route path="/transactions/:id" component={TransactionDetail} />
         <Route path="/accounts" component={Accounts} />
         <Route path="/pre-trade" component={PreTrade} />
         <Route path="/pre-trade/:id" component={PreTrade} />
