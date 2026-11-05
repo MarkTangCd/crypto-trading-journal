@@ -5,23 +5,21 @@ import type { TrpcContext } from "./_core/context";
 
 vi.mock("./db", () => ({
   // Minimal surface used by the router + orchestrator under test.
-  getTransactionById: vi.fn(),
+  getTradeById: vi.fn(),
   getAccountById: vi.fn().mockResolvedValue({
     id: 1,
     userId: 1,
     name: "main",
-    initialBalance: "1000",
+    balanceUsdt: "1100",
     notes: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   }),
-  getAccountSnapshot: vi
-    .fn()
-    .mockResolvedValue({ currentBalance: "1100.00", consecutiveLosses: 1 }),
-  getTransactionsByUserId: vi.fn().mockResolvedValue([]),
+  getTradeStats: vi.fn().mockResolvedValue({ losingStreak: 1 }),
+  listTrades: vi.fn().mockResolvedValue([]),
   getOrCreateConversation: vi.fn(),
   getConversationById: vi.fn(),
-  getConversationByTransaction: vi.fn().mockResolvedValue(undefined),
+  getConversationByTrade: vi.fn().mockResolvedValue(undefined),
   appendMessage: vi.fn().mockResolvedValue(undefined),
   listMessages: vi.fn(),
   getAgentSettings: vi.fn().mockResolvedValue(undefined),
@@ -126,35 +124,29 @@ function makeCtx(): TrpcContext {
   };
 }
 
-const fakeTransaction = {
+const fakeTrade = {
   id: 42,
   userId: 1,
   accountId: 1,
+  tradeKey: "BTCUSDT|BOTH#1",
+  exchange: "binance",
+  exchangeSymbol: "BTCUSDT",
+  symbol: "BTCUSDT",
+  positionSide: "BOTH",
+  side: "long" as const,
   status: "closed" as const,
-  accountBalance: "1100",
-  tradingPair: "BTCUSDT",
-  timeFrame: "1H" as const,
-  startTime: 1_700_000_000_000,
-  endTime: 1_700_003_600_000,
-  direction: "long" as const,
-  tradingLogic: "breakout retest",
-  context: "btc broke prior day high",
-  tradeItems: ["entry on 1h close", "stop below pdl"],
-  outcome: "win" as const,
-  consecutiveLosses: 0,
-  riskRewardRatio: "2.1",
-  returnAmount: "100",
+  openTime: 1_700_000_000_000,
+  openTimeApprox: false,
+  closeTime: 1_700_003_600_000,
   entryPrice: "68000",
   exitPrice: "69000",
-  plannedStopLossPrice: "67500",
-  plannedTakeProfitPrice: "69500",
-  plannedRiskRewardRatio: "3",
-  positionSizeUsdt: "500",
-  tvUrl: null,
-  marketCycle: null,
-  transactionType: null,
-  reviewFeedback: null,
-  reviewChartUrl: null,
+  quantity: "0.01",
+  positionSizeUsdt: "680",
+  feeUsd: "0.68",
+  realizedPnlUsd: "9.32",
+  stopLossPrice: "67500",
+  takeProfitPrice: "69500",
+  syncedAt: 1_700_003_700_000,
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -185,13 +177,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(secrets.getProviderApiKey).mockResolvedValue("test-key");
   vi.mocked(secrets.getProviderBaseUrl).mockResolvedValue(undefined);
-  vi.mocked(db.getConversationByTransaction).mockResolvedValue(undefined);
+  vi.mocked(db.getConversationByTrade).mockResolvedValue(undefined);
   // Default: send/stream paths look up the conversation row and find a
   // deepseek-locked one. Individual tests override when they need otherwise.
   vi.mocked(db.getConversationById).mockResolvedValue({
     id: 99,
     userId: 1,
-    transactionId: 42,
+    tradeId: 42,
     providerId: "deepseek",
     model: "deepseek-chat",
     createdAt: new Date(),
@@ -211,50 +203,22 @@ beforeEach(() => {
 
 describe("reviewAgent router", () => {
   describe("open", () => {
-    it("returns FORBIDDEN when the trade does not belong to the user", async () => {
-      vi.mocked(db.getTransactionById).mockResolvedValue(undefined);
+    it("returns NOT_FOUND when the trade is missing or not the user's", async () => {
+      vi.mocked(db.getTradeById).mockResolvedValue(undefined);
       const caller = appRouter.createCaller(makeCtx());
 
       await expect(
-        caller.reviewAgent.open({ transactionId: 999 })
-      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+        caller.reviewAgent.open({ tradeId: 999 })
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      expect(db.getOrCreateConversation).not.toHaveBeenCalled();
     });
 
-    it("seeds a fresh conversation with system + user + assistant turns", async () => {
-      vi.mocked(db.getTransactionById).mockResolvedValue(fakeTransaction);
+    it("keys the new conversation by tradeId", async () => {
+      vi.mocked(db.getTradeById).mockResolvedValue(fakeTrade);
       vi.mocked(db.getOrCreateConversation).mockResolvedValue({
         id: 99,
         userId: 1,
-        transactionId: 42,
-        providerId: "deepseek",
-        model: "deepseek-chat",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-      // First load: empty. After seeding: 3 messages.
-      vi.mocked(db.listMessages)
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([sysRow, userCtxRow, assistantReply]);
-
-      const caller = appRouter.createCaller(makeCtx());
-      const result = await caller.reviewAgent.open({ transactionId: 42 });
-
-      expect(result.conversationId).toBe(99);
-      expect(result.messages.map(m => m.role)).toEqual([
-        "system",
-        "user",
-        "assistant",
-      ]);
-      expect(deepseekProvider.chat).toHaveBeenCalledOnce();
-      expect(db.appendMessage).toHaveBeenCalledTimes(3); // sys + user + assistant
-    });
-
-    it("is idempotent: existing thread returns without calling the provider again", async () => {
-      vi.mocked(db.getTransactionById).mockResolvedValue(fakeTransaction);
-      vi.mocked(db.getOrCreateConversation).mockResolvedValue({
-        id: 99,
-        userId: 1,
-        transactionId: 42,
+        tradeId: 42,
         providerId: "deepseek",
         model: "deepseek-chat",
         createdAt: new Date(),
@@ -267,20 +231,75 @@ describe("reviewAgent router", () => {
       ]);
 
       const caller = appRouter.createCaller(makeCtx());
-      await caller.reviewAgent.open({ transactionId: 42 });
+      await caller.reviewAgent.open({ tradeId: 42 });
+
+      expect(db.getTradeById).toHaveBeenCalledWith(42, 1);
+      expect(db.getOrCreateConversation).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 1, tradeId: 42 })
+      );
+    });
+
+    it("seeds a fresh conversation with system + user + assistant turns", async () => {
+      vi.mocked(db.getTradeById).mockResolvedValue(fakeTrade);
+      vi.mocked(db.getOrCreateConversation).mockResolvedValue({
+        id: 99,
+        userId: 1,
+        tradeId: 42,
+        providerId: "deepseek",
+        model: "deepseek-chat",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      // First load: empty. After seeding: 3 messages.
+      vi.mocked(db.listMessages)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([sysRow, userCtxRow, assistantReply]);
+
+      const caller = appRouter.createCaller(makeCtx());
+      const result = await caller.reviewAgent.open({ tradeId: 42 });
+
+      expect(result.conversationId).toBe(99);
+      expect(result.messages.map(m => m.role)).toEqual([
+        "system",
+        "user",
+        "assistant",
+      ]);
+      expect(deepseekProvider.chat).toHaveBeenCalledOnce();
+      expect(db.appendMessage).toHaveBeenCalledTimes(3); // sys + user + assistant
+    });
+
+    it("is idempotent: existing thread returns without calling the provider again", async () => {
+      vi.mocked(db.getTradeById).mockResolvedValue(fakeTrade);
+      vi.mocked(db.getOrCreateConversation).mockResolvedValue({
+        id: 99,
+        userId: 1,
+        tradeId: 42,
+        providerId: "deepseek",
+        model: "deepseek-chat",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      vi.mocked(db.listMessages).mockResolvedValue([
+        sysRow,
+        userCtxRow,
+        assistantReply,
+      ]);
+
+      const caller = appRouter.createCaller(makeCtx());
+      await caller.reviewAgent.open({ tradeId: 42 });
 
       expect(deepseekProvider.chat).not.toHaveBeenCalled();
       expect(db.appendMessage).not.toHaveBeenCalled();
     });
 
     it("maps a provider AUTH failure to BAD_REQUEST without leaking upstream", async () => {
-      vi.mocked(db.getTransactionById).mockResolvedValue(fakeTransaction);
+      vi.mocked(db.getTradeById).mockResolvedValue(fakeTrade);
       vi.mocked(secrets.getProviderApiKey).mockResolvedValue(undefined);
 
       const caller = appRouter.createCaller(makeCtx());
 
       await expect(
-        caller.reviewAgent.open({ transactionId: 42 })
+        caller.reviewAgent.open({ tradeId: 42 })
       ).rejects.toMatchObject({
         code: "BAD_REQUEST",
         message: expect.stringContaining("api key"),
@@ -288,12 +307,12 @@ describe("reviewAgent router", () => {
     });
 
     it("respects an explicit providerId override on first open", async () => {
-      vi.mocked(db.getTransactionById).mockResolvedValue(fakeTransaction);
-      vi.mocked(db.getConversationByTransaction).mockResolvedValue(undefined);
+      vi.mocked(db.getTradeById).mockResolvedValue(fakeTrade);
+      vi.mocked(db.getConversationByTrade).mockResolvedValue(undefined);
       vi.mocked(db.getOrCreateConversation).mockResolvedValue({
         id: 99,
         userId: 1,
-        transactionId: 42,
+        tradeId: 42,
         providerId: "kimi",
         model: "moonshot-v1-128k",
         createdAt: new Date(),
@@ -305,7 +324,7 @@ describe("reviewAgent router", () => {
 
       const caller = appRouter.createCaller(makeCtx());
       const result = await caller.reviewAgent.open({
-        transactionId: 42,
+        tradeId: 42,
         providerId: "kimi",
       });
 
@@ -323,8 +342,8 @@ describe("reviewAgent router", () => {
     });
 
     it("returns BAD_REQUEST mentioning the provider id when its key is missing", async () => {
-      vi.mocked(db.getTransactionById).mockResolvedValue(fakeTransaction);
-      vi.mocked(db.getConversationByTransaction).mockResolvedValue(undefined);
+      vi.mocked(db.getTradeById).mockResolvedValue(fakeTrade);
+      vi.mocked(db.getConversationByTrade).mockResolvedValue(undefined);
       vi.mocked(secrets.getProviderApiKey).mockImplementation(
         async (_userId, providerId) =>
           providerId === "kimi" ? undefined : "test-key"
@@ -333,7 +352,7 @@ describe("reviewAgent router", () => {
       const caller = appRouter.createCaller(makeCtx());
 
       await expect(
-        caller.reviewAgent.open({ transactionId: 42, providerId: "kimi" })
+        caller.reviewAgent.open({ tradeId: 42, providerId: "kimi" })
       ).rejects.toMatchObject({
         code: "BAD_REQUEST",
         message: expect.stringContaining("kimi"),
@@ -341,12 +360,12 @@ describe("reviewAgent router", () => {
     });
 
     it("locks to the existing conversation's providerId and ignores the override", async () => {
-      vi.mocked(db.getTransactionById).mockResolvedValue(fakeTransaction);
+      vi.mocked(db.getTradeById).mockResolvedValue(fakeTrade);
       // Existing conversation was opened on deepseek; caller now passes kimi.
-      vi.mocked(db.getConversationByTransaction).mockResolvedValue({
+      vi.mocked(db.getConversationByTrade).mockResolvedValue({
         id: 99,
         userId: 1,
-        transactionId: 42,
+        tradeId: 42,
         providerId: "deepseek",
         model: "deepseek-chat",
         createdAt: new Date(),
@@ -355,7 +374,7 @@ describe("reviewAgent router", () => {
       vi.mocked(db.getOrCreateConversation).mockResolvedValue({
         id: 99,
         userId: 1,
-        transactionId: 42,
+        tradeId: 42,
         providerId: "deepseek",
         model: "deepseek-chat",
         createdAt: new Date(),
@@ -369,7 +388,7 @@ describe("reviewAgent router", () => {
 
       const caller = appRouter.createCaller(makeCtx());
       await caller.reviewAgent.open({
-        transactionId: 42,
+        tradeId: 42,
         providerId: "kimi",
       });
 
@@ -386,11 +405,11 @@ describe("reviewAgent router", () => {
     });
 
     it("maps a provider UPSTREAM failure to INTERNAL_SERVER_ERROR", async () => {
-      vi.mocked(db.getTransactionById).mockResolvedValue(fakeTransaction);
+      vi.mocked(db.getTradeById).mockResolvedValue(fakeTrade);
       vi.mocked(db.getOrCreateConversation).mockResolvedValue({
         id: 99,
         userId: 1,
-        transactionId: 42,
+        tradeId: 42,
         providerId: "deepseek",
         model: "deepseek-chat",
         createdAt: new Date(),
@@ -404,11 +423,30 @@ describe("reviewAgent router", () => {
       const caller = appRouter.createCaller(makeCtx());
 
       await expect(
-        caller.reviewAgent.open({ transactionId: 42 })
+        caller.reviewAgent.open({ tradeId: 42 })
       ).rejects.toMatchObject({
         code: "INTERNAL_SERVER_ERROR",
         message: expect.stringContaining("deepseek"),
       });
+    });
+  });
+
+  describe("getActive", () => {
+    it("returns NOT_FOUND when the trade is missing or not the user's", async () => {
+      vi.mocked(db.getTradeById).mockResolvedValue(undefined);
+      const caller = appRouter.createCaller(makeCtx());
+
+      await expect(
+        caller.reviewAgent.getActive({ tradeId: 999 })
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    });
+
+    it("returns null when the trade has no conversation yet", async () => {
+      vi.mocked(db.getTradeById).mockResolvedValue(fakeTrade);
+      const caller = appRouter.createCaller(makeCtx());
+
+      expect(await caller.reviewAgent.getActive({ tradeId: 42 })).toBeNull();
+      expect(db.getConversationByTrade).toHaveBeenCalledWith(1, 42);
     });
   });
 

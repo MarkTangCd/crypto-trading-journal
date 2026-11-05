@@ -1,27 +1,24 @@
 import { z } from "zod";
 import { register, type Skill } from "../skillRegistry";
-import { getTransactionsByUserId } from "../../db";
+import { getAccountsByUserId, listTrades } from "../../db";
 import { formatUtc8Prompt } from "@shared/time";
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 20;
 
 const parameters = z.object({
-  tradingPair: z
+  symbol: z
     .string()
     .min(1)
     .optional()
     .describe(
       "Optional pair filter, e.g. BTCUSDT. Will be normalized to uppercase."
     ),
-  direction: z
-    .enum(["long", "short"])
+  side: z.enum(["long", "short"]).optional().describe("Optional side filter."),
+  status: z
+    .enum(["open", "closed"])
     .optional()
-    .describe("Optional direction filter."),
-  outcome: z
-    .enum(["win", "loss", "breakeven"])
-    .optional()
-    .describe("Optional outcome filter; only matches closed trades."),
+    .describe("Optional status filter."),
   limit: z
     .number()
     .int()
@@ -35,7 +32,7 @@ export const getRecentTradesSkill: Skill<typeof parameters> = {
   name: "get_recent_trades",
   category: "internal",
   description:
-    "Fetch the user's recent trades, newest-first by start time. Use this to ground review with comparable historical setups (same pair, same direction, similar outcome). Returns a compact field set scoped to the current user. startTime/endTime are epoch milliseconds (pass directly as anchorMs to kline tools); startTimeText/endTimeText are the same instants as UTC+8 wall-clock strings — quote these when mentioning times.",
+    "Fetch the user's recent trades (synced from the exchange), newest-first by open time. Use this to ground review with comparable historical setups (same pair, same side). Returns exchange facts only, scoped to the current user: prices, quantity, size, fees and net PnL (realizedPnlUsd, after fees). openTime/closeTime are epoch milliseconds (pass directly as anchorMs to kline tools); openTimeText/closeTimeText are the same instants as UTC+8 wall-clock strings — quote these when mentioning times. openTimeApprox=true means the open time is only approximate.",
   parameters,
   async run(args, context) {
     // ctx.userId is the ONLY guard against cross-user reads — runTools always
@@ -44,30 +41,42 @@ export const getRecentTradesSkill: Skill<typeof parameters> = {
     if (context?.userId === undefined) {
       throw new Error("get_recent_trades requires ctx.userId for scoping");
     }
+    const userId = context.userId;
 
-    const rows = await getTransactionsByUserId(context.userId, {
-      ...(args.tradingPair
-        ? { tradingPair: args.tradingPair.toUpperCase() }
-        : {}),
-      ...(args.direction ? { direction: args.direction } : {}),
-      ...(args.outcome ? { outcome: args.outcome } : {}),
-      sortBy: "startTime",
-      sortOrder: "desc",
-    });
+    const symbol = args.symbol?.toUpperCase();
+    const accounts = await getAccountsByUserId(userId);
+    const rows = (
+      await Promise.all(
+        accounts.map(account => listTrades(account.id, userId, args.status))
+      )
+    )
+      .flat()
+      .filter(
+        row =>
+          (symbol === undefined || row.symbol === symbol) &&
+          (args.side === undefined || row.side === args.side)
+      )
+      .sort((a, b) => b.openTime - a.openTime);
 
     const trades = rows.slice(0, args.limit).map(row => ({
       id: row.id,
-      tradingPair: row.tradingPair,
-      direction: row.direction,
+      symbol: row.symbol,
+      side: row.side,
       status: row.status,
-      outcome: row.outcome,
-      riskRewardRatio: row.riskRewardRatio,
-      returnAmount: row.returnAmount,
-      startTime: row.startTime,
-      startTimeText: formatUtc8Prompt(row.startTime),
-      endTime: row.endTime,
-      endTimeText: row.endTime === null ? null : formatUtc8Prompt(row.endTime),
-      context: row.context,
+      openTime: row.openTime,
+      openTimeText: formatUtc8Prompt(row.openTime),
+      openTimeApprox: row.openTimeApprox,
+      closeTime: row.closeTime,
+      closeTimeText:
+        row.closeTime === null ? null : formatUtc8Prompt(row.closeTime),
+      entryPrice: row.entryPrice,
+      exitPrice: row.exitPrice,
+      stopLossPrice: row.stopLossPrice,
+      takeProfitPrice: row.takeProfitPrice,
+      quantity: row.quantity,
+      positionSizeUsdt: row.positionSizeUsdt,
+      feeUsd: row.feeUsd,
+      realizedPnlUsd: row.realizedPnlUsd,
     }));
 
     return {

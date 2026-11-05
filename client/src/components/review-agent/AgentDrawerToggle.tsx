@@ -3,14 +3,14 @@ import { useState } from "react";
 import { AgentDrawer } from "./AgentDrawer";
 
 interface Props {
-  transactionId: number;
+  tradeId: number;
 }
 
 /**
  * Floating control rendered inside TransactionDetail. Owns the open/closed
  * state of the AgentDrawer so the parent page doesn't need to thread it.
  */
-export function AgentDrawerToggle({ transactionId }: Props) {
+export function AgentDrawerToggle({ tradeId }: Props) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -18,11 +18,7 @@ export function AgentDrawerToggle({ transactionId }: Props) {
       <Button variant="outline" onClick={() => setOpen(true)}>
         打开 AI 复盘
       </Button>
-      <AgentDrawer
-        transactionId={transactionId}
-        open={open}
-        onOpenChange={setOpen}
-      />
+      <AgentDrawer tradeId={tradeId} open={open} onOpenChange={setOpen} />
     </>
   );
 }

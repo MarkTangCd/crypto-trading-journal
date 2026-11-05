@@ -1064,21 +1064,18 @@ export const appRouter = router({
     // provider picker (no conversation yet) or the locked label (already
     // open). Never creates a conversation row.
     getActive: publicProcedure
-      .input(z.object({ transactionId: z.number().int().positive() }))
+      .input(z.object({ tradeId: z.number().int().positive() }))
       .query(async ({ ctx, input }) => {
-        const transaction = await getTransactionById(
-          input.transactionId,
-          ctx.user.id
-        );
-        if (!transaction) {
+        const trade = await getTradeById(input.tradeId, ctx.user.id);
+        if (!trade) {
           throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "Transaction not found or not owned by user",
+            code: "NOT_FOUND",
+            message: "Trade not found",
           });
         }
         const active = await getActiveConversation({
           userId: ctx.user.id,
-          transactionId: input.transactionId,
+          tradeId: trade.id,
         });
         if (!active) return null;
         return {
@@ -1091,25 +1088,22 @@ export const appRouter = router({
     open: publicProcedure
       .input(
         z.object({
-          transactionId: z.number().int().positive(),
+          tradeId: z.number().int().positive(),
           providerId: providerIdSchema.optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
-        const transaction = await getTransactionById(
-          input.transactionId,
-          ctx.user.id
-        );
-        if (!transaction) {
+        const trade = await getTradeById(input.tradeId, ctx.user.id);
+        if (!trade) {
           throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "Transaction not found or not owned by user",
+            code: "NOT_FOUND",
+            message: "Trade not found",
           });
         }
         return runAgent(() =>
           openConversation({
             userId: ctx.user.id,
-            transaction,
+            trade,
             providerId: input.providerId,
           })
         );

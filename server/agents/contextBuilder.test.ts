@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Transaction } from "../../drizzle/schema";
+import type { Trade } from "../../drizzle/schema";
 import type { Candle, CandleWindow } from "../_core/coinank";
 
 vi.mock("../db", () => ({
@@ -7,15 +7,10 @@ vi.mock("../db", () => ({
     id: 1,
     userId: 1,
     name: "main",
-    initialBalance: "1000",
-    notes: null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    balanceUsdt: "1100.5",
   }),
-  getAccountSnapshot: vi
-    .fn()
-    .mockResolvedValue({ currentBalance: "1100.00", consecutiveLosses: 1 }),
-  getTransactionsByUserId: vi.fn().mockResolvedValue([]),
+  getTradeStats: vi.fn().mockResolvedValue({ losingStreak: 1 }),
+  listTrades: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("../_core/coinank", () => ({
@@ -24,41 +19,36 @@ vi.mock("../_core/coinank", () => ({
 
 const { buildInitialMessages } = await import("./contextBuilder");
 const { fetchCandleWindowAround } = await import("../_core/coinank");
+const { listTrades } = await import("../db");
 
 const ANCHOR_MS = 1_700_000_000_000;
 const ANCHOR_SEC = Math.floor(ANCHOR_MS / 1000);
 const INTERVAL_SEC = 60 * 60; // 1H
 
-function makeTransaction(overrides: Partial<Transaction> = {}): Transaction {
+function makeTrade(overrides: Partial<Trade> = {}): Trade {
   return {
     id: 42,
     userId: 1,
     accountId: 1,
+    tradeKey: "BTCUSDT|BOTH#1",
+    exchange: "binance",
+    exchangeSymbol: "BTCUSDT",
+    symbol: "BTCUSDT",
+    positionSide: "BOTH",
+    side: "long",
     status: "closed",
-    accountBalance: "1100",
-    tradingPair: "BTCUSDT",
-    timeFrame: "1H",
-    startTime: ANCHOR_MS,
-    endTime: ANCHOR_MS + INTERVAL_SEC * 1000,
-    direction: "long",
-    tradingLogic: "breakout retest",
-    context: "btc broke prior day high",
-    tradeItems: ["entry on 1h close", "stop below pdl"],
-    outcome: "win",
-    consecutiveLosses: 0,
-    riskRewardRatio: "2.1",
-    returnAmount: "100",
+    openTime: ANCHOR_MS,
+    openTimeApprox: false,
+    closeTime: ANCHOR_MS + INTERVAL_SEC * 1000,
     entryPrice: "68000",
     exitPrice: "69000",
-    plannedStopLossPrice: "67500",
-    plannedTakeProfitPrice: "69500",
-    plannedRiskRewardRatio: "3",
-    positionSizeUsdt: "500",
-    tvUrl: null,
-    marketCycle: null,
-    transactionType: null,
-    reviewFeedback: null,
-    reviewChartUrl: null,
+    quantity: "0.01",
+    positionSizeUsdt: "680",
+    feeUsd: "0.68",
+    realizedPnlUsd: "9.32",
+    stopLossPrice: "67500",
+    takeProfitPrice: "69500",
+    syncedAt: ANCHOR_MS,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
@@ -95,7 +85,7 @@ describe("buildInitialMessages — K-line section", () => {
 
     const { user } = await buildInitialMessages({
       userId: 1,
-      transaction: makeTransaction(),
+      trade: makeTrade(),
     });
 
     expect(user.content).toContain("## 行情上下文 · K 线（1H）");
@@ -126,7 +116,7 @@ describe("buildInitialMessages — K-line section", () => {
 
     const { user } = await buildInitialMessages({
       userId: 1,
-      transaction: makeTransaction(),
+      trade: makeTrade(),
     });
 
     expect(user.content).toContain(
@@ -141,7 +131,7 @@ describe("buildInitialMessages — K-line section", () => {
 
     const { user } = await buildInitialMessages({
       userId: 1,
-      transaction: makeTransaction(),
+      trade: makeTrade(),
     });
 
     expect(user.content).toContain("## 行情上下文 · K 线（1H）");
@@ -170,7 +160,7 @@ describe("buildInitialMessages — K-line section", () => {
 
     const { user } = await buildInitialMessages({
       userId: 1,
-      transaction: makeTransaction(),
+      trade: makeTrade(),
     });
 
     // After drop, header advertises 5 columns and no row carries a 6th cell.
@@ -202,11 +192,75 @@ describe("buildInitialMessages — K-line section", () => {
 
     const { user } = await buildInitialMessages({
       userId: 1,
-      transaction: makeTransaction({ entryPrice: "0.1234" }),
+      trade: makeTrade({ entryPrice: "0.1234" }),
     });
 
     // entryPrice has 4 decimals → values truncated/rounded to 4 decimals.
     expect(user.content).toMatch(/0\.1235/);
     expect(user.content).not.toMatch(/0\.123456789/);
+  });
+});
+
+describe("buildInitialMessages — trade facts", () => {
+  beforeEach(() => {
+    vi.mocked(fetchCandleWindowAround).mockResolvedValue(makeFullWindow());
+  });
+
+  it("renders exchange facts, account state and no manual-entry sections", async () => {
+    const { user } = await buildInitialMessages({
+      userId: 1,
+      trade: makeTrade({ openTimeApprox: true }),
+    });
+
+    for (const line of [
+      "- 交易ID：42",
+      "- 交易对：BTCUSDT",
+      "- 方向：long",
+      "（近似）",
+      "- 状态：closed",
+      "- 净盈亏(USD)：9.32",
+      "- 入场均价：68000",
+      "- 出场均价：69000",
+      "- 止损：67500",
+      "- 止盈：69500",
+      "- 数量：0.01",
+      "- 仓位规模(USDT)：680",
+      "- 手续费(USD)：0.68",
+      "- 当前余额：1100.5",
+      "- 连续亏损次数：1",
+    ]) {
+      expect(user.content).toContain(line);
+    }
+    for (const removed of [
+      "周期",
+      "交易逻辑",
+      "交易要点",
+      "复盘笔记",
+      "计划",
+    ]) {
+      expect(user.content).not.toContain(removed);
+    }
+  });
+
+  it("lists recent same symbol + side trades from listTrades, newest first", async () => {
+    vi.mocked(listTrades).mockResolvedValueOnce([
+      makeTrade({ id: 50, status: "open", openTime: ANCHOR_MS + 1 }),
+      makeTrade({ id: 42 }),
+      makeTrade({ id: 41, openTime: ANCHOR_MS - 2, realizedPnlUsd: "-3" }),
+      makeTrade({ id: 40, openTime: ANCHOR_MS - 1, realizedPnlUsd: "7" }),
+      makeTrade({ id: 39, side: "short" }),
+      makeTrade({ id: 38, symbol: "ETHUSDT" }),
+    ]);
+
+    const { user } = await buildInitialMessages({
+      userId: 1,
+      trade: makeTrade(),
+    });
+
+    expect(listTrades).toHaveBeenCalledWith(1, 1);
+    expect(user.content).toContain("## 最近 3 笔同向同 pair 历史");
+    const section = user.content.split("## 最近 3 笔")[1] as string;
+    const pnls = Array.from(section.matchAll(/pnl=(\S+)/g)).map(m => m[1]);
+    expect(pnls.slice(0, 3)).toEqual(["9.32", "7", "-3"]);
   });
 });

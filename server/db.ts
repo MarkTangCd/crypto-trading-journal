@@ -1443,9 +1443,9 @@ export async function getConversationById(
   return rows[0];
 }
 
-export async function getConversationByTransaction(
+export async function getConversationByTrade(
   userId: number,
-  transactionId: number
+  tradeId: number
 ): Promise<Conversation | undefined> {
   const db = await getDb();
   if (!db) return undefined;
@@ -1454,10 +1454,7 @@ export async function getConversationByTransaction(
     .select()
     .from(conversations)
     .where(
-      and(
-        eq(conversations.userId, userId),
-        eq(conversations.transactionId, transactionId)
-      )
+      and(eq(conversations.userId, userId), eq(conversations.tradeId, tradeId))
     )
     .limit(1);
 
@@ -1466,7 +1463,7 @@ export async function getConversationByTransaction(
 
 export async function getOrCreateConversation(params: {
   userId: number;
-  transactionId: number;
+  tradeId: number;
   providerId: string;
   model: string;
 }): Promise<Conversation> {
@@ -1477,7 +1474,7 @@ export async function getOrCreateConversation(params: {
       .where(
         and(
           eq(conversations.userId, params.userId),
-          eq(conversations.transactionId, params.transactionId)
+          eq(conversations.tradeId, params.tradeId)
         )
       )
       .limit(1);
@@ -1490,7 +1487,7 @@ export async function getOrCreateConversation(params: {
       .insert(conversations)
       .values({
         userId: params.userId,
-        transactionId: params.transactionId,
+        tradeId: params.tradeId,
         providerId: params.providerId,
         model: params.model,
       })

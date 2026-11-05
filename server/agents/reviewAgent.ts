@@ -1,9 +1,9 @@
 import {
   appendMessage,
-  getConversationByTransaction,
+  getConversationByTrade,
   getOrCreateConversation,
 } from "../db";
-import type { Conversation, Transaction } from "../../drizzle/schema";
+import type { Conversation, Trade } from "../../drizzle/schema";
 import { buildInitialMessages } from "./contextBuilder";
 import {
   type AgentMessage,
@@ -30,14 +30,14 @@ export {
  */
 export async function getActiveConversation(params: {
   userId: number;
-  transactionId: number;
+  tradeId: number;
 }): Promise<{
   conversation: Conversation;
   messages: AgentMessage[];
 } | null> {
-  const conversation = await getConversationByTransaction(
+  const conversation = await getConversationByTrade(
     params.userId,
-    params.transactionId
+    params.tradeId
   );
   if (!conversation) return null;
   return {
@@ -48,18 +48,18 @@ export async function getActiveConversation(params: {
 
 /**
  * Open a per-trade conversation. The caller must have already verified that
- * `transaction` belongs to `userId`. Returns the existing thread on
+ * `trade` belongs to `userId`. Returns the existing thread on
  * subsequent opens; seeds a fresh thread (system + user context + initial
  * assistant reply) on the first call.
  */
 export async function openConversation(params: {
   userId: number;
-  transaction: Transaction;
+  trade: Trade;
   providerId?: string;
 }): Promise<{ conversationId: number; messages: AgentMessage[] }> {
-  const existingConversation = await getConversationByTransaction(
+  const existingConversation = await getConversationByTrade(
     params.userId,
-    params.transaction.id
+    params.trade.id
   );
 
   const handle: ResolvedProvider = existingConversation
@@ -70,7 +70,7 @@ export async function openConversation(params: {
 
   const conversation = await getOrCreateConversation({
     userId: params.userId,
-    transactionId: params.transaction.id,
+    tradeId: params.trade.id,
     providerId: handle.provider.id,
     model: handle.provider.defaultModel,
   });
@@ -82,7 +82,7 @@ export async function openConversation(params: {
 
   const { system, user } = await buildInitialMessages({
     userId: params.userId,
-    transaction: params.transaction,
+    trade: params.trade,
   });
 
   await appendMessage({

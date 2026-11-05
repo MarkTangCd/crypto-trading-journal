@@ -151,7 +151,7 @@ export default function TransactionDetail() {
         >
           ← transactions
         </Link>
-        <AgentDrawerToggle transactionId={transaction.id} />
+        <AgentDrawerToggle tradeId={transactionId} />
       </div>
 
       {/* Page header: pair + status marker + meta */}

@@ -1,10 +1,6 @@
-import type { Transaction } from "../../drizzle/schema";
+import type { Trade } from "../../drizzle/schema";
 import type { ChatMessage } from "./providers/types";
-import {
-  getAccountById,
-  getAccountSnapshot,
-  getTransactionsByUserId,
-} from "../db";
+import { getAccountById, getTradeStats, listTrades } from "../db";
 import {
   type Candle,
   type CandleWindow,
@@ -14,6 +10,8 @@ import { formatUtc8CandleTime, formatUtc8Prompt } from "@shared/time";
 
 const SIMILAR_TRADE_LIMIT = 5;
 const KLINE_HALF_SIZE = 100;
+// Trades carry no timeFrame; one fixed interval anchored at openTime.
+const KLINE_INTERVAL = "1H";
 // Soft cap on the rendered K-line section. ±100 candles with timestamps +
 // 4 prices is ~9-10 KB on its own; the cap exists to drop the volume column
 // when high-volume markets push the block well above its typical width.
@@ -21,7 +19,7 @@ const KLINE_SECTION_CHAR_CAP = 12000;
 
 interface BuildOptions {
   userId: number;
-  transaction: Transaction;
+  trade: Trade;
 }
 
 /**
@@ -35,80 +33,78 @@ interface BuildOptions {
  */
 export async function buildInitialMessages({
   userId,
-  transaction,
+  trade,
 }: BuildOptions): Promise<{ system: ChatMessage; user: ChatMessage }> {
-  const account = await getAccountById(transaction.accountId, userId);
-  const snapshot = account
-    ? await getAccountSnapshot(account.id, account.initialBalance)
-    : { currentBalance: "未知", consecutiveLosses: 0 };
+  const account = await getAccountById(trade.accountId, userId);
+  const snapshot = {
+    currentBalance: account?.balanceUsdt ?? "未知",
+    consecutiveLosses: account
+      ? (await getTradeStats(account.id, userId)).losingStreak
+      : 0,
+  };
 
-  const sameDirection = await getTransactionsByUserId(userId, {
-    accountId: transaction.accountId,
-    tradingPair: transaction.tradingPair,
-    direction: transaction.direction,
-    sortBy: "startTime",
-    sortOrder: "desc",
-  });
-
-  const recent = sameDirection
-    .filter(row => row.id !== transaction.id)
+  // listTrades orders open first; re-sort so "recent" means newest openTime.
+  const recent = (await listTrades(trade.accountId, userId))
+    .filter(
+      row =>
+        row.id !== trade.id &&
+        row.symbol === trade.symbol &&
+        row.side === trade.side
+    )
+    .sort((a, b) => b.openTime - a.openTime)
     .slice(0, SIMILAR_TRADE_LIMIT);
 
-  const klineBlock = await loadKlineBlock(transaction);
+  const klineBlock = await loadKlineBlock(trade);
 
   return {
     system: { role: "system", content: SYSTEM_PROMPT },
     user: {
       role: "user",
-      content: renderUserContext({ transaction, snapshot, recent, klineBlock }),
+      content: renderUserContext({ trade, snapshot, recent, klineBlock }),
     },
   };
 }
 
-async function loadKlineBlock(transaction: Transaction): Promise<string> {
+async function loadKlineBlock(trade: Trade): Promise<string> {
   try {
     const window = await fetchCandleWindowAround({
-      tradingPair: transaction.tradingPair,
-      timeFrame: transaction.timeFrame,
-      anchorMs: transaction.startTime,
+      tradingPair: trade.symbol,
+      timeFrame: KLINE_INTERVAL,
+      anchorMs: trade.openTime,
       halfSize: KLINE_HALF_SIZE,
     });
-    return renderKlineSection(transaction, window);
+    return renderKlineSection(trade, window);
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     console.warn("[contextBuilder] kline fetch failed", reason);
     return [
       "",
-      `## 行情上下文 · K 线（${transaction.timeFrame}）`,
+      `## 行情上下文 · K 线（${KLINE_INTERVAL}）`,
       `> 无法加载 K 线上下文（${reason}），其余信息照常使用。`,
     ].join("\n");
   }
 }
 
-function renderKlineSection(
-  transaction: Transaction,
-  window: CandleWindow
-): string {
+function renderKlineSection(trade: Trade, window: CandleWindow): string {
   if (window.candles.length === 0) {
     return [
       "",
-      `## 行情上下文 · K 线（${transaction.timeFrame}）`,
+      `## 行情上下文 · K 线（${KLINE_INTERVAL}）`,
       "> 该交易对在此时间段无可用 K 线数据。",
     ].join("\n");
   }
 
-  const decimals = pricePrecision(transaction.entryPrice);
-  const withVolume = composeKlineBlock(transaction, window, decimals, true);
+  const decimals = pricePrecision(trade.entryPrice);
+  const withVolume = composeKlineBlock(window, decimals, true);
   if (withVolume.length <= KLINE_SECTION_CHAR_CAP) return withVolume;
 
   console.warn(
     `[contextBuilder] dropped volume column to fit ${KLINE_SECTION_CHAR_CAP}-char cap`
   );
-  return composeKlineBlock(transaction, window, decimals, false);
+  return composeKlineBlock(window, decimals, false);
 }
 
 function composeKlineBlock(
-  transaction: Transaction,
   window: CandleWindow,
   decimals: number,
   includeVolume: boolean
@@ -117,7 +113,7 @@ function composeKlineBlock(
   const entryLabel = window.entryIndex === null ? "无" : window.entryIndex;
   const lines: string[] = [];
   lines.push("");
-  lines.push(`## 行情上下文 · K 线（${transaction.timeFrame}）`);
+  lines.push(`## 行情上下文 · K 线（${KLINE_INTERVAL}）`);
   lines.push(
     `before=${window.before} · after=${window.after} · entryIndex=${entryLabel} · 列=${cols}`
   );
@@ -179,14 +175,14 @@ const SYSTEM_PROMPT = `你是一名严格但克制的加密货币交易复盘搭
 5. 所有时间均为 UTC+8：上下文中给出的时间已经是 UTC+8，你在回复中提及任何时间一律按 UTC+8 表述，不要自行做时区换算。`;
 
 interface RenderInput {
-  transaction: Transaction;
+  trade: Trade;
   snapshot: { currentBalance: string; consecutiveLosses: number };
-  recent: Transaction[];
+  recent: Trade[];
   klineBlock: string;
 }
 
 function renderUserContext({
-  transaction,
+  trade,
   snapshot,
   recent,
   klineBlock,
@@ -195,51 +191,27 @@ function renderUserContext({
   lines.push("以下是这笔交易的完整记录，请阅读后给出你的初步复盘意见。");
   lines.push("");
   lines.push("## 交易基本信息");
-  lines.push(`- 交易ID：${transaction.id}`);
-  lines.push(`- 交易对：${transaction.tradingPair}`);
-  lines.push(`- 方向：${transaction.direction}`);
-  lines.push(`- 周期：${transaction.timeFrame}`);
-  lines.push(`- 开仓时间：${fmtTime(transaction.startTime)}`);
+  lines.push(`- 交易ID：${trade.id}`);
+  lines.push(`- 交易对：${trade.symbol}`);
+  lines.push(`- 方向：${trade.side}`);
   lines.push(
-    `- 平仓时间：${transaction.endTime ? fmtTime(transaction.endTime) : "未平仓"}`
+    `- 开仓时间：${fmtTime(trade.openTime)}${trade.openTimeApprox ? "（近似）" : ""}`
   );
-  lines.push(`- 状态：${transaction.status}`);
-  if (transaction.outcome) lines.push(`- 结果：${transaction.outcome}`);
-  if (transaction.returnAmount)
-    lines.push(`- 盈亏：${transaction.returnAmount}`);
+  lines.push(
+    `- 平仓时间：${trade.closeTime ? fmtTime(trade.closeTime) : "未平仓"}`
+  );
+  lines.push(`- 状态：${trade.status}`);
+  lines.push(`- 净盈亏(USD)：${trade.realizedPnlUsd}`);
 
   lines.push("");
   lines.push("## 价格与风险");
-  if (transaction.entryPrice)
-    lines.push(`- 计划入场：${transaction.entryPrice}`);
-  if (transaction.exitPrice) lines.push(`- 实际出场：${transaction.exitPrice}`);
-  if (transaction.plannedStopLossPrice)
-    lines.push(`- 计划止损：${transaction.plannedStopLossPrice}`);
-  if (transaction.plannedTakeProfitPrice)
-    lines.push(`- 计划止盈：${transaction.plannedTakeProfitPrice}`);
-  if (transaction.plannedRiskRewardRatio)
-    lines.push(`- 计划盈亏比：1:${transaction.plannedRiskRewardRatio}`);
-  if (transaction.riskRewardRatio)
-    lines.push(`- 实际盈亏比：1:${transaction.riskRewardRatio}`);
-  if (transaction.positionSizeUsdt)
-    lines.push(`- 仓位规模(USDT)：${transaction.positionSizeUsdt}`);
-
-  lines.push("");
-  lines.push("## 交易逻辑（trader 自己写的）");
-  if (transaction.context) {
-    lines.push(transaction.context);
-  } else if (transaction.tradingLogic) {
-    lines.push(transaction.tradingLogic);
-  } else {
-    lines.push("（未填写）");
-  }
-  if (transaction.tradeItems && transaction.tradeItems.length > 0) {
-    lines.push("");
-    lines.push("交易要点：");
-    transaction.tradeItems.forEach((item, index) => {
-      lines.push(`${index + 1}. ${item}`);
-    });
-  }
+  lines.push(`- 入场均价：${trade.entryPrice}`);
+  if (trade.exitPrice) lines.push(`- 出场均价：${trade.exitPrice}`);
+  if (trade.stopLossPrice) lines.push(`- 止损：${trade.stopLossPrice}`);
+  if (trade.takeProfitPrice) lines.push(`- 止盈：${trade.takeProfitPrice}`);
+  lines.push(`- 数量：${trade.quantity}`);
+  lines.push(`- 仓位规模(USDT)：${trade.positionSizeUsdt}`);
+  lines.push(`- 手续费(USD)：${trade.feeUsd}`);
 
   lines.push("");
   lines.push("## 账户状态");
@@ -250,18 +222,10 @@ function renderUserContext({
     lines.push("");
     lines.push(`## 最近 ${recent.length} 笔同向同 pair 历史（按开仓时间倒序）`);
     recent.forEach(row => {
-      const outcome = row.outcome ?? "—";
-      const pnl = row.returnAmount ?? "—";
       lines.push(
-        `- ${fmtTime(row.startTime)} · ${row.timeFrame} · ${outcome} · pnl=${pnl}`
+        `- ${fmtTime(row.openTime)} · ${row.status} · pnl=${row.realizedPnlUsd}`
       );
     });
-  }
-
-  if (transaction.reviewFeedback) {
-    lines.push("");
-    lines.push("## 之前已写的复盘笔记");
-    lines.push(transaction.reviewFeedback);
   }
 
   if (klineBlock) lines.push(klineBlock);

@@ -19,12 +19,12 @@ import { useReviewStream } from "./useReviewStream";
 type ProviderId = "deepseek" | "kimi" | "glm" | "openai" | "gemini";
 
 interface Props {
-  transactionId: number;
+  tradeId: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function AgentDrawer({ transactionId, open, onOpenChange }: Props) {
+export function AgentDrawer({ tradeId, open, onOpenChange }: Props) {
   const utils = trpc.useUtils();
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [lockedProviderId, setLockedProviderId] = useState<string | null>(null);
@@ -38,7 +38,7 @@ export function AgentDrawer({ transactionId, open, onOpenChange }: Props) {
     enabled: open,
   });
   const activeQuery = trpc.reviewAgent.getActive.useQuery(
-    { transactionId },
+    { tradeId },
     { enabled: open }
   );
 
@@ -53,7 +53,7 @@ export function AgentDrawer({ transactionId, open, onOpenChange }: Props) {
       // open() returns conversationId + messages but no providerId — pull the
       // freshly-persisted row via getActive's cache so the lock label is
       // accurate even on first open.
-      utils.reviewAgent.getActive.invalidate({ transactionId });
+      utils.reviewAgent.getActive.invalidate({ tradeId });
     },
     onError: error => toast.error(error.message || "无法打开复盘对话"),
   });
@@ -123,7 +123,7 @@ export function AgentDrawer({ transactionId, open, onOpenChange }: Props) {
   const handleStartConversation = () => {
     if (!pickedProviderId) return;
     openMutation.mutate({
-      transactionId,
+      tradeId,
       providerId: pickedProviderId as ProviderId,
     });
   };

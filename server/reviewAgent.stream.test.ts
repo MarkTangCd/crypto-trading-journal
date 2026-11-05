@@ -2,13 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./db", () => ({
   getAccountById: vi.fn().mockResolvedValue(undefined),
-  getAccountSnapshot: vi
-    .fn()
-    .mockResolvedValue({ currentBalance: "1000", consecutiveLosses: 0 }),
-  getTransactionsByUserId: vi.fn().mockResolvedValue([]),
+  getTradeStats: vi.fn().mockResolvedValue({ losingStreak: 0 }),
+  listTrades: vi.fn().mockResolvedValue([]),
   getOrCreateConversation: vi.fn(),
   getConversationById: vi.fn(),
-  getConversationByTransaction: vi.fn().mockResolvedValue(undefined),
+  getConversationByTrade: vi.fn().mockResolvedValue(undefined),
   appendMessage: vi.fn(),
   listMessages: vi.fn(),
   getAgentSettings: vi.fn().mockResolvedValue(undefined),
@@ -80,7 +78,7 @@ const { ProviderError } = await import("./agents/providers/types");
 const deepseekConversation = {
   id: 99,
   userId: 1,
-  transactionId: 42,
+  tradeId: 42,
   providerId: "deepseek",
   model: "deepseek-chat",
   createdAt: new Date(),
@@ -237,7 +235,7 @@ describe("streamUserMessage", () => {
     vi.mocked(db.getConversationById).mockResolvedValue({
       id: 99,
       userId: 1,
-      transactionId: 42,
+      tradeId: 42,
       providerId: "kimi",
       model: "moonshot-v1-128k",
       createdAt: new Date(),

@@ -45,17 +45,20 @@ const db = await import("./server/db.ts");
 await db.getOrCreateAnonymousUser();
 
 const first = await db.getOrCreateConversation({
-  userId: 1, transactionId: 42, providerId: "deepseek", model: "deepseek-chat",
+  userId: 1, tradeId: 42, providerId: "deepseek", model: "deepseek-chat",
 });
 const second = await db.getOrCreateConversation({
-  userId: 1, transactionId: 42, providerId: "deepseek", model: "deepseek-chat",
+  userId: 1, tradeId: 42, providerId: "deepseek", model: "deepseek-chat",
 });
 if (first.id !== second.id) throw new Error("convo-not-idempotent");
 
 const other = await db.getOrCreateConversation({
-  userId: 1, transactionId: 43, providerId: "deepseek", model: "deepseek-chat",
+  userId: 1, tradeId: 43, providerId: "deepseek", model: "deepseek-chat",
 });
-if (other.id === first.id) throw new Error("convo-not-scoped-by-tx");
+if (other.id === first.id) throw new Error("convo-not-scoped-by-trade");
+if (first.tradeId !== 42 || first.transactionId !== null) throw new Error("convo-not-keyed-by-trade");
+if ((await db.getConversationByTrade(1, 43))?.id !== other.id) throw new Error("lookup-by-trade");
+if ((await db.getConversationByTrade(999, 43)) !== undefined) throw new Error("lookup-user-scope-leak");
 
 await db.appendMessage({ conversationId: first.id, role: "system", content: JSON.stringify({ text: "boot" }) });
 await db.appendMessage({ conversationId: first.id, role: "user", content: JSON.stringify({ text: "review" }) });
