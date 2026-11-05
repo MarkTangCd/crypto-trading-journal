@@ -85,9 +85,9 @@ describe("summarizeSample", () => {
     const summary = summarizeSample([], [], []);
     expect(summary).toEqual({
       winRate: 0,
-      medianR: 0,
-      p25R: 0,
-      p75R: 0,
+      medianReturnPct: 0,
+      p25ReturnPct: 0,
+      p75ReturnPct: 0,
       avgHoldHours: 0,
       medianHoldHours: 0,
     });
@@ -102,15 +102,15 @@ describe("summarizeSample", () => {
     expect(summary.winRate).toBe(50);
   });
 
-  it("returns r:r quartiles + hold stats for a synthetic 5-trade sample", () => {
+  it("returns net return % quartiles + hold stats for a synthetic 5-trade sample", () => {
     const summary = summarizeSample(
       [1, 2, 3, 4, 5],
       ["win", "loss", "win", "loss", "win"],
       [2, 4, 6, 8, 10]
     );
-    expect(summary.medianR).toBe(3);
-    expect(summary.p25R).toBe(2);
-    expect(summary.p75R).toBe(4);
+    expect(summary.medianReturnPct).toBe(3);
+    expect(summary.p25ReturnPct).toBe(2);
+    expect(summary.p75ReturnPct).toBe(4);
     expect(summary.avgHoldHours).toBe(6);
     expect(summary.medianHoldHours).toBe(6);
     expect(summary.winRate).toBeCloseTo(60);

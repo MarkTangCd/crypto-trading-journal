@@ -5,8 +5,8 @@ title: >-
   code
 status: To Do
 assignee: []
-created_date: "2026-11-04 12:43"
-updated_date: "2026-11-04 12:45"
+created_date: '2026-11-04 12:43'
+updated_date: '2026-11-05 13:34'
 labels:
   - ready-for-agent
 dependencies:
@@ -19,11 +19,9 @@ ordinal: 68000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-
 decision-2 and spec doc-4 section Dropped. Server-side half of the removal; final migration tightens the schema to the spec.
 
 Current DB holds 0 transactions, so no data migration.
-
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
@@ -37,3 +35,9 @@ Current DB holds 0 transactions, so no data migration.
 - [ ] #5 rg -n 'transaction' server shared drizzle/schema.ts returns only runInSqliteTransaction and SQL transaction wording
 - [ ] #6 devbox run -- npm run check, npm run test and npm run format pass
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Paused 2026-11-05: compareWithMyBaseline still uses transaction reads, so task-69 goes first. Decided: migration deletes keyless accounts (apiKey/apiSecret NULL) before the NOT NULL copy; drizzle/dev.db is a pre-migration legacy DB (no __drizzle_migrations, never migrated), so verify against a copy of data/crypto-trading-journal.sqlite instead.
+<!-- SECTION:NOTES:END -->

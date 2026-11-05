@@ -10,9 +10,9 @@ export type BucketLabel =
 
 export interface SampleSummary {
   winRate: number;
-  medianR: number;
-  p25R: number;
-  p75R: number;
+  medianReturnPct: number;
+  p25ReturnPct: number;
+  p75ReturnPct: number;
   avgHoldHours: number;
   medianHoldHours: number;
 }
@@ -64,21 +64,21 @@ export function classifyBucket(rank: number): BucketLabel {
 }
 
 /**
- * Compute the headline stats the skill returns: win-rate, r:r quartiles,
+ * Compute the headline stats the skill returns: win-rate, net return % quartiles,
  * mean + median hold hours. Outcomes/holdHours are positional arrays —
- * caller is responsible for aligning them with the rrValues array.
+ * caller is responsible for aligning them with the returnValues array.
  */
 export function summarizeSample(
-  rrValues: number[],
+  returnValues: number[],
   outcomes: Array<"win" | "loss" | "breakeven">,
   holdHours: number[]
 ): SampleSummary {
-  if (rrValues.length === 0) {
+  if (returnValues.length === 0) {
     return {
       winRate: 0,
-      medianR: 0,
-      p25R: 0,
-      p75R: 0,
+      medianReturnPct: 0,
+      p25ReturnPct: 0,
+      p75ReturnPct: 0,
       avgHoldHours: 0,
       medianHoldHours: 0,
     };
@@ -91,9 +91,9 @@ export function summarizeSample(
       : holdHours.reduce((a, b) => a + b, 0) / holdHours.length;
   return {
     winRate,
-    medianR: quantile(rrValues, 0.5),
-    p25R: quantile(rrValues, 0.25),
-    p75R: quantile(rrValues, 0.75),
+    medianReturnPct: quantile(returnValues, 0.5),
+    p25ReturnPct: quantile(returnValues, 0.25),
+    p75ReturnPct: quantile(returnValues, 0.75),
     avgHoldHours: avgHold,
     medianHoldHours: quantile(holdHours, 0.5),
   };
