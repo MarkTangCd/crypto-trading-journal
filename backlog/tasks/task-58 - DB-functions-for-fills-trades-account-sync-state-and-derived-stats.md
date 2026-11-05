@@ -1,11 +1,11 @@
 ---
 id: TASK-58
-title: 'DB functions for fills, trades, account sync state and derived stats'
+title: "DB functions for fills, trades, account sync state and derived stats"
 status: Done
 assignee:
-  - '@myself'
-created_date: '2026-11-04 12:42'
-updated_date: '2026-11-05 00:20'
+  - "@myself"
+created_date: "2026-11-04 12:42"
+updated_date: "2026-11-05 00:20"
 labels:
   - ready-for-agent
 dependencies:
@@ -19,13 +19,17 @@ ordinal: 58000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
+
 Spec doc-4 sections Data model (rebuild merge rules), Derived values and tRPC surface. Plain exported functions in server/db.ts, userId-filtered, no router logic. Existing transaction functions stay until the removal task.
 
 Trades are matched by tradeKey, never delete-and-reinsert, so conversations keep their tradeId.
+
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
+
 <!-- AC:BEGIN -->
+
 - [x] #1 insertFills(rows) ignores duplicates on (accountId, symbol, fillId); listFillsByAccount(accountId, userId); getFillCursors(accountId) returns max fills.time per symbol
 - [x] #2 upsertTradesByTradeKey(accountId, userId, records, syncedAt) inserts new keys with every column, updates existing keys with every column except openTime and openTimeApprox, and except stopLossPrice/takeProfitPrice on rows whose stored status is closed; a stored tradeKey absent from records is logged with [Sync] and left in place
 - [x] #3 getTradeById(id, userId), listTrades(accountId, userId, status?) ordered open first then openTime desc, listOpenTradeSymbols(accountId)
@@ -40,11 +44,12 @@ Trades are matched by tradeKey, never delete-and-reinsert, so conversations keep
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
+
 1. server/db.ts fills: insertFills (onConflictDoNothing), listFillsByAccount (time, id order), getFillCursors -> Map<symbol, max time>
 2. trades: upsertTradesByTradeKey (load existing keys; insert new; update existing except openTime/openTimeApprox; SL/TP written only when the incoming record is open, so open->closed freezes the last value and closed rows keep hand edits; missing keys logged [Sync]); getTradeById, listTrades (open first, openTime desc, id desc), listOpenTradeSymbols (distinct exchangeSymbol)
 3. updateTradeByHand + exported TradeEditError for rule violations (router maps to BAD_REQUEST); returns undefined when not found
 4. writeSyncAttempt / writeSyncFailure / writeSyncSuccess: plain getDb() updates, no own transaction, so they join the caller's runInSqliteTransaction
-5. getTradeStats: decimal strings via _core/decimal (money unrounded sums, ratios scale 4, null on zero denominator); win rate/PF/expectancy/streak over closed trades; Σ realizedPnlUsd and Σ feeUsd over all trades (open rows hold realized partials)
+5. getTradeStats: decimal strings via \_core/decimal (money unrounded sums, ratios scale 4, null on zero denominator); win rate/PF/expectancy/streak over closed trades; Σ realizedPnlUsd and Σ feeUsd over all trades (open rows hold realized partials)
 6. deleteAccountCascade via subquery deletes in one runInSqliteTransaction; toPublicAccount(row) with apiKeyTail (null when no key) using decrypt from agents/secrets
 7. server/trade.db.test.ts via subprocess runNodeEval pattern
 8. format (touched files only), check, test
@@ -53,13 +58,14 @@ Trades are matched by tradeKey, never delete-and-reinsert, so conversations keep
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
+
 DB layer for exchange sync in server/db.ts (plain exported functions, no router changes).
 
 - Fills: insertFills (onConflictDoNothing on accountId/symbol/fillId), listFillsByAccount (time, id), getFillCursors -> Map<symbol, max time>.
 - Trades: upsertTradesByTradeKey merges by tradeKey without deleting rows; openTime/openTimeApprox written on insert only; SL/TP written only when the incoming record is open, so open->closed freezes the last live value and closed rows keep hand edits; stored keys missing from records are logged [Sync] and kept. getTradeById, listTrades (open first, openTime desc, id desc), listOpenTradeSymbols.
 - updateTradeByHand enforces closed-only SL/TP and approx-only openTime (sets openTimeApprox false); violations throw the new exported TradeEditError for the router to map to BAD_REQUEST; missing trade returns undefined.
 - writeSyncAttempt / writeSyncFailure / writeSyncSuccess are single UPDATEs with no own transaction, so they join the caller's runInSqliteTransaction.
-- getTradeStats returns TradeStats via _core/decimal: counts, winRate / profitFactor / exposureRatio (scale 4), expectancyUsd (scale 2), losingStreak, Σ realizedPnlUsd and Σ feeUsd over all trades (open rows hold partial realized PnL), open count and exposure; null on zero denominators.
+- getTradeStats returns TradeStats via \_core/decimal: counts, winRate / profitFactor / exposureRatio (scale 4), expectancyUsd (scale 2), losingStreak, Σ realizedPnlUsd and Σ feeUsd over all trades (open rows hold partial realized PnL), open count and exposure; null on zero denominators.
 - deleteAccountCascade deletes messages, conversations, trades, fills and the account via subqueries in one runInSqliteTransaction; toPublicAccount strips key ciphertexts and adds apiKeyTail (null without a key).
 
 Deviation from AC #2 wording: SL/TP freeze keys off the incoming record's status, not the stored status, because reconstruct emits null SL/TP for closed records and the stored-status rule would wipe them on the closing sync.
@@ -67,4 +73,5 @@ Deviation from AC #2 wording: SL/TP freeze keys off the incoming record's status
 Notes: db.ts now imports decrypt from agents/secrets (which imports db.ts); the cycle is call-time only. Sync writes do not bump updatedAt; hand edits do.
 
 Tests: server/trade.db.test.ts (5 cases, real SQLite via subprocess) covers fills, merge rules, list order + hand-edit rules, stats + sync state, cascade + toPublicAccount; mutation-checked the SL/TP freeze. npm run check and npm run test (462) pass.
+
 <!-- SECTION:FINAL_SUMMARY:END -->

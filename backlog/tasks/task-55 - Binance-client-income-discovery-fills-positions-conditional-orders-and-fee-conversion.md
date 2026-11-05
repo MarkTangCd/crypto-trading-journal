@@ -5,9 +5,9 @@ title: >-
   conversion
 status: Done
 assignee:
-  - '@myself'
-created_date: '2026-11-04 12:42'
-updated_date: '2026-11-04 13:38'
+  - "@myself"
+created_date: "2026-11-04 12:42"
+updated_date: "2026-11-04 13:38"
 labels:
   - ready-for-agent
 dependencies:
@@ -20,15 +20,19 @@ ordinal: 55000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
+
 Spec doc-4 section Binance implementation, rows discoverSymbols, fetchFills, fetchPositions, fetchConditionalOrders and fee conversion. Second half of the thin client.
 
 Research: docs/research/binance-income-and-symbol-discovery.md (branch research/binance-income-and-symbol-discovery), docs/research/binance-algo-orders.md (branch research/binance-algo-orders), docs/research/binance-position-and-balance-v3.md.
 
 Map fog to clear if possible: two facts still need a live open position (whether live openOrders still returns migrated conditional types alongside openAlgoOrders; sign of positionAmt for a hedge-mode SHORT). If the trader has an open position during this task, re-run scripts/binance-key-probe.mjs and record both answers in the final summary; otherwise say so.
+
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
+
 <!-- AC:BEGIN -->
+
 - [x] #1 discoverSymbols: GET /fapi/v1/income without symbol or incomeType, limit 1000, windows of at most 7 days, pages by advancing startTime, dedupes by tranId, keeps symbols from REALIZED_PNL / COMMISSION / FUNDING_FEE rows, returns { symbols, maxTime }
 - [x] #2 fetchFills: GET /fapi/v1/userTrades with symbol, windows of at most 7 days, limit 1000, pages by startTime = last time, dedupes by id, maps every ExchangeFill field; commission in USDT passes through to feeUsd unchanged
 - [x] #3 Non-USDT commission is converted through GET /fapi/v1/klines?symbol=<ASSET>USDT&interval=1m using the 1-minute close at the fill's minute, cached per (asset, minute) for the lifetime of one adapter run; a missing kline throws ExchangeError unknown
@@ -41,6 +45,7 @@ Map fog to clear if possible: two facts still need a live open position (whether
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
+
 1. http.ts: add publicGet (unsigned, same timeout/weight log/error mapping) by sharing the send path with signedGet
 2. Windowing helper: split [from, to] into inclusive windows of at most 7 days; inside each window page with limit 1000, next startTime = last row time while the page is full (cursor + 1 if no progress, to avoid a same-ms loop)
 3. discoverSymbols: /fapi/v1/income (no symbol/incomeType), dedupe by incomeType+tranId (tranId is unique per incomeType), symbols from REALIZED_PNL / COMMISSION / FUNDING_FEE rows with non-empty symbol, maxTime = max time of all rows (0 when none, same as the fake)
@@ -54,6 +59,7 @@ Map fog to clear if possible: two facts still need a live open position (whether
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
+
 Second half of the hand-written Binance client (spec doc-4); createBinanceAdapter() now implements every ExchangeAdapter method.
 
 - http.ts: publicGet (unsigned) shares the send path with signedGet (timeout, weight log, error mapping).
@@ -66,4 +72,5 @@ Second half of the hand-written Binance client (spec doc-4); createBinanceAdapte
 - check and full suite (436) pass.
 
 Open fog: the trader had no open position, so the live probe was not re-run. Still UNCONFIRMED: (1) whether live openOrders still returns migrated conditional types alongside openAlgoOrders; (2) sign of positionAmt for a hedge-mode SHORT.
+
 <!-- SECTION:FINAL_SUMMARY:END -->

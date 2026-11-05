@@ -3,11 +3,11 @@ id: TASK-45
 title: Balance snapshot and balance-curve source after initialBalance retires
 status: Done
 assignee:
-  - '@myself'
-created_date: '2026-11-04 06:46'
-updated_date: '2026-11-04 08:22'
+  - "@myself"
+created_date: "2026-11-04 06:46"
+updated_date: "2026-11-04 08:22"
 labels:
-  - 'wayfinder:grilling'
+  - "wayfinder:grilling"
 dependencies: []
 references:
   - backlog/docs/doc-3 - Exchange-sync-map.md
@@ -17,16 +17,19 @@ ordinal: 45000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
+
 ## Question
 
 Account balance now comes from the exchange wallet at sync time (decided). Where does that snapshot live, and how is the Dashboard balance curve computed once initialBalance is gone?
 
 Options to grill: (a) a single balanceUsdt + balanceSyncedAt on accounts, curve derived as current balance minus cumulative later trade PnL; (b) an account_balance_snapshots table appended on every sync, curve drawn from snapshots; (c) both. Also decide what the Dashboard shows while an account has never synced.
+
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
+
 Decisions (all recommendations accepted by the trader, 2026-11-04):
 
 1. Storage: two columns on accounts — balanceUsdt (wallet balance, /fapi/v3/balance USDT row 'balance') and unrealizedPnlUsdt ('crossUnPnl' from the same call). No snapshot table in v1; if a curve is ever wanted, add one then and let history start from that point.

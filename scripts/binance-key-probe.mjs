@@ -31,11 +31,15 @@ loadEnvFile(ENV_FILE);
 const apiKey = process.env.BINANCE_API_KEY ?? "";
 const apiSecret = process.env.BINANCE_API_SECRET ?? "";
 if (!apiKey || !apiSecret) {
-  console.error(`missing BINANCE_API_KEY / BINANCE_API_SECRET (looked in ${ENV_FILE} and env)`);
+  console.error(
+    `missing BINANCE_API_KEY / BINANCE_API_SECRET (looked in ${ENV_FILE} and env)`
+  );
   process.exit(2);
 }
 
-const FAPI = TESTNET ? "https://demo-fapi.binance.com" : "https://fapi.binance.com";
+const FAPI = TESTNET
+  ? "https://demo-fapi.binance.com"
+  : "https://fapi.binance.com";
 const SAPI = "https://api.binance.com";
 const RECV_WINDOW = 5000;
 
@@ -70,7 +74,9 @@ async function signed(host, method, path, params = {}) {
     recvWindow: String(RECV_WINDOW),
     timestamp: String(Date.now()),
   });
-  const signature = createHmac("sha256", apiSecret).update(qs.toString()).digest("hex");
+  const signature = createHmac("sha256", apiSecret)
+    .update(qs.toString())
+    .digest("hex");
   qs.append("signature", signature);
   const url = `${host}${path}?${qs.toString()}`;
   let res;
@@ -78,8 +84,16 @@ async function signed(host, method, path, params = {}) {
     res = await fetch(url, { method, headers: { "X-MBX-APIKEY": apiKey } });
   } catch (error) {
     const cause = error?.cause?.code ?? error?.message ?? String(error);
-    const hint = process.env.HTTPS_PROXY && !process.env.NODE_USE_ENV_PROXY ? " (HTTPS_PROXY is set but Node ignores it: run with NODE_USE_ENV_PROXY=1)" : "";
-    return { status: 0, ok: false, body: { code: "NETWORK", msg: `${cause}${hint}` }, weight: null };
+    const hint =
+      process.env.HTTPS_PROXY && !process.env.NODE_USE_ENV_PROXY
+        ? " (HTTPS_PROXY is set but Node ignores it: run with NODE_USE_ENV_PROXY=1)"
+        : "";
+    return {
+      status: 0,
+      ok: false,
+      body: { code: "NETWORK", msg: `${cause}${hint}` },
+      weight: null,
+    };
   }
   const text = await res.text();
   let body;
@@ -88,16 +102,28 @@ async function signed(host, method, path, params = {}) {
   } catch {
     body = { raw: text.slice(0, 200) };
   }
-  return { status: res.status, ok: res.ok, body, weight: res.headers.get("x-mbx-used-weight-1m") };
+  return {
+    status: res.status,
+    ok: res.ok,
+    body,
+    weight: res.headers.get("x-mbx-used-weight-1m"),
+  };
 }
 
 function errText(r) {
   const { code, msg } = r.body ?? {};
-  return code !== undefined ? `HTTP ${r.status} code ${code}: ${msg}` : `HTTP ${r.status}: ${JSON.stringify(r.body).slice(0, 200)}`;
+  return code !== undefined
+    ? `HTTP ${r.status} code ${code}: ${msg}`
+    : `HTTP ${r.status}: ${JSON.stringify(r.body).slice(0, 200)}`;
 }
 
 function record(name, outcome, finding, detail) {
-  report.probes.push({ name, outcome, finding, ...(detail !== undefined ? { detail } : {}) });
+  report.probes.push({
+    name,
+    outcome,
+    finding,
+    ...(detail !== undefined ? { detail } : {}),
+  });
   if (!JSON_OUT) {
     const tag = { PASS: "✓", FAIL: "✗", INFO: "·", SKIP: "–" }[outcome];
     console.log(`${tag} ${name}: ${finding}`);
@@ -121,7 +147,11 @@ if (TESTNET) {
 } else {
   const r = await signed(SAPI, "GET", "/sapi/v1/account/apiRestrictions");
   if (!r.ok) {
-    record("apiRestrictions", "FAIL", `spot host rejected the key: ${errText(r)}`);
+    record(
+      "apiRestrictions",
+      "FAIL",
+      `spot host rejected the key: ${errText(r)}`
+    );
   } else {
     const b = r.body;
     const writeOn = WRITE_FLAGS.filter(f => b[f] === true);
@@ -132,24 +162,43 @@ if (TESTNET) {
       createTime: b.createTime,
       writeFlagsOn: writeOn,
     };
-    if (b.enableReading !== true) record("apiRestrictions", "FAIL", "enableReading is false", summary);
-    else if (writeOn.length) record("apiRestrictions", "FAIL", `write permissions ticked: ${writeOn.join(", ")}`, summary);
-    else record("apiRestrictions", "PASS", `reading-only key, enableFutures=${b.enableFutures}, ipRestrict=${b.ipRestrict}`, summary);
+    if (b.enableReading !== true)
+      record("apiRestrictions", "FAIL", "enableReading is false", summary);
+    else if (writeOn.length)
+      record(
+        "apiRestrictions",
+        "FAIL",
+        `write permissions ticked: ${writeOn.join(", ")}`,
+        summary
+      );
+    else
+      record(
+        "apiRestrictions",
+        "PASS",
+        `reading-only key, enableFutures=${b.enableFutures}, ipRestrict=${b.ipRestrict}`,
+        summary
+      );
   }
 }
 
 // 2. futures balance ------------------------------------------------------
 {
   const r = await signed(FAPI, "GET", "/fapi/v3/balance");
-  if (!r.ok) record("futures balance", "FAIL", `futures read rejected: ${errText(r)}`);
+  if (!r.ok)
+    record("futures balance", "FAIL", `futures read rejected: ${errText(r)}`);
   else {
     const usdt = (r.body ?? []).find(x => x.asset === "USDT") ?? null;
-    record("futures balance", "PASS", `futures reads work (${r.body.length} assets)`, usdt && {
-      balance: usdt.balance,
-      crossUnPnl: usdt.crossUnPnl,
-      availableBalance: usdt.availableBalance,
-      updateTime: usdt.updateTime,
-    });
+    record(
+      "futures balance",
+      "PASS",
+      `futures reads work (${r.body.length} assets)`,
+      usdt && {
+        balance: usdt.balance,
+        crossUnPnl: usdt.crossUnPnl,
+        availableBalance: usdt.availableBalance,
+        updateTime: usdt.updateTime,
+      }
+    );
   }
 }
 
@@ -166,16 +215,31 @@ for (const incomeType of ["REALIZED_PNL", "COMMISSION", "FUNDING_FEE"]) {
   }
   const rows = r.body ?? [];
   if (!rows.length) {
-    record(`income ${incomeType}`, "INFO", "no rows in the last 30 days; cannot judge symbol/tradeId");
+    record(
+      `income ${incomeType}`,
+      "INFO",
+      "no rows in the last 30 days; cannot judge symbol/tradeId"
+    );
     continue;
   }
   const withSymbol = rows.filter(x => x.symbol).length;
-  const withTradeId = rows.filter(x => x.tradeId && String(x.tradeId) !== "0" && x.tradeId !== "").length;
+  const withTradeId = rows.filter(
+    x => x.tradeId && String(x.tradeId) !== "0" && x.tradeId !== ""
+  ).length;
   record(
     `income ${incomeType}`,
     "INFO",
     `${rows.length} rows: ${withSymbol} carry symbol, ${withTradeId} carry a non-zero tradeId`,
-    { sample: rows.slice(0, 2).map(x => ({ symbol: x.symbol, tradeId: x.tradeId, asset: x.asset, time: x.time })) }
+    {
+      sample: rows
+        .slice(0, 2)
+        .map(x => ({
+          symbol: x.symbol,
+          tradeId: x.tradeId,
+          asset: x.asset,
+          time: x.time,
+        })),
+    }
   );
 }
 
@@ -185,21 +249,30 @@ for (const incomeType of ["REALIZED_PNL", "COMMISSION", "FUNDING_FEE"]) {
   if (!r.ok) record("openOrders", "FAIL", errText(r));
   else {
     const types = [...new Set((r.body ?? []).map(x => x.type))];
-    record("openOrders", "INFO", `${r.body.length} open orders; types: ${types.join(", ") || "(none)"}`);
+    record(
+      "openOrders",
+      "INFO",
+      `${r.body.length} open orders; types: ${types.join(", ") || "(none)"}`
+    );
   }
   const a = await signed(FAPI, "GET", "/fapi/v1/openAlgoOrders");
   if (!a.ok) record("openAlgoOrders", "FAIL", errText(a));
   else {
-    const list = Array.isArray(a.body) ? a.body : a.body?.orders ?? [];
+    const list = Array.isArray(a.body) ? a.body : (a.body?.orders ?? []);
     const types = [...new Set(list.map(x => x.orderType ?? x.type))];
-    record("openAlgoOrders", "INFO", `${list.length} open algo orders; types: ${types.join(", ") || "(none)"}`, list.slice(0, 2).map(x => ({
-      symbol: x.symbol,
-      orderType: x.orderType ?? x.type,
-      positionSide: x.positionSide,
-      triggerPrice: x.triggerPrice ?? x.stopPrice,
-      closePosition: x.closePosition,
-      algoStatus: x.algoStatus,
-    })));
+    record(
+      "openAlgoOrders",
+      "INFO",
+      `${list.length} open algo orders; types: ${types.join(", ") || "(none)"}`,
+      list.slice(0, 2).map(x => ({
+        symbol: x.symbol,
+        orderType: x.orderType ?? x.type,
+        positionSide: x.positionSide,
+        triggerPrice: x.triggerPrice ?? x.stopPrice,
+        closePosition: x.closePosition,
+        algoStatus: x.algoStatus,
+      }))
+    );
   }
 }
 
@@ -208,25 +281,39 @@ for (const incomeType of ["REALIZED_PNL", "COMMISSION", "FUNDING_FEE"]) {
   const m = await signed(FAPI, "GET", "/fapi/v1/positionSide/dual");
   const hedge = m.ok ? m.body?.dualSidePosition : undefined;
   if (!m.ok) record("positionSide/dual", "FAIL", errText(m));
-  else record("positionSide/dual", "INFO", hedge ? "hedge mode (dualSidePosition=true)" : "one-way mode");
+  else
+    record(
+      "positionSide/dual",
+      "INFO",
+      hedge ? "hedge mode (dualSidePosition=true)" : "one-way mode"
+    );
   const p = await signed(FAPI, "GET", "/fapi/v3/positionRisk");
   if (!p.ok) record("positionRisk", "FAIL", errText(p));
   else {
     const open = (p.body ?? []).filter(x => Number(x.positionAmt) !== 0);
-    record("positionRisk", "INFO", `${open.length} open positions`, open.slice(0, 4).map(x => ({
-      symbol: x.symbol,
-      positionSide: x.positionSide,
-      positionAmt: x.positionAmt,
-      entryPrice: x.entryPrice,
-      notional: x.notional,
-      updateTime: x.updateTime,
-    })));
+    record(
+      "positionRisk",
+      "INFO",
+      `${open.length} open positions`,
+      open.slice(0, 4).map(x => ({
+        symbol: x.symbol,
+        positionSide: x.positionSide,
+        positionAmt: x.positionAmt,
+        entryPrice: x.entryPrice,
+        notional: x.notional,
+        updateTime: x.updateTime,
+      }))
+    );
   }
 }
 
 // 6. opt-in write probe ----------------------------------------------------
 if (!WRITE_PROBE) {
-  record("order/test write probe", "SKIP", "pass --write-probe to run (validates only, never places an order)");
+  record(
+    "order/test write probe",
+    "SKIP",
+    "pass --write-probe to run (validates only, never places an order)"
+  );
 } else {
   const r = await signed(FAPI, "POST", "/fapi/v1/order/test", {
     symbol: "BTCUSDT",
@@ -236,8 +323,18 @@ if (!WRITE_PROBE) {
     quantity: "0.001",
     price: "1000",
   });
-  if (r.ok) record("order/test write probe", "FAIL", "test order ACCEPTED: this key can trade futures");
-  else record("order/test write probe", "PASS", `rejected as expected: ${errText(r)}`);
+  if (r.ok)
+    record(
+      "order/test write probe",
+      "FAIL",
+      "test order ACCEPTED: this key can trade futures"
+    );
+  else
+    record(
+      "order/test write probe",
+      "PASS",
+      `rejected as expected: ${errText(r)}`
+    );
 }
 
 if (JSON_OUT) console.log(JSON.stringify(report, null, 2));

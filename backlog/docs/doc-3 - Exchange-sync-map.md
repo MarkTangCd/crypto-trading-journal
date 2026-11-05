@@ -2,8 +2,8 @@
 id: doc-3
 title: Exchange sync map
 type: other
-created_date: '2026-11-04 06:45'
-updated_date: '2026-11-04 12:46'
+created_date: "2026-11-04 06:45"
+updated_date: "2026-11-04 12:46"
 ---
 
 ## Destination

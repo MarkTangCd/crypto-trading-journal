@@ -1,11 +1,11 @@
 ---
 id: TASK-53
-title: 'ExchangeAdapter interface, ExchangeError and sync error codes'
+title: "ExchangeAdapter interface, ExchangeError and sync error codes"
 status: Done
 assignee:
-  - '@myself'
-created_date: '2026-11-04 12:42'
-updated_date: '2026-11-04 13:09'
+  - "@myself"
+created_date: "2026-11-04 12:42"
+updated_date: "2026-11-04 13:09"
 labels:
   - ready-for-agent
 dependencies: []
@@ -17,13 +17,17 @@ ordinal: 53000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
+
 Spec doc-4 section ExchangeAdapter: the only surface the sync algorithm sees. Defining it first lets the Binance client, the reconstruction module and the sync algorithm be built and tested in parallel against a fake.
 
 Includes a scripted fake adapter for tests (serves fixtures per method, can be told to throw a given error code).
+
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
+
 <!-- AC:BEGIN -->
+
 - [x] #1 server/exchange/adapter.ts exports ExchangeCredentials, KeyVerification, ExchangeFill, ExchangePosition, ExchangeConditionalOrder, ExchangeBalance and ExchangeAdapter exactly as written in the spec
 - [x] #2 shared/const.ts exports SYNC_ERROR_CODES (the eight codes), the SyncErrorCode type and a TRANSIENT_SYNC_ERROR_CODES subset (rate_limited, exchange_unavailable, network)
 - [x] #3 server/exchange/errors.ts exports class ExchangeError { code: SyncErrorCode; detail: string }
@@ -34,6 +38,7 @@ Includes a scripted fake adapter for tests (serves fixtures per method, can be t
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
+
 1. shared/const.ts: add SYNC_ERROR_CODES (8 codes, as const), SyncErrorCode type, TRANSIENT_SYNC_ERROR_CODES (rate_limited, exchange_unavailable, network)
 2. server/exchange/adapter.ts: copy the spec interfaces verbatim
 3. server/exchange/errors.ts: class ExchangeError extends Error { code; detail }, message = code: detail
@@ -45,6 +50,7 @@ Includes a scripted fake adapter for tests (serves fixtures per method, can be t
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
+
 Add the ExchangeAdapter contract for Exchange sync (spec doc-4).
 
 - server/exchange/adapter.ts: spec interfaces verbatim.
