@@ -18,8 +18,9 @@ import {
   getAccountById,
   getAccountsByUserId,
   updateAccount,
-  deleteAccountWithTransactions,
+  deleteAccountCascade,
   getAccountCount,
+  toPublicAccount,
   // Pre-trade
   listPreTradesByUser,
   // Goals
@@ -64,6 +65,7 @@ import { ProviderError } from "./agents/providers/types";
 import { listProviders } from "./agents/providers/registry";
 import { listSkillMetadata } from "./agents/skillRegistry";
 import {
+  encrypt,
   getProviderConfig,
   hasToolApiKey,
   setProviderConfig,
@@ -71,6 +73,9 @@ import {
   type ToolId,
 } from "./agents/secrets";
 import { getAgentSettings, upsertAgentSettings } from "./db";
+import { createBinanceAdapter } from "./exchange/binance";
+import { ExchangeError } from "./exchange/errors";
+import { autoSync, runSync } from "./exchange/sync";
 
 // Derived from the static registry at module load. z.enum needs a non-empty
 // tuple, so cast after asserting at least one provider exists.
@@ -101,6 +106,28 @@ function runTradeMath<T>(operation: () => T): T {
 }
 
 const decimalString = z.string().min(1);
+
+/**
+ * Key verification at link time: any failure, returned or thrown by the
+ * adapter, is BAD_REQUEST with the sync error code as message and nothing
+ * is written. Returns the encrypted pair on success.
+ */
+async function verifyAndEncryptKey(apiKey: string, apiSecret: string) {
+  let code: string | undefined;
+  try {
+    const verification = await createBinanceAdapter().verifyKey({
+      apiKey,
+      apiSecret,
+    });
+    if (!verification.ok) code = verification.code;
+  } catch (error) {
+    if (!(error instanceof ExchangeError)) throw error;
+    console.error(`[Account] key verification ${error.code}`, error.detail);
+    code = error.code;
+  }
+  if (code) throw new TRPCError({ code: "BAD_REQUEST", message: code });
+  return { apiKey: encrypt(apiKey), apiSecret: encrypt(apiSecret) };
+}
 
 // Ownership guards. Both throw FORBIDDEN when the row is missing or owned by
 // another user so that the procedure never silently leaks foreign data.
@@ -653,8 +680,10 @@ export const appRouter = router({
       .input(
         z.object({
           name: z.string().min(1).max(100),
+          exchange: z.literal("binance"),
+          apiKey: z.string().trim().min(1),
+          apiSecret: z.string().trim().min(1),
           notes: z.string().optional(),
-          initialBalance: z.string().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -666,22 +695,27 @@ export const appRouter = router({
           });
         }
 
-        return createAccount({
+        const keys = await verifyAndEncryptKey(input.apiKey, input.apiSecret);
+        const account = await createAccount({
           userId: ctx.user.id,
           name: trimmedName,
           notes: input.notes || null,
-          initialBalance: input.initialBalance || "0",
+          exchange: input.exchange,
+          ...keys,
+          keyVerifiedAt: Date.now(),
         });
+        return toPublicAccount(account);
       }),
 
     list: publicProcedure.query(async ({ ctx }) => {
-      return getAccountsByUserId(ctx.user.id);
+      return (await getAccountsByUserId(ctx.user.id)).map(toPublicAccount);
     }),
 
     get: publicProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ ctx, input }) => {
-        return getAccountById(input.id, ctx.user.id);
+        const account = await getAccountById(input.id, ctx.user.id);
+        return account && toPublicAccount(account);
       }),
 
     update: publicProcedure
@@ -690,7 +724,6 @@ export const appRouter = router({
           id: z.number(),
           name: z.string().min(1).max(100).optional(),
           notes: z.string().optional(),
-          initialBalance: z.string().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -709,10 +742,32 @@ export const appRouter = router({
           data.name = trimmedName;
         }
 
-        return updateAccount(id, ctx.user.id, {
+        const account = await updateAccount(id, ctx.user.id, {
           ...data,
           notes: data.notes !== undefined ? data.notes || null : undefined,
         });
+        return account && toPublicAccount(account);
+      }),
+
+    // Fills, trades and sync cursors are left untouched.
+    replaceKey: publicProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          apiKey: z.string().trim().min(1),
+          apiSecret: z.string().trim().min(1),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        await requireOwnedAccount(ctx, input.id);
+        const keys = await verifyAndEncryptKey(input.apiKey, input.apiSecret);
+        const account = await updateAccount(input.id, ctx.user.id, {
+          ...keys,
+          keyVerifiedAt: Date.now(),
+          lastSyncErrorCode: null,
+          lastSyncRetryAt: null,
+        });
+        return account && toPublicAccount(account);
       }),
 
     delete: publicProcedure
@@ -728,9 +783,21 @@ export const appRouter = router({
           });
         }
 
-        await deleteAccountWithTransactions(input.id, ctx.user.id);
+        await deleteAccountCascade(input.id, ctx.user.id);
         return { success: true };
       }),
+
+    sync: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await requireOwnedAccount(ctx, input.id);
+        await runSync(input.id, ctx.user.id, { reason: "manual" });
+        return toPublicAccount(await requireOwnedAccount(ctx, input.id));
+      }),
+
+    autoSync: publicProcedure.mutation(async ({ ctx }) => {
+      return autoSync(ctx.user.id);
+    }),
   }),
 
   // Trading goals: user-level, free text, status derived from completedAt.

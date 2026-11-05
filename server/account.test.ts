@@ -1,57 +1,80 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
+import type { Account } from "../drizzle/schema";
 import * as db from "./db";
+import * as sync from "./exchange/sync";
+import { createBinanceAdapter } from "./exchange/binance";
+import {
+  createFakeAdapter,
+  type FakeAdapterFixtures,
+} from "./exchange/testing/fakeAdapter";
 
-// Mock the database functions
-vi.mock("./db", () => ({
-  createAccount: vi.fn().mockImplementation(data => ({
-    id: 1,
-    ...data,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  })),
-  getAccountById: vi.fn().mockResolvedValue({
+// Reversible stand-in so tests never touch the real master key file.
+vi.mock("./agents/secrets", async importOriginal => ({
+  ...(await importOriginal<typeof import("./agents/secrets")>()),
+  encrypt: (plaintext: string) => `enc:${plaintext}`,
+  decrypt: (token: string) => token.replace(/^enc:/, ""),
+}));
+
+vi.mock("./exchange/binance", () => ({ createBinanceAdapter: vi.fn() }));
+
+vi.mock("./exchange/sync", () => ({
+  runSync: vi.fn().mockResolvedValue(undefined),
+  autoSync: vi.fn().mockResolvedValue([{ accountId: 1, ok: true }]),
+}));
+
+function accountRow(overrides: Partial<Account> = {}): Account {
+  return {
     id: 1,
     userId: 1,
     name: "Test Account",
     notes: "Test notes",
-    initialBalance: "1000",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  }),
-  getAccountsByUserId: vi.fn().mockResolvedValue([
-    {
-      id: 1,
-      userId: 1,
-      name: "Test Account",
-      notes: "Test notes",
-      initialBalance: "1000",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-  ]),
-  updateAccount: vi.fn().mockResolvedValue({
-    id: 1,
-    userId: 1,
-    name: "Updated Account",
-    notes: "Updated notes",
-    initialBalance: "2000",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  }),
-  deleteAccountWithTransactions: vi.fn().mockResolvedValue(undefined),
-  getAccountCount: vi.fn().mockResolvedValue(2),
-  ensureUserHasAccount: vi.fn().mockImplementation(userId => ({
-    id: 1,
-    userId,
-    name: "Default Account",
-    notes: null,
     initialBalance: "0",
+    exchange: "binance",
+    apiKey: "enc:key-abcd1234",
+    apiSecret: "enc:secret-xyz",
+    keyVerifiedAt: 1,
+    balanceUsdt: null,
+    unrealizedPnlUsdt: null,
+    backfillStart: null,
+    incomeCursorAt: null,
+    lastSyncedAt: null,
+    lastSyncAttemptAt: null,
+    lastSyncErrorCode: null,
+    lastSyncRetryAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
-  })),
+    ...overrides,
+  };
+}
+
+// node:sqlite cannot load under vitest, so toPublicAccount is mirrored here;
+// the real one is covered by trade.db.test.ts.
+vi.mock("./db", () => ({
+  toPublicAccount: ({ apiKey, apiSecret: _apiSecret, ...rest }: Account) => ({
+    ...rest,
+    apiKeyTail: apiKey === null ? null : apiKey.slice(-4),
+  }),
+  createAccount: vi.fn(),
+  getAccountById: vi.fn(),
+  getAccountsByUserId: vi.fn(),
+  updateAccount: vi.fn(),
+  deleteAccountCascade: vi.fn().mockResolvedValue(undefined),
+  getAccountCount: vi.fn().mockResolvedValue(2),
 }));
+
+function useAdapter(fixtures: FakeAdapterFixtures = {}) {
+  const fake = createFakeAdapter(fixtures);
+  vi.mocked(createBinanceAdapter).mockReturnValue(fake.adapter);
+  return fake;
+}
+
+function expectNoSecrets(account: object | undefined) {
+  expect(account).not.toHaveProperty("apiKey");
+  expect(account).not.toHaveProperty("apiSecret");
+  expect(account).toHaveProperty("apiKeyTail", "1234");
+}
 
 describe("Account Router", () => {
   const mockCtx: TrpcContext = {
@@ -72,166 +95,202 @@ describe("Account Router", () => {
 
   const caller = appRouter.createCaller(mockCtx);
 
+  const createInput = {
+    name: "Test Account",
+    exchange: "binance" as const,
+    apiKey: "key-abcd1234",
+    apiSecret: "secret-xyz",
+    notes: "Test notes",
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(db.createAccount).mockImplementation(async data =>
+      accountRow({ ...data, id: 1 })
+    );
+    vi.mocked(db.getAccountById).mockResolvedValue(accountRow());
+    vi.mocked(db.getAccountsByUserId).mockResolvedValue([accountRow()]);
+    vi.mocked(db.updateAccount).mockImplementation(async (_id, _userId, data) =>
+      accountRow(data)
+    );
   });
 
   describe("create", () => {
-    it("should create an account with valid data", async () => {
-      const result = await caller.account.create({
-        name: "Test Account",
-        notes: "Test notes",
-        initialBalance: "1000",
-      });
+    it("verifies the key, encrypts both secrets and inserts", async () => {
+      const fake = useAdapter();
 
-      expect(result).toMatchObject({
-        id: expect.any(Number),
-        name: "Test Account",
-        notes: "Test notes",
-        initialBalance: "1000",
-        userId: 1,
-      });
+      const result = await caller.account.create(createInput);
+
+      expect(fake.calls).toEqual([
+        {
+          method: "verifyKey",
+          args: [{ apiKey: "key-abcd1234", apiSecret: "secret-xyz" }],
+        },
+      ]);
       expect(db.createAccount).toHaveBeenCalledWith({
         userId: 1,
         name: "Test Account",
         notes: "Test notes",
-        initialBalance: "1000",
+        exchange: "binance",
+        apiKey: "enc:key-abcd1234",
+        apiSecret: "enc:secret-xyz",
+        keyVerifiedAt: expect.any(Number),
       });
+      expectNoSecrets(result);
     });
 
-    it("should trim account name", async () => {
-      await caller.account.create({
-        name: "  Test Account  ",
-      });
+    it("trims the account name", async () => {
+      useAdapter();
+
+      await caller.account.create({ ...createInput, name: "  Test Account  " });
 
       expect(db.createAccount).toHaveBeenCalledWith(
-        expect.objectContaining({
-          name: "Test Account",
-        })
+        expect.objectContaining({ name: "Test Account" })
       );
     });
 
-    it("should default initialBalance to '0' when not provided", async () => {
-      await caller.account.create({
-        name: "Test Account",
-      });
+    it("rejects an empty name after trimming", async () => {
+      useAdapter();
 
-      expect(db.createAccount).toHaveBeenCalledWith(
-        expect.objectContaining({
-          initialBalance: "0",
-        })
-      );
-    });
-
-    it("should reject empty name after trimming", async () => {
       await expect(
-        caller.account.create({
-          name: "   ",
-        })
-      ).rejects.toThrow();
+        caller.account.create({ ...createInput, name: "   " })
+      ).rejects.toThrow("Account name cannot be empty");
+      expect(db.createAccount).not.toHaveBeenCalled();
+    });
+
+    it("rejects a failed verification with the code and writes nothing", async () => {
+      useAdapter({ verifyKey: { ok: false, code: "permissions_changed" } });
+
+      await expect(caller.account.create(createInput)).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+        message: "permissions_changed",
+      });
+      expect(db.createAccount).not.toHaveBeenCalled();
+    });
+
+    it("rejects a verification that throws with the code and writes nothing", async () => {
+      useAdapter({ throws: { verifyKey: "clock_skew" } });
+
+      await expect(caller.account.create(createInput)).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+        message: "clock_skew",
+      });
+      expect(db.createAccount).not.toHaveBeenCalled();
     });
   });
 
-  describe("list", () => {
-    it("should return all accounts for the user", async () => {
+  describe("list / get", () => {
+    it("returns accounts without secrets and with apiKeyTail", async () => {
       const result = await caller.account.list();
 
       expect(result).toHaveLength(1);
-      expect(result[0]).toMatchObject({
-        id: 1,
-        name: "Test Account",
-        userId: 1,
-      });
+      expect(result[0]).toMatchObject({ id: 1, name: "Test Account" });
+      expectNoSecrets(result[0]);
       expect(db.getAccountsByUserId).toHaveBeenCalledWith(1);
     });
-  });
 
-  describe("get", () => {
-    it("should return an account by id", async () => {
+    it("returns one account without secrets and with apiKeyTail", async () => {
       const result = await caller.account.get({ id: 1 });
 
-      expect(result).toMatchObject({
-        id: 1,
-        name: "Test Account",
-        userId: 1,
-      });
+      expect(result).toMatchObject({ id: 1, name: "Test Account" });
+      expectNoSecrets(result);
       expect(db.getAccountById).toHaveBeenCalledWith(1, 1);
     });
 
-    it("should return null for non-existent account", async () => {
+    it("returns undefined for a missing account", async () => {
       vi.mocked(db.getAccountById).mockResolvedValueOnce(undefined);
 
-      const result = await caller.account.get({ id: 999 });
-
-      expect(result).toBeUndefined();
+      expect(await caller.account.get({ id: 999 })).toBeUndefined();
     });
   });
 
   describe("update", () => {
-    it("should update an account with valid data", async () => {
+    it("updates name and notes only", async () => {
       const result = await caller.account.update({
         id: 1,
-        name: "Updated Account",
+        name: "  Updated Account  ",
         notes: "Updated notes",
-        initialBalance: "2000",
       });
 
-      expect(result).toMatchObject({
-        id: 1,
+      expect(db.updateAccount).toHaveBeenCalledWith(1, 1, {
         name: "Updated Account",
         notes: "Updated notes",
-        initialBalance: "2000",
       });
-      expect(db.updateAccount).toHaveBeenCalledWith(
-        1,
-        1,
-        expect.objectContaining({
-          name: "Updated Account",
-          notes: "Updated notes",
-          initialBalance: "2000",
-        })
+      expectNoSecrets(result);
+    });
+  });
+
+  describe("replaceKey", () => {
+    it("verifies, encrypts, updates and clears the sync error", async () => {
+      useAdapter();
+      vi.mocked(db.updateAccount).mockResolvedValueOnce(
+        accountRow({ apiKey: "enc:new-key-1234" })
       );
+
+      const result = await caller.account.replaceKey({
+        id: 1,
+        apiKey: "new-key-1234",
+        apiSecret: "new-secret",
+      });
+
+      // Only key and error fields: fills, trades and cursors stay untouched.
+      expect(db.updateAccount).toHaveBeenCalledWith(1, 1, {
+        apiKey: "enc:new-key-1234",
+        apiSecret: "enc:new-secret",
+        keyVerifiedAt: expect.any(Number),
+        lastSyncErrorCode: null,
+        lastSyncRetryAt: null,
+      });
+      expect(db.deleteAccountCascade).not.toHaveBeenCalled();
+      expectNoSecrets(result);
     });
 
-    it("should trim name when updating", async () => {
-      await caller.account.update({
-        id: 1,
-        name: "  Updated Account  ",
-      });
+    it("rejects a failed verification and writes nothing", async () => {
+      useAdapter({ verifyKey: { ok: false, code: "invalid_key" } });
 
-      expect(db.updateAccount).toHaveBeenCalledWith(
-        1,
-        1,
-        expect.objectContaining({
-          name: "Updated Account",
-        })
-      );
+      await expect(
+        caller.account.replaceKey({ id: 1, apiKey: "bad", apiSecret: "bad" })
+      ).rejects.toMatchObject({ code: "BAD_REQUEST", message: "invalid_key" });
+      expect(db.updateAccount).not.toHaveBeenCalled();
     });
   });
 
   describe("delete", () => {
-    it("should delete an account when user has multiple accounts", async () => {
-      vi.mocked(db.getAccountCount).mockResolvedValueOnce(2);
-
+    it("cascades through deleteAccountCascade", async () => {
       const result = await caller.account.delete({ id: 1 });
 
       expect(result).toEqual({ success: true });
-      expect(db.deleteAccountWithTransactions).toHaveBeenCalledWith(1, 1);
+      expect(db.deleteAccountCascade).toHaveBeenCalledWith(1, 1);
     });
 
-    it("should prevent deleting the last account", async () => {
+    it("prevents deleting the last account", async () => {
       vi.mocked(db.getAccountCount).mockResolvedValueOnce(1);
 
       await expect(caller.account.delete({ id: 1 })).rejects.toThrow(
         "Cannot delete the last account"
       );
-      expect(db.deleteAccountWithTransactions).not.toHaveBeenCalled();
+      expect(db.deleteAccountCascade).not.toHaveBeenCalled();
     });
   });
-});
 
-describe("Account Migration", () => {
-  it("should ensure user has a default account", async () => {
-    expect(true).toBe(true);
+  describe("sync / autoSync", () => {
+    it("runs a manual sync and returns the refreshed public account", async () => {
+      vi.mocked(db.getAccountById)
+        .mockResolvedValueOnce(accountRow())
+        .mockResolvedValueOnce(accountRow({ balanceUsdt: "1234.5" }));
+
+      const result = await caller.account.sync({ id: 1 });
+
+      expect(sync.runSync).toHaveBeenCalledWith(1, 1, { reason: "manual" });
+      expect(result).toMatchObject({ balanceUsdt: "1234.5" });
+      expectNoSecrets(result);
+    });
+
+    it("returns the per-account outcome list", async () => {
+      expect(await caller.account.autoSync()).toEqual([
+        { accountId: 1, ok: true },
+      ]);
+      expect(sync.autoSync).toHaveBeenCalledWith(1);
+    });
   });
 });

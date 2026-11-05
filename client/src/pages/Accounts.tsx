@@ -27,7 +27,8 @@ import {
 } from "@/lib/ledger";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
-import type { Account } from "@shared/types";
+import { SYNC_ERROR_CODES } from "@shared/const";
+import type { PublicAccount } from "@shared/types";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -35,10 +36,11 @@ import { toast } from "sonner";
 interface FormData {
   name: string;
   notes: string;
-  initialBalance: string;
+  apiKey: string;
+  apiSecret: string;
 }
 
-const EMPTY_FORM: FormData = { name: "", notes: "", initialBalance: "0" };
+const EMPTY_FORM: FormData = { name: "", notes: "", apiKey: "", apiSecret: "" };
 
 const NOTES_TEXTAREA_CLASS = cn(TEXTAREA_CLASS, "min-h-[5rem]");
 
@@ -47,9 +49,14 @@ export default function Accounts() {
   const { accounts, isLoading, selectedAccount, setSelectedAccountId } =
     useAccount();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
-  const [deletingAccount, setDeletingAccount] = useState<Account | null>(null);
+  const [editingAccount, setEditingAccount] = useState<PublicAccount | null>(
+    null
+  );
+  const [deletingAccount, setDeletingAccount] = useState<PublicAccount | null>(
+    null
+  );
   const [formData, setFormData] = useState<FormData>(EMPTY_FORM);
+  const [linkError, setLinkError] = useState<string | null>(null);
 
   const createMutation = trpc.account.create.useMutation({
     onSuccess: () => {
@@ -59,6 +66,11 @@ export default function Accounts() {
       setFormData(EMPTY_FORM);
     },
     onError: error => {
+      // Key verification failures carry a sync error code; show it inline.
+      if (SYNC_ERROR_CODES.some(code => code === error.message)) {
+        setLinkError(error.message);
+        return;
+      }
       toast.error(error.message || "failed to create account");
     },
   });
@@ -96,14 +108,15 @@ export default function Accounts() {
 
   const openCreate = () => {
     setFormData(EMPTY_FORM);
+    setLinkError(null);
     setIsCreateOpen(true);
   };
 
-  const openEdit = (account: Account) => {
+  const openEdit = (account: PublicAccount) => {
     setFormData({
+      ...EMPTY_FORM,
       name: account.name,
       notes: account.notes || "",
-      initialBalance: account.initialBalance,
     });
     setEditingAccount(account);
   };
@@ -114,10 +127,13 @@ export default function Accounts() {
       toast.error("name is required");
       return;
     }
+    setLinkError(null);
     createMutation.mutate({
       name: trimmedName,
+      exchange: "binance",
+      apiKey: formData.apiKey,
+      apiSecret: formData.apiSecret,
       notes: formData.notes || undefined,
-      initialBalance: formData.initialBalance || "0",
     });
   };
 
@@ -132,7 +148,6 @@ export default function Accounts() {
       id: editingAccount.id,
       name: trimmedName,
       notes: formData.notes || undefined,
-      initialBalance: formData.initialBalance || "0",
     });
   };
 
@@ -289,16 +304,35 @@ export default function Accounts() {
                 autoFocus
               />
             </Field>
-            <Field label="initial balance" htmlFor="create-balance">
+            <Field label="api key" htmlFor="create-api-key">
               <input
-                id="create-balance"
+                id="create-api-key"
                 type="text"
-                inputMode="decimal"
-                placeholder="0.00"
-                value={formData.initialBalance}
-                onChange={e => updateField("initialBalance", e.target.value)}
+                autoComplete="off"
+                value={formData.apiKey}
+                onChange={e => updateField("apiKey", e.target.value)}
                 className={INPUT_CLASS}
               />
+            </Field>
+            <Field label="api secret" htmlFor="create-api-secret">
+              <input
+                id="create-api-secret"
+                type="password"
+                autoComplete="off"
+                value={formData.apiSecret}
+                onChange={e => updateField("apiSecret", e.target.value)}
+                className={INPUT_CLASS}
+                aria-describedby={linkError ? "create-link-error" : undefined}
+              />
+              {linkError && (
+                <p
+                  id="create-link-error"
+                  role="alert"
+                  className="text-sm text-destructive"
+                >
+                  {linkError}
+                </p>
+              )}
             </Field>
             <Field label="notes (optional)" htmlFor="create-notes">
               <textarea
@@ -317,7 +351,12 @@ export default function Accounts() {
             </Button>
             <Button
               onClick={handleCreate}
-              disabled={createMutation.isPending || !formData.name.trim()}
+              disabled={
+                createMutation.isPending ||
+                !formData.name.trim() ||
+                !formData.apiKey.trim() ||
+                !formData.apiSecret.trim()
+              }
             >
               {createMutation.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -348,16 +387,6 @@ export default function Accounts() {
                 type="text"
                 value={formData.name}
                 onChange={e => updateField("name", e.target.value)}
-                className={INPUT_CLASS}
-              />
-            </Field>
-            <Field label="initial balance" htmlFor="edit-balance">
-              <input
-                id="edit-balance"
-                type="text"
-                inputMode="decimal"
-                value={formData.initialBalance}
-                onChange={e => updateField("initialBalance", e.target.value)}
                 className={INPUT_CLASS}
               />
             </Field>

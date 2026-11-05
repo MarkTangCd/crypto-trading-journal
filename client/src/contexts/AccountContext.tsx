@@ -7,12 +7,12 @@ import {
   type ReactNode,
 } from "react";
 import { trpc } from "@/lib/trpc";
-import type { Account } from "@shared/types";
+import type { PublicAccount } from "@shared/types";
 
 interface AccountContextValue {
-  selectedAccount: Account | null;
+  selectedAccount: PublicAccount | null;
   setSelectedAccountId: (id: number) => void;
-  accounts: Account[];
+  accounts: PublicAccount[];
   isLoading: boolean;
 }
 

@@ -42,6 +42,7 @@ import {
 } from "./_core/fixedPoint";
 import * as decimal from "./_core/decimal";
 import { decrypt } from "./agents/secrets";
+import type { PublicAccount } from "@shared/types";
 import type { TradeRecord } from "./exchange/reconstruct";
 import type { SyncErrorCode } from "@shared/const";
 
@@ -941,30 +942,6 @@ export async function updateAccount(
   return getAccountById(id, userId);
 }
 
-export async function deleteAccountWithTransactions(
-  id: number,
-  userId: number
-): Promise<void> {
-  const accountCount = await getAccountCount(userId);
-  if (accountCount < 2) {
-    throw new Error("Cannot delete the last account");
-  }
-
-  await runInSqliteTransaction(async db => {
-    // Delete all transactions for this account
-    await db
-      .delete(transactions)
-      .where(
-        and(eq(transactions.accountId, id), eq(transactions.userId, userId))
-      );
-
-    // Delete the account
-    await db
-      .delete(accounts)
-      .where(and(eq(accounts.id, id), eq(accounts.userId, userId)));
-  });
-}
-
 export async function getAccountCount(userId: number): Promise<number> {
   const db = await getDb();
   if (!db) return 0;
@@ -976,10 +953,6 @@ export async function getAccountCount(userId: number): Promise<number> {
 
   return result[0]?.count ?? 0;
 }
-
-export type PublicAccount = Omit<Account, "apiKey" | "apiSecret"> & {
-  apiKeyTail: string | null;
-};
 
 /** Strip key ciphertexts; expose only the last 4 characters of the key. */
 export function toPublicAccount(row: Account): PublicAccount {

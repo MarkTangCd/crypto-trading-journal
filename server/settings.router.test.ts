@@ -15,7 +15,6 @@ vi.mock("./db", () => ({
   createAccount: vi.fn(),
   getAccountsByUserId: vi.fn(),
   updateAccount: vi.fn(),
-  deleteAccountWithTransactions: vi.fn(),
   getAccountCount: vi.fn(),
   createTransactionWithElements: vi.fn(),
   updateTransaction: vi.fn(),
