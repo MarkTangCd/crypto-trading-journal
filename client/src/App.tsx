@@ -1,6 +1,8 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
+import { Loader2 } from "lucide-react";
+import { lazy, Suspense } from "react";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import DashboardLayout from "./components/DashboardLayout";
@@ -8,6 +10,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { AccountProvider } from "./contexts/AccountContext";
 import Dashboard from "./pages/Dashboard";
 import Goals from "./pages/Goals";
+import Plans from "./pages/Plans";
 import Trades from "./pages/Trades";
 import TradeDetail from "./pages/TradeDetail";
 import Accounts from "./pages/Accounts";
@@ -16,12 +19,30 @@ import Tools from "./pages/Tools";
 import PositionSizeCalculator from "./pages/PositionSizeCalculator";
 import Settings from "./pages/Settings";
 
+// Lazy so the rich-text editor only loads on the plan detail page.
+const PlanDetail = lazy(() => import("./pages/PlanDetail"));
+
 function Router() {
   return (
     <DashboardLayout>
       <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/goals" component={Goals} />
+        <Route path="/plans" component={Plans} />
+        <Route path="/plans/:id">
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center min-h-[400px]">
+                <Loader2
+                  className="h-6 w-6 animate-spin text-foreground"
+                  aria-label="loading"
+                />
+              </div>
+            }
+          >
+            <PlanDetail />
+          </Suspense>
+        </Route>
         <Route path="/trades" component={Trades} />
         <Route path="/trades/:id" component={TradeDetail} />
         <Route path="/accounts" component={Accounts} />
