@@ -1,4 +1,5 @@
 import { PlanEditor } from "@/components/plans/PlanEditor";
+import { PlanScenarios } from "@/components/plans/PlanScenarios";
 import { SectionHeader, fmtDuration } from "@/lib/ledger";
 import { trpc } from "@/lib/trpc";
 import { isEmptyDoc } from "@shared/richText";
@@ -160,6 +161,13 @@ export default function PlanDetail() {
           />
         )}
       </section>
+
+      <PlanScenarios
+        planId={plan.id}
+        scenarios={plan.scenarios}
+        editable={isOpen}
+        onSaved={setSavedAt}
+      />
     </div>
   );
 }
