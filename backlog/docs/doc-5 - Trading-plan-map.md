@@ -3,7 +3,7 @@ id: doc-5
 title: Trading plan map
 type: other
 created_date: '2026-11-10 03:08'
-updated_date: '2026-11-10 06:38'
+updated_date: '2026-11-10 06:51'
 ---
 ## Destination
 
@@ -40,6 +40,7 @@ Settled directly with the trader while charting; later tickets build on these an
 - [Image storage in SQLite via node:sqlite and Express serving](task-71): drizzle `blob({ mode: "buffer" })` round-trips over the node:sqlite proxy; `POST /api/images?planId=` with route-scoped `express.raw` (10 MiB, magic-byte MIME), `GET /api/images/:id` with strong sha256 ETag + `Cache-Control: immutable`; whole-buffer reads are fine; cascade in app code, not a DB FK (migration runner hazard). Findings: branch research/plan-image-storage.
 - [Prototype the Plans pages](task-72): variant A "ledger" chosen as is. Separate /plans and /plans/:id pages; single column with the symbol as display hero (editable while open); scenarios lettered in creation order (no manual reorder); observations oldest first with the composer at the foot; close is an inline verdict section at the page foot, not a modal; outcomes in ink with glyphs, no win/loss hue. Prototype: branch prototype/plans-ui.
 - [Write the Trading plan spec, schema and ADR](task-73): locked as **Trading plan spec** (doc-6) plus ADR decision-3 (image BLOBs in SQLite via Express, app-code cascade, no FK). Scenarios order by id (no `position`); own `SCENARIO_TIME_FRAMES`; rich text as JSON `RichTextDoc` with `isEmptyDoc`; flat tRPC `plan` namespace with NOT_FOUND / CONFLICT (closed) / BAD_REQUEST (verdicts); reopen keeps outcomes only as close pre-fill (GLOSSARY reworded); no agent packages.
+- [Break the Trading plan spec into implementation tasks](task-74): ten ready-for-agent tasks TASK-75…TASK-84 referencing doc-6, additive-first (shared consts/richText → schema → db → image routes ∥ tRPC → list page → detail shell + PlanEditor → scenarios ∥ observations → close/reopen/delete); critical path 75→76→77→79→80→81→82→84; UI tasks verified on the :3100 temp-DB dev server against variant A. No new fog — the map is complete.
 
 ## Not yet specified
 
