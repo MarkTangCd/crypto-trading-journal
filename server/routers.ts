@@ -25,11 +25,35 @@ import {
   listGoalsByUserId,
   updateGoal,
   deleteGoal,
+  // Plans
+  getPlanRow,
+  listPlans,
+  getPlan,
+  createPlan,
+  updatePlan,
+  addScenario,
+  updateScenario,
+  deleteScenario,
+  addObservation,
+  updateObservation,
+  deleteObservation,
+  closePlan,
+  reopenPlan,
+  deletePlan,
+  listTradeSymbols,
 } from "./db";
 import type { TrpcContext } from "./_core/context";
-import type { Account, Goal } from "../drizzle/schema";
+import type { Account, Goal, Plan } from "../drizzle/schema";
 import { normalize as normalizeDecimal } from "./_core/decimal";
-import { TIME_FRAMES, TRADING_PAIR_RE } from "@shared/const";
+import {
+  SCENARIO_NAME_MAX,
+  SCENARIO_OUTCOMES,
+  SCENARIO_SIDES,
+  SCENARIO_TIME_FRAMES,
+  TIME_FRAMES,
+  TRADING_PAIR_RE,
+} from "@shared/const";
+import { isEmptyDoc, richTextDocSchema } from "@shared/richText";
 import { fetchCandles } from "./_core/coinank";
 import {
   getActiveConversation,
@@ -136,6 +160,36 @@ function normalizeGoalText(text: string): string {
     });
   }
   return trimmed;
+}
+
+const planSymbol = z.string().trim().toUpperCase().regex(TRADING_PAIR_RE, {
+  message: "Invalid symbol",
+});
+const scenarioName = z.string().trim().min(1).max(SCENARIO_NAME_MAX);
+const observationContent = richTextDocSchema.refine(doc => !isEmptyDoc(doc), {
+  message: "Observation cannot be empty",
+});
+
+function notFound(what: "Plan" | "Scenario" | "Observation"): TRPCError {
+  return new TRPCError({ code: "NOT_FOUND", message: `${what} not found` });
+}
+
+async function requirePlan(ctx: TrpcContext, planId: number): Promise<Plan> {
+  const plan = await getPlanRow(ctx.user.id, planId);
+  if (!plan) throw notFound("Plan");
+  return plan;
+}
+
+// Every write to a closed plan except reopen and delete is a CONFLICT.
+async function requireOpenPlan(
+  ctx: TrpcContext,
+  planId: number
+): Promise<Plan> {
+  const plan = await requirePlan(ctx, planId);
+  if (plan.closedAt !== null) {
+    throw new TRPCError({ code: "CONFLICT", message: "Plan is closed" });
+  }
+  return plan;
 }
 
 export const appRouter = router({
@@ -406,6 +460,201 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         await requireOwnedGoal(ctx, input.id);
         await deleteGoal(input.id, ctx.user.id);
+        return { success: true };
+      }),
+  }),
+
+  // Trading plans: open/closed derived from closedAt; outcomes set only by close.
+  plan: router({
+    list: publicProcedure.query(async ({ ctx }) => {
+      return listPlans(ctx.user.id);
+    }),
+
+    get: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const plan = await getPlan(ctx.user.id, input.id);
+        if (!plan) throw notFound("Plan");
+        return plan;
+      }),
+
+    symbolSuggestions: publicProcedure.query(async ({ ctx }) => {
+      return listTradeSymbols(ctx.user.id);
+    }),
+
+    create: publicProcedure
+      .input(z.object({ symbol: planSymbol }))
+      .mutation(async ({ ctx, input }) => {
+        const plan = await createPlan(ctx.user.id, input.symbol);
+        return { id: plan.id };
+      }),
+
+    update: publicProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          symbol: planSymbol.optional(),
+          marketContext: richTextDocSchema.nullable().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { id, ...patch } = input;
+        await requireOpenPlan(ctx, id);
+        const plan = await updatePlan(ctx.user.id, id, patch);
+        if (!plan) throw notFound("Plan");
+        return { updatedAt: plan.updatedAt };
+      }),
+
+    addScenario: publicProcedure
+      .input(
+        z.object({
+          planId: z.number(),
+          name: scenarioName,
+          side: z.enum(SCENARIO_SIDES),
+          primaryTimeFrame: z.enum(SCENARIO_TIME_FRAMES),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { planId, ...data } = input;
+        await requireOpenPlan(ctx, planId);
+        const scenario = await addScenario(ctx.user.id, planId, data);
+        if (!scenario) throw notFound("Plan");
+        return scenario;
+      }),
+
+    updateScenario: publicProcedure
+      .input(
+        z.object({
+          planId: z.number(),
+          scenarioId: z.number(),
+          name: scenarioName.optional(),
+          side: z.enum(SCENARIO_SIDES).optional(),
+          primaryTimeFrame: z.enum(SCENARIO_TIME_FRAMES).optional(),
+          content: richTextDocSchema.nullable().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { planId, scenarioId, ...patch } = input;
+        await requireOpenPlan(ctx, planId);
+        const scenario = await updateScenario(
+          ctx.user.id,
+          planId,
+          scenarioId,
+          patch
+        );
+        if (!scenario) throw notFound("Scenario");
+        return { updatedAt: scenario.updatedAt };
+      }),
+
+    deleteScenario: publicProcedure
+      .input(z.object({ planId: z.number(), scenarioId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await requireOpenPlan(ctx, input.planId);
+        const deleted = await deleteScenario(
+          ctx.user.id,
+          input.planId,
+          input.scenarioId
+        );
+        if (!deleted) throw notFound("Scenario");
+        return { success: true };
+      }),
+
+    addObservation: publicProcedure
+      .input(z.object({ planId: z.number(), content: observationContent }))
+      .mutation(async ({ ctx, input }) => {
+        await requireOpenPlan(ctx, input.planId);
+        const observation = await addObservation(
+          ctx.user.id,
+          input.planId,
+          input.content
+        );
+        if (!observation) throw notFound("Plan");
+        return observation;
+      }),
+
+    updateObservation: publicProcedure
+      .input(
+        z.object({
+          planId: z.number(),
+          observationId: z.number(),
+          content: observationContent,
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        await requireOpenPlan(ctx, input.planId);
+        const observation = await updateObservation(
+          ctx.user.id,
+          input.planId,
+          input.observationId,
+          input.content
+        );
+        if (!observation) throw notFound("Observation");
+        return { updatedAt: observation.updatedAt };
+      }),
+
+    deleteObservation: publicProcedure
+      .input(z.object({ planId: z.number(), observationId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await requireOpenPlan(ctx, input.planId);
+        const deleted = await deleteObservation(
+          ctx.user.id,
+          input.planId,
+          input.observationId
+        );
+        if (!deleted) throw notFound("Observation");
+        return { success: true };
+      }),
+
+    close: publicProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          verdicts: z.array(
+            z.object({
+              scenarioId: z.number(),
+              outcome: z.enum(SCENARIO_OUTCOMES),
+            })
+          ),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const plan = await getPlan(ctx.user.id, input.id);
+        if (!plan) throw notFound("Plan");
+        if (plan.closedAt !== null) {
+          throw new TRPCError({ code: "CONFLICT", message: "Plan is closed" });
+        }
+        // Verdict ids must equal the plan's scenario ids exactly.
+        const verdictIds = new Set(input.verdicts.map(v => v.scenarioId));
+        const exact =
+          verdictIds.size === input.verdicts.length &&
+          verdictIds.size === plan.scenarios.length &&
+          plan.scenarios.every(scenario => verdictIds.has(scenario.id));
+        if (!exact) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Every scenario needs exactly one verdict",
+          });
+        }
+        await closePlan(ctx.user.id, input.id, input.verdicts);
+        return { success: true };
+      }),
+
+    reopen: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const plan = await requirePlan(ctx, input.id);
+        if (plan.closedAt === null) {
+          throw new TRPCError({ code: "CONFLICT", message: "Plan is open" });
+        }
+        await reopenPlan(ctx.user.id, input.id);
+        return { success: true };
+      }),
+
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const deleted = await deletePlan(ctx.user.id, input.id);
+        if (!deleted) throw notFound("Plan");
         return { success: true };
       }),
   }),
