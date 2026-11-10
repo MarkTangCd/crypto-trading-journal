@@ -3,7 +3,7 @@ id: doc-5
 title: Trading plan map
 type: other
 created_date: '2026-11-10 03:08'
-updated_date: '2026-11-10 03:26'
+updated_date: '2026-11-10 04:05'
 ---
 ## Destination
 
@@ -38,6 +38,7 @@ Settled directly with the trader while charting; later tickets build on these an
 <!-- one line per closed ticket, appended as tickets resolve -->
 - [Rich text editor and paste-to-image pipeline for Plans](task-70): Tiptap 3 (pin 3.32.0) with StarterKit (headings etc. off) + Image + FileHandler, no toolbar; store ProseMirror JSON, read-only via `editable: false`, agents read it through static-renderer + turndown; paste/drop inserts a blob: placeholder, uploads to POST /api/images, swaps src to /api/images/:id; ~130 kB gzip, lazy-load the route. Findings: branch research/plan-rich-text-editor.
 - [Image storage in SQLite via node:sqlite and Express serving](task-71): drizzle `blob({ mode: "buffer" })` round-trips over the node:sqlite proxy; `POST /api/images?planId=` with route-scoped `express.raw` (10 MiB, magic-byte MIME), `GET /api/images/:id` with strong sha256 ETag + `Cache-Control: immutable`; whole-buffer reads are fine; cascade in app code, not a DB FK (migration runner hazard). Findings: branch research/plan-image-storage.
+- [Prototype the Plans pages](task-72): variant A "ledger" chosen as is. Separate /plans and /plans/:id pages; single column with the symbol as display hero (editable while open); scenarios lettered in creation order (no manual reorder); observations oldest first with the composer at the foot; close is an inline verdict section at the page foot, not a modal; outcomes in ink with glyphs, no win/loss hue. Prototype: branch prototype/plans-ui.
 
 ## Not yet specified
 
@@ -46,7 +47,6 @@ Settled directly with the trader while charting; later tickets build on these an
 - Relating a Plan to the synced trades on its symbol inside its open window (did the trade follow a triggered scenario?). Nothing is stored for this; derivable by symbol + time range.
 - Orphan image garbage collection once removed-from-editor images accumulate; and whether dedupe should be per user instead of per plan.
 - Dashboard presence: whether open plans deserve a strip like open goals, or stay only on `/plans`.
-- Scenario ordering: manual reordering vs creation order (prototype may settle it).
 - e2e coverage for the Plan lifecycle in the Playwright smoke.
 
 ## Out of scope
