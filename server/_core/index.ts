@@ -6,6 +6,7 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
+import { mountImageRoutes } from "./imageRoutes";
 import { mountPreTradeAgentSseRoute } from "./preTradeAgentSseRoute";
 import { mountReviewAgentSseRoute } from "./reviewAgentSseRoute";
 import { serveStatic, setupVite } from "./vite";
@@ -59,6 +60,8 @@ async function startServer() {
   // agents mount plain Express routers next to tRPC.
   app.use("/api/review-agent", mountReviewAgentSseRoute());
   app.use("/api/pre-trade-agent", mountPreTradeAgentSseRoute());
+  // Plan images: raw-bytes upload and cached GET (decision-3).
+  app.use("/api/images", mountImageRoutes());
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
