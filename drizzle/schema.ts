@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  blob,
   check,
   index,
   integer,
@@ -7,6 +8,7 @@ import {
   text,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
+import type { RichTextDoc } from "../shared/richText";
 
 /**
  * Core user table backing auth flow.
@@ -274,6 +276,152 @@ export const goals = sqliteTable("goals", {
 
 export type Goal = typeof goals.$inferSelect;
 export type InsertGoal = typeof goals.$inferInsert;
+
+/**
+ * Trading plan: what the trader expects one symbol to do. Belongs to the
+ * user, not to an account. State is derived from `closedAt`: null = open.
+ */
+export const plans = sqliteTable(
+  "plans",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** Foreign key to users table */
+    userId: integer("userId").notNull(),
+    /** Uppercase trading pair, TRADING_PAIR_RE */
+    symbol: text("symbol").notNull(),
+    /** Rich text; null = empty */
+    marketContext: text("marketContext", { mode: "json" }).$type<RichTextDoc>(),
+    /** Set by close, cleared by reopen; null while open */
+    closedAt: integer("closedAt", { mode: "timestamp_ms" }),
+    /** Record creation timestamp */
+    createdAt: integer("createdAt", { mode: "timestamp_ms" })
+      .default(sql`(unixepoch() * 1000)`)
+      .notNull(),
+    /** Bumped only when this row changes */
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" })
+      .default(sql`(unixepoch() * 1000)`)
+      .notNull(),
+  },
+  table => [index("plans_user_closed_idx").on(table.userId, table.closedAt)]
+);
+
+export type Plan = typeof plans.$inferSelect;
+export type InsertPlan = typeof plans.$inferInsert;
+
+/**
+ * Scenario of a plan. Listed by id asc (lettered a, b, c… at render); no
+ * manual reorder. `outcome` is written only by closing the plan.
+ */
+export const planScenarios = sqliteTable(
+  "plan_scenarios",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** Owning plan; no FK, cascaded in application code */
+    planId: integer("planId").notNull(),
+    /** Trimmed, 1..SCENARIO_NAME_MAX chars */
+    name: text("name").notNull(),
+    side: text("side").$type<"long" | "short">().notNull(),
+    /** One of SCENARIO_TIME_FRAMES */
+    primaryTimeFrame: text("primaryTimeFrame").notNull(),
+    /** Rich text; null = empty */
+    content: text("content", { mode: "json" }).$type<RichTextDoc>(),
+    /** Verdict from the last close; null until first closed */
+    outcome: text("outcome").$type<"triggered" | "invalidated">(),
+    /** Record creation timestamp */
+    createdAt: integer("createdAt", { mode: "timestamp_ms" })
+      .default(sql`(unixepoch() * 1000)`)
+      .notNull(),
+    /** Record update timestamp */
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" })
+      .default(sql`(unixepoch() * 1000)`)
+      .notNull(),
+  },
+  table => [
+    check("plan_scenarios_side_check", sql`${table.side} in ('long', 'short')`),
+    check(
+      "plan_scenarios_time_frame_check",
+      sql`${table.primaryTimeFrame} in ('15m', '30m', '1H', '4H', '12H', '1D')`
+    ),
+    check(
+      "plan_scenarios_outcome_check",
+      sql`${table.outcome} is null or ${table.outcome} in ('triggered', 'invalidated')`
+    ),
+    index("plan_scenarios_plan_idx").on(table.planId),
+  ]
+);
+
+export type PlanScenario = typeof planScenarios.$inferSelect;
+export type InsertPlanScenario = typeof planScenarios.$inferInsert;
+
+/**
+ * Observation logged while a plan is open. `createdAt` is the observation
+ * time and is never updated.
+ */
+export const planObservations = sqliteTable(
+  "plan_observations",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** Owning plan; no FK, cascaded in application code */
+    planId: integer("planId").notNull(),
+    /** Rich text; never empty */
+    content: text("content", { mode: "json" }).$type<RichTextDoc>().notNull(),
+    /** Observation time (server clock) */
+    createdAt: integer("createdAt", { mode: "timestamp_ms" })
+      .default(sql`(unixepoch() * 1000)`)
+      .notNull(),
+    /** Record update timestamp */
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" })
+      .default(sql`(unixepoch() * 1000)`)
+      .notNull(),
+  },
+  table => [
+    index("plan_observations_plan_created_idx").on(
+      table.planId,
+      table.createdAt
+    ),
+  ]
+);
+
+export type PlanObservation = typeof planObservations.$inferSelect;
+export type InsertPlanObservation = typeof planObservations.$inferInsert;
+
+/**
+ * Image pasted into a plan's rich text, stored as a BLOB (decision-3).
+ * Insert-only; deleted with its plan. Metadata reads never select `bytes`.
+ */
+export const images = sqliteTable(
+  "images",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** Foreign key to users table; GET filters by it */
+    userId: integer("userId").notNull(),
+    /** Owning plan; no FK, cascaded in application code */
+    planId: integer("planId").notNull(),
+    /** Hex sha256 of bytes */
+    sha256: text("sha256").notNull(),
+    /** Sniffed type, one of IMAGE_MIME_TYPES */
+    mime: text("mime").notNull(),
+    /** Byte length */
+    size: integer("size").notNull(),
+    bytes: blob("bytes", { mode: "buffer" }).notNull(),
+    /** Record creation timestamp */
+    createdAt: integer("createdAt", { mode: "timestamp_ms" })
+      .default(sql`(unixepoch() * 1000)`)
+      .notNull(),
+  },
+  table => [
+    check(
+      "images_mime_check",
+      sql`${table.mime} in ('image/png', 'image/jpeg', 'image/webp', 'image/gif')`
+    ),
+    // Dedupe backstop for concurrent uploads of the same bytes.
+    uniqueIndex("images_plan_sha_unique").on(table.planId, table.sha256),
+    index("images_user_idx").on(table.userId),
+  ]
+);
+
+export type Image = typeof images.$inferSelect;
+export type InsertImage = typeof images.$inferInsert;
 
 /**
  * Pre-trade brainstorming session. Written when the user commits to "start
