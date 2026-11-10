@@ -1,9 +1,11 @@
 ---
 id: TASK-72
 title: Prototype the Plans pages
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@myself'
 created_date: '2026-11-10 03:09'
+updated_date: '2026-11-10 03:50'
 labels:
   - 'wayfinder:prototype'
 dependencies:
@@ -24,3 +26,14 @@ Screens: /plans (create by symbol only, then jump to the detail; open plans firs
 
 Use the editor recommended by the rich-text research ticket; images may stay base64 in the prototype. Record which variant or mix was chosen and every UX decision it settles.
 <!-- SECTION:DESCRIPTION:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Prototype ready on branch prototype/plans-ui (commit 003657b, pushed; not for merge). Run: git checkout prototype/plans-ui && devbox run -- npm install && devbox run dev, open /plans; switch with ?variant=A|B|C, the bottom-right bar or the arrow keys. In-memory seed data; reload reseeds. Tiptap 3.32.0 per TASK-70, images base64 in the prototype only.
+A ledger: one column like Trades; symbol is the display hero; scenarios lettered a/b/c in creation order; observations oldest first with composer at the foot; close is an inline section at the page foot.
+B index + sheet: plan index stays beside the open plan (hidden on phone when a plan is open); open-for duration is the display hero; scenarios are a table expanding one row at a time; observations newest first, composer on top; close in a right side sheet.
+C scenario columns: big symbol input on /plans, open plans listed with their scenarios; detail puts symbol beside market context, scenarios side by side with manual left/right reordering; close turns the columns into an in-place verdict board with a sticky confirm bar.
+Shared across all three: outcomes in ink with glyphs (filled = triggered, hollow = invalidated), no win/loss hue; long/short in ink; lowercase labels with timeframes kept uppercase; delete via confirmation dialog; saved hh:mm indicator from updatedAt.
+Questions for the trader: (1) which variant or mix; (2) list and detail on separate pages (A, C) or together (B); (3) close flow: inline section, side sheet or in-place verdicts; (4) scenario ordering: creation order or manual reorder (settles the map fog item); (5) observations oldest-first or newest-first; (6) which number is the hero: symbol or open-for duration.
+<!-- SECTION:NOTES:END -->
