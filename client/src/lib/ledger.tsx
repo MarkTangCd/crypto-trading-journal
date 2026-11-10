@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { formatUtc8Date, formatUtc8DateTime } from "@shared/time";
+import { formatUtc8Date, formatUtc8DateTime, utc8Parts } from "@shared/time";
 import type React from "react";
 
 // Bench Notebook shared primitives. Brand-specific layer above shadcn.
@@ -54,6 +54,12 @@ export function fmtDateTime(ts: number | Date): string {
 
 export function fmtDate(ts: number | Date): string {
   return formatUtc8Date(ts).toLowerCase();
+}
+
+// "nov 10 05:12"
+export function fmtDayTime(ts: number | Date): string {
+  const p = utc8Parts(ts);
+  return `${p.monthName.toLowerCase()} ${p.day} ${p.hhmm}`;
 }
 
 export function fmtDuration(start: number, end: number): string {

@@ -1,6 +1,7 @@
 import { PlanEditor } from "@/components/plans/PlanEditor";
+import { PlanObservations } from "@/components/plans/PlanObservations";
 import { PlanScenarios } from "@/components/plans/PlanScenarios";
-import { SectionHeader, fmtDuration } from "@/lib/ledger";
+import { SectionHeader, fmtDayTime, fmtDuration } from "@/lib/ledger";
 import { trpc } from "@/lib/trpc";
 import { isEmptyDoc } from "@shared/richText";
 import { utc8Parts } from "@shared/time";
@@ -8,12 +9,6 @@ import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "wouter";
 import { toast } from "sonner";
-
-// "nov 10 05:12"
-function dayTime(ts: Date): string {
-  const p = utc8Parts(ts);
-  return `${p.monthName.toLowerCase()} ${p.day} ${p.hhmm}`;
-}
 
 export default function PlanDetail() {
   const params = useParams<{ id: string }>();
@@ -137,8 +132,8 @@ export default function PlanDetail() {
         )}
         <p className="text-label tabular-nums">
           {plan.closedAt === null
-            ? `open · since ${dayTime(plan.createdAt)} · ${fmtDuration(plan.createdAt.getTime(), Date.now())}`
-            : `closed ${dayTime(plan.closedAt)} · was open ${fmtDuration(plan.createdAt.getTime(), plan.closedAt.getTime())}`}
+            ? `open · since ${fmtDayTime(plan.createdAt)} · ${fmtDuration(plan.createdAt.getTime(), Date.now())}`
+            : `closed ${fmtDayTime(plan.closedAt)} · was open ${fmtDuration(plan.createdAt.getTime(), plan.closedAt.getTime())}`}
         </p>
       </header>
 
@@ -165,6 +160,13 @@ export default function PlanDetail() {
       <PlanScenarios
         planId={plan.id}
         scenarios={plan.scenarios}
+        editable={isOpen}
+        onSaved={setSavedAt}
+      />
+
+      <PlanObservations
+        planId={plan.id}
+        observations={plan.observations}
         editable={isOpen}
         onSaved={setSavedAt}
       />

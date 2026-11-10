@@ -50,6 +50,7 @@ export function PlanEditor({
   onSave,
   placeholder,
   className,
+  debounceMs = AUTOSAVE_MS,
 }: {
   planId: number;
   content: RichTextDoc | null;
@@ -57,6 +58,8 @@ export function PlanEditor({
   onSave: (doc: RichTextDoc) => void;
   placeholder?: string;
   className?: string;
+  /** Delay before `onSave`; 0 hands every change over synchronously */
+  debounceMs?: number;
 }) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingDoc = useRef<RichTextDoc | null>(null);
@@ -75,8 +78,10 @@ export function PlanEditor({
   const scheduleSave = (editor: Editor) => {
     if (pendingUploads.current > 0) return;
     pendingDoc.current = editor.getJSON() as RichTextDoc;
+    // Synchronous, so a keystroke right after a change sees the latest doc.
+    if (debounceMs === 0) return flush();
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(flush, AUTOSAVE_MS);
+    timer.current = setTimeout(flush, debounceMs);
   };
 
   const insertImages = (editor: Editor, files: File[], pos: number) => {
