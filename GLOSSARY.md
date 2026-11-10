@@ -86,3 +86,37 @@ _Avoid_: Validation, permission check, key test
 A linked account whose last successful sync is more than five minutes old.
 Opening the trade list syncs stale accounts automatically.
 _Avoid_: Outdated, expired, out of date
+
+## Trading plans
+
+**Plan**:
+The trader's written intention for one symbol over the coming session: the
+market context, one or more scenarios, and the observations logged while it
+is open. Belongs to the trader, not to an account.
+_Avoid_: Pre-trade, session, note, trading plan (as an identifier)
+
+**Open plan / Closed plan**:
+A plan the trader is still working / has concluded. The only two plan
+states. Closing records the end time; a closed plan can be reopened.
+_Avoid_: Active, in progress, completed, done, finished, archived
+
+**Market context**:
+The free-form background (text and screenshots) the trader writes at the top
+of a plan.
+_Avoid_: Background, analysis, thesis, idea
+
+**Scenario**:
+One predicted script inside a plan: a name, a direction (long or short), a
+primary timeframe, and free-form content. A plan may hold several.
+_Avoid_: Playbook, setup, strategy, thesis, idea
+
+**Scenario outcome**:
+The verdict the trader gives every scenario when closing its plan: triggered
+or invalidated. A scenario the market never reached is invalidated. Unset
+while the plan is open.
+_Avoid_: Result, status, hit, miss, pending, untriggered
+
+**Observation**:
+A timestamped free-form entry (text and screenshots) added to an open plan
+as the market moves. Ordered by the time it was written, shown in UTC+8.
+_Avoid_: Market data observation, log, update, comment, note
