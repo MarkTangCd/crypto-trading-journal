@@ -1,4 +1,4 @@
-import { eq, desc, asc, and, inArray, sql } from "drizzle-orm";
+import { eq, desc, asc, and, count, inArray, sql } from "drizzle-orm";
 import { drizzle, type SqliteRemoteDatabase } from "drizzle-orm/sqlite-proxy";
 import { migrate } from "drizzle-orm/sqlite-proxy/migrator";
 import { DatabaseSync } from "node:sqlite";
@@ -29,6 +29,14 @@ import {
   type InsertFill,
   trades,
   type Trade,
+  plans,
+  type Plan,
+  planScenarios,
+  type PlanScenario,
+  planObservations,
+  type PlanObservation,
+  images,
+  type InsertImage,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { ANONYMOUS_OPEN_ID, ANONYMOUS_USER_NAME } from "@shared/const";
@@ -37,6 +45,7 @@ import { decrypt } from "./agents/secrets";
 import type { PublicAccount } from "@shared/types";
 import type { TradeRecord } from "./exchange/reconstruct";
 import type { SyncErrorCode } from "@shared/const";
+import type { RichTextDoc } from "@shared/richText";
 
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "drizzle");
 
@@ -867,6 +876,416 @@ export async function deleteGoal(id: number, userId: number): Promise<void> {
   if (!db) throw new Error("Database not available");
 
   await db.delete(goals).where(and(eq(goals.id, id), eq(goals.userId, userId)));
+}
+
+// ============ Plans ============
+// Ownership is checked with a separate plans query, never a join: the proxy
+// callback maps rows with Object.values, which collapses duplicate column
+// names. Open/closed guards live in the router and the image route.
+
+export type ScenarioOutcome = "triggered" | "invalidated";
+
+export type PlanListItem = Plan & {
+  scenarioCount: number;
+  observationCount: number;
+  /** Stored outcomes in scenario id order; null where none yet */
+  outcomes: (ScenarioOutcome | null)[];
+};
+
+export type PlanDetail = Plan & {
+  scenarios: PlanScenario[];
+  observations: PlanObservation[];
+};
+
+export async function getPlanRow(
+  userId: number,
+  planId: number
+): Promise<Plan | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const [row] = await db
+    .select()
+    .from(plans)
+    .where(and(eq(plans.id, planId), eq(plans.userId, userId)))
+    .limit(1);
+
+  return row;
+}
+
+/** Open plans newest first, then closed plans by closedAt desc. */
+export async function listPlans(userId: number): Promise<PlanListItem[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const planRows = await db
+    .select()
+    .from(plans)
+    .where(eq(plans.userId, userId))
+    .orderBy(
+      desc(sql`${plans.closedAt} is null`),
+      desc(plans.closedAt),
+      desc(plans.createdAt),
+      desc(plans.id)
+    );
+  if (planRows.length === 0) return [];
+
+  const planIds = planRows.map(plan => plan.id);
+  const scenarioRows = await db
+    .select({
+      planId: planScenarios.planId,
+      outcome: planScenarios.outcome,
+    })
+    .from(planScenarios)
+    .where(inArray(planScenarios.planId, planIds))
+    .orderBy(asc(planScenarios.id));
+  const observationCounts = await db
+    .select({ planId: planObservations.planId, n: count() })
+    .from(planObservations)
+    .where(inArray(planObservations.planId, planIds))
+    .groupBy(planObservations.planId);
+
+  const outcomesByPlan = new Map<number, (ScenarioOutcome | null)[]>();
+  for (const row of scenarioRows) {
+    const outcomes = outcomesByPlan.get(row.planId) ?? [];
+    outcomes.push(row.outcome);
+    outcomesByPlan.set(row.planId, outcomes);
+  }
+  const observationsByPlan = new Map(
+    observationCounts.map(row => [row.planId, row.n])
+  );
+
+  return planRows.map(plan => {
+    const outcomes = outcomesByPlan.get(plan.id) ?? [];
+    return {
+      ...plan,
+      scenarioCount: outcomes.length,
+      observationCount: observationsByPlan.get(plan.id) ?? 0,
+      outcomes,
+    };
+  });
+}
+
+export async function getPlan(
+  userId: number,
+  planId: number
+): Promise<PlanDetail | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const plan = await getPlanRow(userId, planId);
+  if (!plan) return undefined;
+
+  const scenarios = await db
+    .select()
+    .from(planScenarios)
+    .where(eq(planScenarios.planId, planId))
+    .orderBy(asc(planScenarios.id));
+  const observations = await db
+    .select()
+    .from(planObservations)
+    .where(eq(planObservations.planId, planId))
+    .orderBy(asc(planObservations.createdAt), asc(planObservations.id));
+
+  return { ...plan, scenarios, observations };
+}
+
+export async function createPlan(
+  userId: number,
+  symbol: string
+): Promise<Plan> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [row] = await db.insert(plans).values({ userId, symbol }).returning();
+  return row;
+}
+
+export async function updatePlan(
+  userId: number,
+  planId: number,
+  patch: { symbol?: string; marketContext?: RichTextDoc | null }
+): Promise<Plan | undefined> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [row] = await db
+    .update(plans)
+    .set({ ...patch, updatedAt: new Date() })
+    .where(and(eq(plans.id, planId), eq(plans.userId, userId)))
+    .returning();
+  return row;
+}
+
+export async function addScenario(
+  userId: number,
+  planId: number,
+  data: {
+    name: string;
+    side: "long" | "short";
+    primaryTimeFrame: string;
+  }
+): Promise<PlanScenario | undefined> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (!(await getPlanRow(userId, planId))) return undefined;
+
+  const [row] = await db
+    .insert(planScenarios)
+    .values({ ...data, planId })
+    .returning();
+  return row;
+}
+
+/** `outcome` is written only by closePlan. */
+export async function updateScenario(
+  userId: number,
+  planId: number,
+  scenarioId: number,
+  patch: {
+    name?: string;
+    side?: "long" | "short";
+    primaryTimeFrame?: string;
+    content?: RichTextDoc | null;
+  }
+): Promise<PlanScenario | undefined> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (!(await getPlanRow(userId, planId))) return undefined;
+
+  const [row] = await db
+    .update(planScenarios)
+    .set({ ...patch, updatedAt: new Date() })
+    .where(
+      and(eq(planScenarios.id, scenarioId), eq(planScenarios.planId, planId))
+    )
+    .returning();
+  return row;
+}
+
+/** Returns false when the plan or scenario does not exist. */
+export async function deleteScenario(
+  userId: number,
+  planId: number,
+  scenarioId: number
+): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (!(await getPlanRow(userId, planId))) return false;
+
+  const deleted = await db
+    .delete(planScenarios)
+    .where(
+      and(eq(planScenarios.id, scenarioId), eq(planScenarios.planId, planId))
+    )
+    .returning({ id: planScenarios.id });
+  return deleted.length > 0;
+}
+
+export async function addObservation(
+  userId: number,
+  planId: number,
+  content: RichTextDoc
+): Promise<PlanObservation | undefined> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (!(await getPlanRow(userId, planId))) return undefined;
+
+  const [row] = await db
+    .insert(planObservations)
+    .values({ planId, content })
+    .returning();
+  return row;
+}
+
+/** `createdAt` is the observation time and never changes. */
+export async function updateObservation(
+  userId: number,
+  planId: number,
+  observationId: number,
+  content: RichTextDoc
+): Promise<PlanObservation | undefined> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (!(await getPlanRow(userId, planId))) return undefined;
+
+  const [row] = await db
+    .update(planObservations)
+    .set({ content, updatedAt: new Date() })
+    .where(
+      and(
+        eq(planObservations.id, observationId),
+        eq(planObservations.planId, planId)
+      )
+    )
+    .returning();
+  return row;
+}
+
+/** Returns false when the plan or observation does not exist. */
+export async function deleteObservation(
+  userId: number,
+  planId: number,
+  observationId: number
+): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (!(await getPlanRow(userId, planId))) return false;
+
+  const deleted = await db
+    .delete(planObservations)
+    .where(
+      and(
+        eq(planObservations.id, observationId),
+        eq(planObservations.planId, planId)
+      )
+    )
+    .returning({ id: planObservations.id });
+  return deleted.length > 0;
+}
+
+/**
+ * Write every verdict and closedAt atomically. The router has already
+ * checked that the verdicts cover exactly the plan's scenarios.
+ */
+export async function closePlan(
+  userId: number,
+  planId: number,
+  verdicts: { scenarioId: number; outcome: ScenarioOutcome }[]
+): Promise<Plan | undefined> {
+  return runInSqliteTransaction(async db => {
+    const [owned] = await db
+      .select({ id: plans.id })
+      .from(plans)
+      .where(and(eq(plans.id, planId), eq(plans.userId, userId)))
+      .limit(1);
+    if (!owned) return undefined;
+
+    const now = new Date();
+    for (const verdict of verdicts) {
+      await db
+        .update(planScenarios)
+        .set({ outcome: verdict.outcome, updatedAt: now })
+        .where(
+          and(
+            eq(planScenarios.id, verdict.scenarioId),
+            eq(planScenarios.planId, planId)
+          )
+        );
+    }
+    const [row] = await db
+      .update(plans)
+      .set({ closedAt: now, updatedAt: now })
+      .where(eq(plans.id, planId))
+      .returning();
+    return row;
+  });
+}
+
+/** Clears closedAt; stored outcomes stay as the next close's pre-fill. */
+export async function reopenPlan(
+  userId: number,
+  planId: number
+): Promise<Plan | undefined> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [row] = await db
+    .update(plans)
+    .set({ closedAt: null, updatedAt: new Date() })
+    .where(and(eq(plans.id, planId), eq(plans.userId, userId)))
+    .returning();
+  return row;
+}
+
+/** Delete a plan with its images, observations and scenarios, atomically. */
+export async function deletePlan(
+  userId: number,
+  planId: number
+): Promise<boolean> {
+  return runInSqliteTransaction(async db => {
+    const [owned] = await db
+      .select({ id: plans.id })
+      .from(plans)
+      .where(and(eq(plans.id, planId), eq(plans.userId, userId)))
+      .limit(1);
+    if (!owned) return false;
+
+    await db
+      .delete(images)
+      .where(and(eq(images.planId, planId), eq(images.userId, userId)));
+    await db
+      .delete(planObservations)
+      .where(eq(planObservations.planId, planId));
+    await db.delete(planScenarios).where(eq(planScenarios.planId, planId));
+    await db.delete(plans).where(eq(plans.id, planId));
+    return true;
+  });
+}
+
+/** Distinct synced trade symbols, for the plan symbol suggestions. */
+export async function listTradeSymbols(userId: number): Promise<string[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = await db
+    .selectDistinct({ symbol: trades.symbol })
+    .from(trades)
+    .where(eq(trades.userId, userId))
+    .orderBy(asc(trades.symbol));
+  return rows.map(row => row.symbol);
+}
+
+// ============ Plan images ============
+// Metadata reads never select `bytes`.
+
+export async function findImageBySha(
+  userId: number,
+  planId: number,
+  sha256: string
+): Promise<{ id: number } | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const [row] = await db
+    .select({ id: images.id })
+    .from(images)
+    .where(
+      and(
+        eq(images.userId, userId),
+        eq(images.planId, planId),
+        eq(images.sha256, sha256)
+      )
+    )
+    .limit(1);
+  return row;
+}
+
+/** Throws on a (planId, sha256) unique violation; the caller re-selects. */
+export async function insertImage(row: InsertImage): Promise<{ id: number }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [inserted] = await db
+    .insert(images)
+    .values(row)
+    .returning({ id: images.id });
+  return inserted;
+}
+
+export async function getImage(
+  userId: number,
+  imageId: number
+): Promise<{ mime: string; sha256: string; bytes: Buffer } | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const [row] = await db
+    .select({ mime: images.mime, sha256: images.sha256, bytes: images.bytes })
+    .from(images)
+    .where(and(eq(images.id, imageId), eq(images.userId, userId)))
+    .limit(1);
+  return row;
 }
 
 // ============ Review Agent: conversations / messages / settings ============
