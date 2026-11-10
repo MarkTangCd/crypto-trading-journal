@@ -66,12 +66,14 @@ function ScenarioRow({
   scenario,
   letter,
   editable,
+  showOutcome,
   onSaved,
 }: {
   planId: number;
   scenario: PlanScenario;
   letter: string;
   editable: boolean;
+  showOutcome: boolean;
   onSaved: (at: Date) => void;
 }) {
   const invalidate = useInvalidatePlan(planId);
@@ -137,7 +139,16 @@ function ScenarioRow({
             className="w-full bg-transparent border-0 border-b border-transparent hover:border-border focus:border-foreground focus:outline-none text-base font-medium px-0"
           />
         ) : (
-          <p className="text-base font-medium">{scenario.name}</p>
+          <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
+            <p className="flex-1 text-base font-medium">{scenario.name}</p>
+            {showOutcome && scenario.outcome && (
+              <span className="text-sm font-medium">
+                {scenario.outcome === "triggered"
+                  ? "● triggered"
+                  : "○ invalidated"}
+              </span>
+            )}
+          </div>
         )}
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
           <Segmented<Side>
@@ -282,11 +293,14 @@ export function PlanScenarios({
   planId,
   scenarios,
   editable,
+  showOutcomes,
   onSaved,
 }: {
   planId: number;
   scenarios: PlanScenario[];
   editable: boolean;
+  /** Only for a closed plan; outcomes stay hidden while open */
+  showOutcomes: boolean;
   onSaved: (at: Date) => void;
 }) {
   return (
@@ -294,7 +308,7 @@ export function PlanScenarios({
       <SectionHeader id="scenarios-label">
         scenarios · {scenarios.length}
       </SectionHeader>
-      {scenarios.length === 0 && !editable && (
+      {scenarios.length === 0 && showOutcomes && (
         <p className="py-4 text-sm">no scenarios were written.</p>
       )}
       <ol>
@@ -305,6 +319,7 @@ export function PlanScenarios({
             scenario={scenario}
             letter={String.fromCharCode(97 + index)}
             editable={editable}
+            showOutcome={showOutcomes}
             onSaved={onSaved}
           />
         ))}

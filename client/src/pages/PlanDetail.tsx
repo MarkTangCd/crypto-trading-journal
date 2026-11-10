@@ -1,4 +1,5 @@
 import { PlanEditor } from "@/components/plans/PlanEditor";
+import { PlanFooter } from "@/components/plans/PlanFooter";
 import { PlanObservations } from "@/components/plans/PlanObservations";
 import { PlanScenarios } from "@/components/plans/PlanScenarios";
 import { SectionHeader, fmtDayTime, fmtDuration } from "@/lib/ledger";
@@ -25,6 +26,8 @@ export default function PlanDetail() {
   const { data: symbolSuggestions } = trpc.plan.symbolSuggestions.useQuery();
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [symbolDraft, setSymbolDraft] = useState<string | null>(null);
+  // Scenarios are locked while verdicts are given, so the set cannot drift.
+  const [closing, setClosing] = useState(false);
 
   // Autosave: set the saved mark from the result; never invalidate plan.get
   // here, it would reset the editor.
@@ -160,7 +163,8 @@ export default function PlanDetail() {
       <PlanScenarios
         planId={plan.id}
         scenarios={plan.scenarios}
-        editable={isOpen}
+        editable={isOpen && !closing}
+        showOutcomes={!isOpen}
         onSaved={setSavedAt}
       />
 
@@ -170,6 +174,8 @@ export default function PlanDetail() {
         editable={isOpen}
         onSaved={setSavedAt}
       />
+
+      <PlanFooter plan={plan} closing={closing} onClosingChange={setClosing} />
     </div>
   );
 }
