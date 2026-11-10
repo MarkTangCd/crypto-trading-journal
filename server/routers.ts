@@ -29,7 +29,7 @@ import {
 import type { TrpcContext } from "./_core/context";
 import type { Account, Goal } from "../drizzle/schema";
 import { normalize as normalizeDecimal } from "./_core/decimal";
-import { TIME_FRAMES } from "@shared/const";
+import { TIME_FRAMES, TRADING_PAIR_RE } from "@shared/const";
 import { fetchCandles } from "./_core/coinank";
 import {
   getActiveConversation,
@@ -66,8 +66,6 @@ const SUPPORTED_PROVIDER_IDS = listProviders().map(p => p.id) as [
   ...string[],
 ];
 const providerIdSchema = z.enum(SUPPORTED_PROVIDER_IDS);
-
-const TRADING_PAIR_RE = /^[A-Z0-9]{4,20}$/;
 
 // Hand-entered price level: a positive plain decimal, stored normalized.
 const priceLevel = z
