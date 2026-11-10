@@ -8,6 +8,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { AccountProvider } from "./contexts/AccountContext";
 import Dashboard from "./pages/Dashboard";
 import Goals from "./pages/Goals";
+import PlansPrototype from "./pages/PlansPrototype";
 import Trades from "./pages/Trades";
 import TradeDetail from "./pages/TradeDetail";
 import Accounts from "./pages/Accounts";
@@ -22,6 +23,8 @@ function Router() {
       <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/goals" component={Goals} />
+        <Route path="/plans" component={PlansPrototype} />
+        <Route path="/plans/:id" component={PlansPrototype} />
         <Route path="/trades" component={Trades} />
         <Route path="/trades/:id" component={TradeDetail} />
         <Route path="/accounts" component={Accounts} />

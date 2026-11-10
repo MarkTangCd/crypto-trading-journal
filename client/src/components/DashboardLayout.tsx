@@ -15,6 +15,7 @@ import {
   BarChart3,
   FileText,
   Flag,
+  NotebookPen,
   PanelLeft,
   Settings,
   Sparkles,
@@ -29,6 +30,7 @@ import { useLocation } from "wouter";
 const menuItems = [
   { icon: BarChart3, label: "Dashboard", path: "/" },
   { icon: Flag, label: "Goals", path: "/goals" },
+  { icon: NotebookPen, label: "Plans", path: "/plans" },
   { icon: FileText, label: "Trades", path: "/trades" },
   { icon: Sparkles, label: "Pre-Trade", path: "/pre-trade" },
   { icon: Wallet, label: "Accounts", path: "/accounts" },
