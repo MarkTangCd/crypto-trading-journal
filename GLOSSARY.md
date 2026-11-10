@@ -112,8 +112,9 @@ _Avoid_: Playbook, setup, strategy, thesis, idea
 
 **Scenario outcome**:
 The verdict the trader gives every scenario when closing its plan: triggered
-or invalidated. A scenario the market never reached is invalidated. Unset
-while the plan is open.
+or invalidated. A scenario the market never reached is invalidated. Has no
+meaning while the plan is open; reopening keeps the earlier verdicts only as
+the starting point for the next close.
 _Avoid_: Result, status, hit, miss, pending, untriggered
 
 **Observation**:
