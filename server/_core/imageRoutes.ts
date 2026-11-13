@@ -110,7 +110,7 @@ export function mountImageRoutes(): Router {
         }
 
         const sha256 = createHash("sha256").update(bytes).digest("hex");
-        const existing = await findImageBySha(userId, plan.id, sha256);
+        const existing = await findImageBySha(userId, "plan", plan.id, sha256);
         if (existing) {
           res.status(200).json({ id: existing.id });
           return;
@@ -119,7 +119,8 @@ export function mountImageRoutes(): Router {
         try {
           const { id } = await insertImage({
             userId,
-            planId: plan.id,
+            ownerKind: "plan",
+            ownerId: plan.id,
             sha256,
             mime,
             size: bytes.length,
@@ -128,7 +129,7 @@ export function mountImageRoutes(): Router {
           res.status(201).json({ id });
         } catch (error) {
           // A concurrent upload of the same bytes won the unique index.
-          const raced = await findImageBySha(userId, plan.id, sha256);
+          const raced = await findImageBySha(userId, "plan", plan.id, sha256);
           if (!raced) throw error;
           res.status(200).json({ id: raced.id });
         }

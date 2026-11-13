@@ -8,6 +8,7 @@ import {
   text,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
+import type { Emotion, ImageOwnerKind } from "../shared/const";
 import type { RichTextDoc } from "../shared/richText";
 
 /**
@@ -386,8 +387,9 @@ export type PlanObservation = typeof planObservations.$inferSelect;
 export type InsertPlanObservation = typeof planObservations.$inferInsert;
 
 /**
- * Image pasted into a plan's rich text, stored as a BLOB (decision-3).
- * Insert-only; deleted with its plan. Metadata reads never select `bytes`.
+ * Image owned by a plan, journal entry or setup (rich text or a journal
+ * screenshot slot), stored as a BLOB (decision-3). Insert-only; deleted with
+ * its owner. Metadata reads never select `bytes`.
  */
 export const images = sqliteTable(
   "images",
@@ -395,8 +397,10 @@ export const images = sqliteTable(
     id: integer("id").primaryKey({ autoIncrement: true }),
     /** Foreign key to users table; GET filters by it */
     userId: integer("userId").notNull(),
-    /** Owning plan; no FK, cascaded in application code */
-    planId: integer("planId").notNull(),
+    /** Owner row kind, one of IMAGE_OWNER_KINDS */
+    ownerKind: text("ownerKind").$type<ImageOwnerKind>().notNull(),
+    /** Owner row id within ownerKind; no FK, cascaded in application code */
+    ownerId: integer("ownerId").notNull(),
     /** Hex sha256 of bytes */
     sha256: text("sha256").notNull(),
     /** Sniffed type, one of IMAGE_MIME_TYPES */
@@ -414,14 +418,174 @@ export const images = sqliteTable(
       "images_mime_check",
       sql`${table.mime} in ('image/png', 'image/jpeg', 'image/webp', 'image/gif')`
     ),
+    check(
+      "images_owner_kind_check",
+      sql`${table.ownerKind} in ('plan', 'journal_entry', 'setup')`
+    ),
     // Dedupe backstop for concurrent uploads of the same bytes.
-    uniqueIndex("images_plan_sha_unique").on(table.planId, table.sha256),
+    uniqueIndex("images_owner_sha_unique").on(
+      table.ownerKind,
+      table.ownerId,
+      table.sha256
+    ),
     index("images_user_idx").on(table.userId),
   ]
 );
 
 export type Image = typeof images.$inferSelect;
 export type InsertImage = typeof images.$inferInsert;
+
+/**
+ * Journal entry: one trade idea across one or more linked trades on one
+ * symbol and account. State is derived from `reviewedAt`: null = unreviewed.
+ */
+export const journalEntries = sqliteTable(
+  "journal_entries",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** Foreign key to users table */
+    userId: integer("userId").notNull(),
+    /** From the first linked trade; immutable */
+    accountId: integer("accountId").notNull(),
+    /** From the first linked trade; immutable */
+    symbol: text("symbol").notNull(),
+    /** Text decimal > 0; null = not set */
+    plannedEntry: text("plannedEntry"),
+    /** Text decimal > 0; null = not set */
+    plannedStopLoss: text("plannedStopLoss"),
+    /** Text decimal > 0; null = not set */
+    plannedTakeProfit: text("plannedTakeProfit"),
+    /** One of EMOTIONS; null = not set */
+    emotion: text("emotion").$type<Emotion>(),
+    /** Recording rich text; null = empty */
+    entryReason: text("entryReason", { mode: "json" }).$type<RichTextDoc>(),
+    /** Recording rich text; null = empty */
+    marketContext: text("marketContext", { mode: "json" }).$type<RichTextDoc>(),
+    /** Recording rich text; null = empty */
+    invalidation: text("invalidation", { mode: "json" }).$type<RichTextDoc>(),
+    /** Review rich text; null = empty */
+    mistakes: text("mistakes", { mode: "json" }).$type<RichTextDoc>(),
+    /** Review rich text: rules followed or broken; null = empty */
+    rules: text("rules", { mode: "json" }).$type<RichTextDoc>(),
+    /** Review rich text; null = empty */
+    managementDecisions: text("managementDecisions", {
+      mode: "json",
+    }).$type<RichTextDoc>(),
+    /** Review rich text: notes for next time; null = empty */
+    nextTime: text("nextTime", { mode: "json" }).$type<RichTextDoc>(),
+    /** Ordered image ids of the before slot (recording) */
+    beforeImageIds: text("beforeImageIds", { mode: "json" })
+      .$type<number[]>()
+      .notNull()
+      .default(sql`'[]'`),
+    /** Ordered image ids of the after slot (review) */
+    afterImageIds: text("afterImageIds", { mode: "json" })
+      .$type<number[]>()
+      .notNull()
+      .default(sql`'[]'`),
+    /** Set by markReviewed, cleared by reopen; null while unreviewed */
+    reviewedAt: integer("reviewedAt", { mode: "timestamp_ms" }),
+    /** Record creation timestamp; internal */
+    createdAt: integer("createdAt", { mode: "timestamp_ms" })
+      .default(sql`(unixepoch() * 1000)`)
+      .notNull(),
+    /** Bumped only when this row changes */
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" })
+      .default(sql`(unixepoch() * 1000)`)
+      .notNull(),
+  },
+  table => [
+    check(
+      "journal_entries_emotion_check",
+      sql`${table.emotion} is null or ${table.emotion} in ('fear', 'greed', 'frustration', 'impatience', 'hesitation', 'overconfidence', 'revenge', 'boredom', 'stress', 'fomo')`
+    ),
+    index("journal_entries_user_idx").on(table.userId),
+  ]
+);
+
+export type JournalEntry = typeof journalEntries.$inferSelect;
+export type InsertJournalEntry = typeof journalEntries.$inferInsert;
+
+/** Trade linked to a journal entry; a trade belongs to at most one entry. */
+export const journalEntryTrades = sqliteTable(
+  "journal_entry_trades",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** Owning entry; no FK, cascaded in application code */
+    entryId: integer("entryId").notNull(),
+    /** Linked trade; no FK */
+    tradeId: integer("tradeId").notNull(),
+  },
+  table => [
+    uniqueIndex("journal_entry_trades_trade_unique").on(table.tradeId),
+    index("journal_entry_trades_entry_idx").on(table.entryId),
+  ]
+);
+
+export type JournalEntryTrade = typeof journalEntryTrades.$inferSelect;
+export type InsertJournalEntryTrade = typeof journalEntryTrades.$inferInsert;
+
+/**
+ * Setup: a named pattern the trader trades, with its entry triggers. Name is
+ * unique per user case-insensitively; a setup in use cannot be deleted.
+ */
+export const setups = sqliteTable(
+  "setups",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** Foreign key to users table */
+    userId: integer("userId").notNull(),
+    /** Trimmed, 1..SETUP_NAME_MAX chars */
+    name: text("name").notNull(),
+    /** Rich text; null = empty */
+    description: text("description", { mode: "json" }).$type<RichTextDoc>(),
+    /** Entry triggers, each trimmed 1..ENTRY_TRIGGER_MAX chars */
+    triggers: text("triggers", { mode: "json" })
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'`),
+    /** Record creation timestamp */
+    createdAt: integer("createdAt", { mode: "timestamp_ms" })
+      .default(sql`(unixepoch() * 1000)`)
+      .notNull(),
+    /** Bumped only when this row changes */
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" })
+      .default(sql`(unixepoch() * 1000)`)
+      .notNull(),
+  },
+  table => [
+    // SQLite lower() folds ASCII only, which is enough here.
+    uniqueIndex("setups_user_name_unique").on(
+      table.userId,
+      sql`lower(${table.name})`
+    ),
+  ]
+);
+
+export type Setup = typeof setups.$inferSelect;
+export type InsertSetup = typeof setups.$inferInsert;
+
+/** Setup recorded on a journal entry. */
+export const journalEntrySetups = sqliteTable(
+  "journal_entry_setups",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** Owning entry; no FK, cascaded in application code */
+    entryId: integer("entryId").notNull(),
+    /** Linked setup; no FK */
+    setupId: integer("setupId").notNull(),
+  },
+  table => [
+    uniqueIndex("journal_entry_setups_entry_setup_unique").on(
+      table.entryId,
+      table.setupId
+    ),
+    index("journal_entry_setups_setup_idx").on(table.setupId),
+  ]
+);
+
+export type JournalEntrySetup = typeof journalEntrySetups.$inferSelect;
+export type InsertJournalEntrySetup = typeof journalEntrySetups.$inferInsert;
 
 /**
  * Pre-trade brainstorming session. Written when the user commits to "start

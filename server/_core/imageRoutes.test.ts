@@ -12,12 +12,13 @@ import { request as httpRequest } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import { createHash } from "node:crypto";
-import { MAX_IMAGE_BYTES } from "@shared/const";
+import { MAX_IMAGE_BYTES, type ImageOwnerKind } from "@shared/const";
 
 type StoredImage = {
   id: number;
   userId: number;
-  planId: number;
+  ownerKind: ImageOwnerKind;
+  ownerId: number;
   sha256: string;
   mime: string;
   size: number;
@@ -38,9 +39,18 @@ vi.mock("../db", () => ({
     store.plans.find(p => p.id === planId && p.userId === userId)
   ),
   findImageBySha: vi.fn(
-    async (userId: number, planId: number, sha256: string) => {
+    async (
+      userId: number,
+      ownerKind: ImageOwnerKind,
+      ownerId: number,
+      sha256: string
+    ) => {
       const hit = store.images.find(
-        i => i.userId === userId && i.planId === planId && i.sha256 === sha256
+        i =>
+          i.userId === userId &&
+          i.ownerKind === ownerKind &&
+          i.ownerId === ownerId &&
+          i.sha256 === sha256
       );
       return hit ? { id: hit.id } : undefined;
     }
@@ -153,7 +163,8 @@ describe("POST /api/images", () => {
     expect(json(reply)).toEqual({ id: 1 });
     expect(store.images[0]).toMatchObject({
       userId: 1,
-      planId: 1,
+      ownerKind: "plan",
+      ownerId: 1,
       mime: "image/png",
       size: PNG.length,
       sha256: createHash("sha256").update(PNG).digest("hex"),
@@ -263,7 +274,8 @@ describe("GET /api/images/:id", () => {
     store.images.push({
       id: 7,
       userId: 2,
-      planId: 2,
+      ownerKind: "plan",
+      ownerId: 2,
       sha256: "x",
       mime: "image/png",
       size: 1,

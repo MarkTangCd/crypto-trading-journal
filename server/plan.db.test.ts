@@ -199,9 +199,9 @@ const p = await db.createPlan(1, "BTCUSDT");
 const keep = await db.createPlan(1, "ETHUSDT");
 await db.addScenario(1, p.id, scenario("a"));
 await db.addObservation(1, p.id, doc("x"));
-await db.insertImage({ userId: 1, planId: p.id, sha256: "aa", mime: "image/png", size: 1, bytes: Buffer.from([1]) });
+await db.insertImage({ userId: 1, ownerKind: "plan", ownerId: p.id, sha256: "aa", mime: "image/png", size: 1, bytes: Buffer.from([1]) });
 await db.addScenario(1, keep.id, scenario("kept"));
-const kept = await db.insertImage({ userId: 1, planId: keep.id, sha256: "aa", mime: "image/png", size: 1, bytes: Buffer.from([1]) });
+const kept = await db.insertImage({ userId: 1, ownerKind: "plan", ownerId: keep.id, sha256: "aa", mime: "image/png", size: 1, bytes: Buffer.from([1]) });
 
 check((await db.deletePlan(2, p.id)) === false, "delete foreign", null);
 check((await db.deletePlan(1, p.id)) === true, "delete", null);
@@ -209,7 +209,8 @@ check((await db.deletePlan(1, p.id)) === false, "delete twice", null);
 
 const raw = new DatabaseSync(process.env.DATABASE_URL);
 const n = table => raw.prepare("select count(*) n from " + table + " where planId = ?").get(p.id).n;
-check(n("plan_scenarios") === 0 && n("plan_observations") === 0 && n("images") === 0, "cascaded", null);
+const images = raw.prepare("select count(*) n from images where ownerKind = 'plan' and ownerId = ?").get(p.id).n;
+check(n("plan_scenarios") === 0 && n("plan_observations") === 0 && images === 0, "cascaded", null);
 check((await db.getPlan(1, keep.id)).scenarios.length === 1, "other plan kept", null);
 check((await db.getImage(1, kept.id)) !== undefined, "other image kept", null);
 raw.close();
@@ -225,14 +226,15 @@ raw.close();
 const p = await db.createPlan(1, "BTCUSDT");
 const q = await db.createPlan(1, "ETHUSDT");
 const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 255, 7]);
-const img = { userId: 1, planId: p.id, sha256: "abc", mime: "image/png", size: bytes.length, bytes };
+const img = { userId: 1, ownerKind: "plan", ownerId: p.id, sha256: "abc", mime: "image/png", size: bytes.length, bytes };
 
-check((await db.findImageBySha(1, p.id, "abc")) === undefined, "no image yet", null);
+check((await db.findImageBySha(1, "plan", p.id, "abc")) === undefined, "no image yet", null);
 const { id } = await db.insertImage(img);
-const found = await db.findImageBySha(1, p.id, "abc");
+const found = await db.findImageBySha(1, "plan", p.id, "abc");
 check(found.id === id && Object.keys(found).length === 1, "found by sha, metadata only", found);
-check((await db.findImageBySha(1, q.id, "abc")) === undefined, "sha scoped by plan", null);
-check((await db.findImageBySha(2, p.id, "abc")) === undefined, "sha scoped by user", null);
+check((await db.findImageBySha(1, "plan", q.id, "abc")) === undefined, "sha scoped by plan", null);
+check((await db.findImageBySha(1, "setup", p.id, "abc")) === undefined, "sha scoped by owner kind", null);
+check((await db.findImageBySha(2, "plan", p.id, "abc")) === undefined, "sha scoped by user", null);
 
 let dup = false;
 try {
@@ -240,9 +242,12 @@ try {
 } catch {
   dup = true;
 }
-check(dup, "unique (planId, sha256)", null);
-const other = await db.insertImage({ ...img, planId: q.id });
+check(dup, "unique (ownerKind, ownerId, sha256)", null);
+const other = await db.insertImage({ ...img, ownerId: q.id });
 check(other.id !== id, "same bytes in another plan", other);
+const crossKind = await db.insertImage({ ...img, ownerKind: "journal_entry" });
+check(crossKind.id !== id && crossKind.id !== other.id, "same bytes, same id, another owner kind", crossKind);
+check((await db.findImageBySha(1, "journal_entry", p.id, "abc")).id === crossKind.id, "found under its own kind", null);
 
 const got = await db.getImage(1, id);
 check(got.mime === "image/png" && got.sha256 === "abc", "metadata", got);

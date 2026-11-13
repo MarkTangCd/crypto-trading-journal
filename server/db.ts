@@ -45,7 +45,7 @@ import * as decimal from "./_core/decimal";
 import { decrypt } from "./agents/secrets";
 import type { PublicAccount } from "@shared/types";
 import type { TradeRecord } from "./exchange/reconstruct";
-import type { SyncErrorCode } from "@shared/const";
+import type { ImageOwnerKind, SyncErrorCode } from "@shared/const";
 import type { RichTextDoc } from "@shared/richText";
 
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "drizzle");
@@ -1243,7 +1243,13 @@ export async function deletePlan(
 
     await db
       .delete(images)
-      .where(and(eq(images.planId, planId), eq(images.userId, userId)));
+      .where(
+        and(
+          eq(images.ownerKind, "plan"),
+          eq(images.ownerId, planId),
+          eq(images.userId, userId)
+        )
+      );
     await db
       .delete(planObservations)
       .where(eq(planObservations.planId, planId));
@@ -1266,12 +1272,13 @@ export async function listTradeSymbols(userId: number): Promise<string[]> {
   return rows.map(row => row.symbol);
 }
 
-// ============ Plan images ============
+// ============ Images ============
 // Metadata reads never select `bytes`.
 
 export async function findImageBySha(
   userId: number,
-  planId: number,
+  ownerKind: ImageOwnerKind,
+  ownerId: number,
   sha256: string
 ): Promise<{ id: number } | undefined> {
   const db = await getDb();
@@ -1283,7 +1290,8 @@ export async function findImageBySha(
     .where(
       and(
         eq(images.userId, userId),
-        eq(images.planId, planId),
+        eq(images.ownerKind, ownerKind),
+        eq(images.ownerId, ownerId),
         eq(images.sha256, sha256)
       )
     )
@@ -1291,7 +1299,10 @@ export async function findImageBySha(
   return row;
 }
 
-/** Throws on a (planId, sha256) unique violation; the caller re-selects. */
+/**
+ * Throws on an (ownerKind, ownerId, sha256) unique violation; the caller
+ * re-selects.
+ */
 export async function insertImage(row: InsertImage): Promise<{ id: number }> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
