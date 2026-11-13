@@ -119,7 +119,9 @@ _Avoid_: Background, analysis, thesis, idea
 
 **Scenario**:
 One predicted script inside a plan: a name, a direction (long or short), a
-primary timeframe, and free-form content. A plan may hold several.
+primary timeframe, and free-form content. A plan may hold several. Not a
+Setup: a scenario is written once for one plan, a setup is reused across
+journal entries.
 _Avoid_: Playbook, setup, strategy, thesis, idea
 
 **Scenario outcome**:
@@ -133,3 +135,55 @@ _Avoid_: Result, status, hit, miss, pending, untriggered
 A timestamped free-form entry (text and screenshots) added to an open plan
 as the market moves. Ordered by the time it was written, shown in UTC+8.
 _Avoid_: Market data observation, log, update, comment, note
+
+## Trade journal
+
+**Journal entry**:
+The trader's written record of one trade idea as it was taken: the setups
+it matched, the reasoning, the planned prices and the emotion going in, then
+the review once the linked trades have closed. Links one or more trades on
+one symbol from one linked account; a trade belongs to at most one entry.
+Belongs to the trader, not to an account.
+_Avoid_: Journal (as an identifier), log, note, trade note, diary
+
+**Unreviewed entry / Reviewed entry**:
+A journal entry whose review the trader has not yet marked done / has marked
+done. The only two entry states. Marking reviewed records the time and makes
+the entry read-only; a reviewed entry can be reopened.
+_Avoid_: Open, closed, pending, complete, draft, finished
+
+**Review**:
+The part of a journal entry written after every linked trade has closed:
+the after screenshots, mistakes, rules followed or broken, management
+decisions and notes for next time. Locked while any linked trade is open.
+_Avoid_: Post-mortem, retrospective, debrief, analysis
+
+**Setup**:
+A reusable trading pattern the trader defines once and matches journal
+entries against: a name, a description and its entry triggers. A setup in
+use by any entry cannot be deleted.
+_Avoid_: Scenario, strategy, playbook, pattern, system, template
+
+**Entry trigger**:
+One short condition that, in the trader's definition, signals a setup is
+ready to be taken. A setup lists zero or more.
+_Avoid_: Signal, condition, rule, criterion
+
+**Emotion**:
+The single dominant feeling the trader records going into a journal entry,
+chosen from a fixed list: fear, greed, frustration, impatience, hesitation,
+overconfidence, revenge, boredom, stress, FOMO.
+_Avoid_: Mood, mindset, psychology, state
+
+**Planned R:R**:
+The reward-to-risk ratio the trader intended for a journal entry: the
+distance from the planned entry price to the planned take profit, divided
+by the distance from the planned entry price to the planned stop loss.
+_Avoid_: Risk/reward, RR, target ratio, expected ratio
+
+**Actual R**:
+What a journal entry actually earned measured in units of its planned risk:
+the net realized PnL of every linked trade divided by the planned risk
+(planned entry-to-stop distance times the total quantity traded). Known only
+once every linked trade has closed.
+_Avoid_: Realized R:R, actual ratio, R multiple, return
