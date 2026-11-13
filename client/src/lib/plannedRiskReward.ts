@@ -1,9 +1,8 @@
 // Planned risk/reward math for the position size calculator. Client-side only.
 
-export type Direction = "long" | "short" | "";
+import { DECIMAL_PATTERN } from "@shared/const";
 
-// Plain positive decimal input, e.g. "0.5" or "42000".
-export const DECIMAL_PATTERN = /^\d+(?:\.\d+)?$/;
+export type Direction = "long" | "short" | "";
 
 export function parsePositiveDecimal(input: string): number | null {
   const value = input.trim();

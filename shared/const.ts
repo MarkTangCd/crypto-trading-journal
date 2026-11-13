@@ -56,3 +56,24 @@ export const IMAGE_MIME_TYPES = [
 ] as const;
 /** 10 MiB; the client pre-checks file.size against it */
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+export const IMAGE_OWNER_KINDS = ["plan", "journal_entry", "setup"] as const;
+export type ImageOwnerKind = (typeof IMAGE_OWNER_KINDS)[number];
+export const EMOTIONS = [
+  "fear",
+  "greed",
+  "frustration",
+  "impatience",
+  "hesitation",
+  "overconfidence",
+  "revenge",
+  "boredom",
+  "stress",
+  "fomo",
+] as const;
+export type Emotion = (typeof EMOTIONS)[number];
+export const JOURNAL_SLOTS = ["before", "after"] as const;
+export const SLOT_IMAGE_MAX = 10;
+export const SETUP_NAME_MAX = 60;
+export const ENTRY_TRIGGER_MAX = 80;
+/** Moved from client/src/lib/plannedRiskReward.ts; server validates prices */
+export const DECIMAL_PATTERN = /^\d+(?:\.\d+)?$/;

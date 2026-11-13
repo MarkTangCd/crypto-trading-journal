@@ -1,11 +1,11 @@
 ---
 id: TASK-91
 title: Shared constants for the Trade journal
-status: In Progress
+status: Done
 assignee:
   - '@myself'
 created_date: '2026-11-13 14:27'
-updated_date: '2026-11-13 14:32'
+updated_date: '2026-11-13 14:33'
 labels:
   - ready-for-agent
 dependencies: []
@@ -22,9 +22,9 @@ Spec doc-8, section Shared constants and helpers. Additive: no consumers yet exc
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 shared/const.ts exports IMAGE_OWNER_KINDS + ImageOwnerKind, EMOTIONS + Emotion, JOURNAL_SLOTS, SLOT_IMAGE_MAX = 10, SETUP_NAME_MAX = 60, ENTRY_TRIGGER_MAX = 80 and DECIMAL_PATTERN exactly as the spec
-- [ ] #2 client/src/lib/plannedRiskReward.ts imports DECIMAL_PATTERN from @shared/const instead of defining it, keeps re-exporting it for existing importers; behaviour unchanged
-- [ ] #3 devbox run -- npm run check and npm run test pass
+- [x] #1 shared/const.ts exports IMAGE_OWNER_KINDS + ImageOwnerKind, EMOTIONS + Emotion, JOURNAL_SLOTS, SLOT_IMAGE_MAX = 10, SETUP_NAME_MAX = 60, ENTRY_TRIGGER_MAX = 80 and DECIMAL_PATTERN exactly as the spec
+- [x] #2 client/src/lib/plannedRiskReward.ts imports DECIMAL_PATTERN from @shared/const instead of defining it, keeps re-exporting it for existing importers; behaviour unchanged
+- [x] #3 devbox run -- npm run check and npm run test pass
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -34,3 +34,14 @@ Spec doc-8, section Shared constants and helpers. Additive: no consumers yet exc
 2. client/src/lib/plannedRiskReward.ts: drop the local DECIMAL_PATTERN, import it from @shared/const; no re-export (no other file imports it)
 3. prettier on the two files, npm run check, npm run test
 <!-- SECTION:PLAN:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Shared constants for the Trade journal (spec doc-8).
+
+- shared/const.ts: IMAGE_OWNER_KINDS + ImageOwnerKind, EMOTIONS + Emotion, JOURNAL_SLOTS, SLOT_IMAGE_MAX = 10, SETUP_NAME_MAX = 60, ENTRY_TRIGGER_MAX = 80, DECIMAL_PATTERN verbatim from the spec, appended after MAX_IMAGE_BYTES.
+- client/src/lib/plannedRiskReward.ts: local DECIMAL_PATTERN removed, imported from @shared/const; parsePositiveDecimal and previewPlannedRiskReward unchanged.
+- Deviation from AC #2: no re-export from plannedRiskReward.ts, because no other file imported DECIMAL_PATTERN from it.
+- check passes; full suite 503 tests pass.
+<!-- SECTION:FINAL_SUMMARY:END -->
