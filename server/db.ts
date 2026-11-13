@@ -1,4 +1,13 @@
-import { eq, desc, asc, and, count, inArray, sql } from "drizzle-orm";
+import {
+  eq,
+  desc,
+  asc,
+  and,
+  count,
+  inArray,
+  notInArray,
+  sql,
+} from "drizzle-orm";
 import { drizzle, type SqliteRemoteDatabase } from "drizzle-orm/sqlite-proxy";
 import { migrate } from "drizzle-orm/sqlite-proxy/migrator";
 import { DatabaseSync } from "node:sqlite";
@@ -37,6 +46,12 @@ import {
   type PlanObservation,
   images,
   type InsertImage,
+  journalEntries,
+  type JournalEntry,
+  journalEntryTrades,
+  journalEntrySetups,
+  setups,
+  type Setup,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { ANONYMOUS_OPEN_ID, ANONYMOUS_USER_NAME } from "@shared/const";
@@ -45,8 +60,14 @@ import * as decimal from "./_core/decimal";
 import { decrypt } from "./agents/secrets";
 import type { PublicAccount } from "@shared/types";
 import type { TradeRecord } from "./exchange/reconstruct";
-import type { ImageOwnerKind, SyncErrorCode } from "@shared/const";
+import type {
+  ImageOwnerKind,
+  JOURNAL_SLOTS,
+  SyncErrorCode,
+} from "@shared/const";
 import type { RichTextDoc } from "@shared/richText";
+
+type JournalSlot = (typeof JOURNAL_SLOTS)[number];
 
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "drizzle");
 
@@ -1327,6 +1348,681 @@ export async function getImage(
     .where(and(eq(images.id, imageId), eq(images.userId, userId)))
     .limit(1);
   return row;
+}
+
+// ============ Journal entries ============
+// Separate queries per table, never a join (see Plans). State guards live in
+// the router and the image route.
+
+export type JournalEntryState = "unreviewed" | "reviewed";
+
+export type JournalEntryDerived = {
+  /** Earliest linked trade's openTime (ms); null with no linked trade rows */
+  date: number | null;
+  /** Distinct sides of the linked trades in openTime order */
+  sides: ("long" | "short")[];
+  tradeCount: number;
+  openTradeCount: number;
+  /** Sum of realizedPnlUsd over all linked trades, open ones included */
+  netPnlUsd: number;
+};
+
+export type JournalEntryListItem = JournalEntry &
+  JournalEntryDerived & {
+    /** Sorted by name */
+    setupNames: string[];
+  };
+
+export type JournalEntryDetail = JournalEntry &
+  JournalEntryDerived & {
+    /** openTime asc */
+    trades: Trade[];
+    /** Sorted by name */
+    setups: { id: number; name: string }[];
+    /** Null while a trade is open, a planned price is missing, or they are equal */
+    actualR: number | null;
+  };
+
+export type JournalEntrySummary = {
+  id: number;
+  date: number | null;
+  setupNames: string[];
+  tradeCount: number;
+  state: JournalEntryState;
+};
+
+export type JournalEntryPatch = Partial<
+  Pick<
+    JournalEntry,
+    | "plannedEntry"
+    | "plannedStopLoss"
+    | "plannedTakeProfit"
+    | "emotion"
+    | "entryReason"
+    | "marketContext"
+    | "invalidation"
+    | "mistakes"
+    | "rules"
+    | "managementDecisions"
+    | "nextTime"
+  >
+>;
+
+type LoadedJournalEntry = {
+  entry: JournalEntry;
+  /** openTime asc */
+  trades: Trade[];
+  /** Sorted by name */
+  setups: { id: number; name: string }[];
+};
+
+/** Linked trades and setups of `entryRows`, one query per table. */
+async function loadJournalEntryLinks(
+  db: SqliteRemoteDatabase,
+  userId: number,
+  entryRows: JournalEntry[]
+): Promise<LoadedJournalEntry[]> {
+  if (entryRows.length === 0) return [];
+
+  const entryIds = entryRows.map(entry => entry.id);
+  const tradeLinks = await db
+    .select({
+      entryId: journalEntryTrades.entryId,
+      tradeId: journalEntryTrades.tradeId,
+    })
+    .from(journalEntryTrades)
+    .where(inArray(journalEntryTrades.entryId, entryIds));
+  const tradeRows =
+    tradeLinks.length === 0
+      ? []
+      : await db
+          .select()
+          .from(trades)
+          .where(
+            and(
+              eq(trades.userId, userId),
+              inArray(
+                trades.id,
+                tradeLinks.map(link => link.tradeId)
+              )
+            )
+          )
+          .orderBy(asc(trades.openTime), asc(trades.id));
+  const setupLinks = await db
+    .select({
+      entryId: journalEntrySetups.entryId,
+      setupId: journalEntrySetups.setupId,
+    })
+    .from(journalEntrySetups)
+    .where(inArray(journalEntrySetups.entryId, entryIds));
+  const setupRows =
+    setupLinks.length === 0
+      ? []
+      : await db
+          .select({ id: setups.id, name: setups.name })
+          .from(setups)
+          .where(
+            and(
+              eq(setups.userId, userId),
+              inArray(
+                setups.id,
+                setupLinks.map(link => link.setupId)
+              )
+            )
+          )
+          .orderBy(asc(sql`lower(${setups.name})`), asc(setups.id));
+
+  const entryIdByTrade = new Map(
+    tradeLinks.map(link => [link.tradeId, link.entryId])
+  );
+  const setupIdsByEntry = new Map<number, Set<number>>();
+  for (const link of setupLinks) {
+    const ids = setupIdsByEntry.get(link.entryId) ?? new Set<number>();
+    ids.add(link.setupId);
+    setupIdsByEntry.set(link.entryId, ids);
+  }
+
+  return entryRows.map(entry => {
+    const setupIds = setupIdsByEntry.get(entry.id);
+    return {
+      entry,
+      trades: tradeRows.filter(
+        trade => entryIdByTrade.get(trade.id) === entry.id
+      ),
+      setups: setupRows.filter(setup => setupIds?.has(setup.id) ?? false),
+    };
+  });
+}
+
+/** `entryTrades` in openTime order. */
+function deriveJournalEntry(entryTrades: Trade[]): JournalEntryDerived {
+  return {
+    date: entryTrades[0]?.openTime ?? null,
+    sides: Array.from(new Set(entryTrades.map(trade => trade.side))),
+    tradeCount: entryTrades.length,
+    openTradeCount: entryTrades.filter(trade => trade.status === "open").length,
+    netPnlUsd: Number(
+      decimal.add(entryTrades.map(trade => trade.realizedPnlUsd))
+    ),
+  };
+}
+
+/** Net PnL / (|planned entry - planned stop loss| x total quantity). */
+function computeActualR(
+  entry: JournalEntry,
+  entryTrades: Trade[]
+): number | null {
+  const { plannedEntry, plannedStopLoss } = entry;
+  if (entryTrades.length === 0) return null;
+  if (entryTrades.some(trade => trade.status === "open")) return null;
+  if (plannedEntry === null || plannedStopLoss === null) return null;
+
+  const risk = decimal.abs(decimal.sub(plannedEntry, plannedStopLoss));
+  if (decimal.isZero(risk)) return null;
+
+  const netPnl = decimal.add(entryTrades.map(trade => trade.realizedPnlUsd));
+  const quantity = decimal.add(entryTrades.map(trade => trade.quantity));
+  return Number(decimal.div(netPnl, decimal.mul(risk, quantity), RATIO_SCALE));
+}
+
+export async function getJournalEntryRow(
+  userId: number,
+  entryId: number
+): Promise<JournalEntry | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const [row] = await db
+    .select()
+    .from(journalEntries)
+    .where(
+      and(eq(journalEntries.id, entryId), eq(journalEntries.userId, userId))
+    )
+    .limit(1);
+  return row;
+}
+
+/** Every entry of the user, newest date first (entries without trades last). */
+export async function listJournalEntries(
+  userId: number
+): Promise<JournalEntryListItem[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const entryRows = await db
+    .select()
+    .from(journalEntries)
+    .where(eq(journalEntries.userId, userId));
+  const loaded = await loadJournalEntryLinks(db, userId, entryRows);
+
+  return loaded
+    .map(({ entry, trades: entryTrades, setups: entrySetups }) => ({
+      ...entry,
+      ...deriveJournalEntry(entryTrades),
+      setupNames: entrySetups.map(setup => setup.name),
+    }))
+    .sort(
+      (a, b) =>
+        (b.date ?? Number.NEGATIVE_INFINITY) -
+          (a.date ?? Number.NEGATIVE_INFINITY) || b.id - a.id
+    );
+}
+
+export async function getJournalEntry(
+  userId: number,
+  entryId: number
+): Promise<JournalEntryDetail | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const entry = await getJournalEntryRow(userId, entryId);
+  if (!entry) return undefined;
+
+  const [loaded] = await loadJournalEntryLinks(db, userId, [entry]);
+  return {
+    ...entry,
+    ...deriveJournalEntry(loaded.trades),
+    trades: loaded.trades,
+    setups: loaded.setups,
+    actualR: computeActualR(entry, loaded.trades),
+  };
+}
+
+/** The account's trades linked to no entry, newest openTime first. */
+export async function listPickableTrades(
+  userId: number,
+  accountId: number,
+  symbol?: string
+): Promise<Trade[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(trades)
+    .where(
+      and(
+        eq(trades.userId, userId),
+        eq(trades.accountId, accountId),
+        symbol === undefined ? undefined : eq(trades.symbol, symbol),
+        notInArray(
+          trades.id,
+          db.select({ id: journalEntryTrades.tradeId }).from(journalEntryTrades)
+        )
+      )
+    )
+    .orderBy(desc(trades.openTime), desc(trades.id));
+}
+
+export async function getJournalEntryForTrade(
+  userId: number,
+  tradeId: number
+): Promise<JournalEntrySummary | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const [link] = await db
+    .select({ entryId: journalEntryTrades.entryId })
+    .from(journalEntryTrades)
+    .where(eq(journalEntryTrades.tradeId, tradeId))
+    .limit(1);
+  if (!link) return undefined;
+  const entry = await getJournalEntryRow(userId, link.entryId);
+  if (!entry) return undefined;
+
+  const [loaded] = await loadJournalEntryLinks(db, userId, [entry]);
+  const derived = deriveJournalEntry(loaded.trades);
+  return {
+    id: entry.id,
+    date: derived.date,
+    setupNames: loaded.setups.map(setup => setup.name),
+    tradeCount: derived.tradeCount,
+    state: entry.reviewedAt === null ? "unreviewed" : "reviewed",
+  };
+}
+
+/**
+ * Insert the entry and one link per trade, atomically. `accountId` and
+ * `symbol` come from the earliest trade; the router has checked that every
+ * trade agrees. Returns undefined when none of the trades is the user's;
+ * throws when a trade is already linked (unique index).
+ */
+export async function createJournalEntry(
+  userId: number,
+  tradeIds: number[]
+): Promise<{ id: number } | undefined> {
+  return runInSqliteTransaction(async db => {
+    const [first] = await db
+      .select({ accountId: trades.accountId, symbol: trades.symbol })
+      .from(trades)
+      .where(and(eq(trades.userId, userId), inArray(trades.id, tradeIds)))
+      .orderBy(asc(trades.openTime), asc(trades.id))
+      .limit(1);
+    if (!first) return undefined;
+
+    const [entry] = await db
+      .insert(journalEntries)
+      .values({ userId, accountId: first.accountId, symbol: first.symbol })
+      .returning({ id: journalEntries.id });
+    await db
+      .insert(journalEntryTrades)
+      .values(tradeIds.map(tradeId => ({ entryId: entry.id, tradeId })));
+    return entry;
+  });
+}
+
+/** Returns the new updatedAt, or undefined when the entry is not the user's. */
+export async function updateJournalEntry(
+  userId: number,
+  entryId: number,
+  patch: JournalEntryPatch
+): Promise<Date | undefined> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [row] = await db
+    .update(journalEntries)
+    .set({ ...patch, updatedAt: new Date() })
+    .where(
+      and(eq(journalEntries.id, entryId), eq(journalEntries.userId, userId))
+    )
+    .returning({ updatedAt: journalEntries.updatedAt });
+  return row?.updatedAt;
+}
+
+/** Replace the entry's setup links, atomically. */
+export async function setJournalEntrySetups(
+  userId: number,
+  entryId: number,
+  setupIds: number[]
+): Promise<boolean> {
+  return runInSqliteTransaction(async db => {
+    const [owned] = await db
+      .select({ id: journalEntries.id })
+      .from(journalEntries)
+      .where(
+        and(eq(journalEntries.id, entryId), eq(journalEntries.userId, userId))
+      )
+      .limit(1);
+    if (!owned) return false;
+
+    await db
+      .delete(journalEntrySetups)
+      .where(eq(journalEntrySetups.entryId, entryId));
+    if (setupIds.length > 0) {
+      await db
+        .insert(journalEntrySetups)
+        .values(setupIds.map(setupId => ({ entryId, setupId })));
+    }
+    return true;
+  });
+}
+
+/** Throws when the trade is already linked (unique index). */
+export async function addJournalEntryTrade(
+  userId: number,
+  entryId: number,
+  tradeId: number
+): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (!(await getJournalEntryRow(userId, entryId))) return false;
+
+  await db.insert(journalEntryTrades).values({ entryId, tradeId });
+  return true;
+}
+
+/** Returns false when the entry or the link does not exist. */
+export async function removeJournalEntryTrade(
+  userId: number,
+  entryId: number,
+  tradeId: number
+): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (!(await getJournalEntryRow(userId, entryId))) return false;
+
+  const deleted = await db
+    .delete(journalEntryTrades)
+    .where(
+      and(
+        eq(journalEntryTrades.entryId, entryId),
+        eq(journalEntryTrades.tradeId, tradeId)
+      )
+    )
+    .returning({ id: journalEntryTrades.id });
+  return deleted.length > 0;
+}
+
+/**
+ * Read a slot's image ids, apply `change`, write back when it changed, all
+ * in one transaction. Returns the resulting ids, or undefined when the entry
+ * is not the user's.
+ */
+async function changeSlotImages(
+  userId: number,
+  entryId: number,
+  slot: JournalSlot,
+  change: (ids: number[]) => number[]
+): Promise<number[] | undefined> {
+  return runInSqliteTransaction(async db => {
+    const [row] = await db
+      .select({
+        beforeImageIds: journalEntries.beforeImageIds,
+        afterImageIds: journalEntries.afterImageIds,
+      })
+      .from(journalEntries)
+      .where(
+        and(eq(journalEntries.id, entryId), eq(journalEntries.userId, userId))
+      )
+      .limit(1);
+    if (!row) return undefined;
+
+    const current = slot === "before" ? row.beforeImageIds : row.afterImageIds;
+    const next = change(current);
+    if (next === current) return current;
+
+    await db
+      .update(journalEntries)
+      .set({
+        ...(slot === "before"
+          ? { beforeImageIds: next }
+          : { afterImageIds: next }),
+        updatedAt: new Date(),
+      })
+      .where(eq(journalEntries.id, entryId));
+    return next;
+  });
+}
+
+/** Append to the slot; no-op when the image is already in it. */
+export async function addSlotImage(
+  userId: number,
+  entryId: number,
+  slot: JournalSlot,
+  imageId: number
+): Promise<number[] | undefined> {
+  return changeSlotImages(userId, entryId, slot, ids =>
+    ids.includes(imageId) ? ids : [...ids, imageId]
+  );
+}
+
+/** Remove from the slot; no-op when absent. The image row stays. */
+export async function removeSlotImage(
+  userId: number,
+  entryId: number,
+  slot: JournalSlot,
+  imageId: number
+): Promise<number[] | undefined> {
+  return changeSlotImages(userId, entryId, slot, ids =>
+    ids.includes(imageId) ? ids.filter(id => id !== imageId) : ids
+  );
+}
+
+export async function setJournalEntryReviewedAt(
+  userId: number,
+  entryId: number,
+  reviewedAt: Date | null
+): Promise<JournalEntry | undefined> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [row] = await db
+    .update(journalEntries)
+    .set({ reviewedAt, updatedAt: new Date() })
+    .where(
+      and(eq(journalEntries.id, entryId), eq(journalEntries.userId, userId))
+    )
+    .returning();
+  return row;
+}
+
+/** Delete an entry with its images, setup links and trade links, atomically. */
+export async function deleteJournalEntry(
+  userId: number,
+  entryId: number
+): Promise<boolean> {
+  return runInSqliteTransaction(async db => {
+    const [owned] = await db
+      .select({ id: journalEntries.id })
+      .from(journalEntries)
+      .where(
+        and(eq(journalEntries.id, entryId), eq(journalEntries.userId, userId))
+      )
+      .limit(1);
+    if (!owned) return false;
+
+    await db
+      .delete(images)
+      .where(
+        and(
+          eq(images.ownerKind, "journal_entry"),
+          eq(images.ownerId, entryId),
+          eq(images.userId, userId)
+        )
+      );
+    await db
+      .delete(journalEntrySetups)
+      .where(eq(journalEntrySetups.entryId, entryId));
+    await db
+      .delete(journalEntryTrades)
+      .where(eq(journalEntryTrades.entryId, entryId));
+    await db.delete(journalEntries).where(eq(journalEntries.id, entryId));
+    return true;
+  });
+}
+
+// ============ Setups ============
+
+export type SetupWithUsage = Setup & {
+  /** Number of entries recording this setup */
+  usageCount: number;
+};
+
+async function withSetupUsage(
+  db: SqliteRemoteDatabase,
+  setupRows: Setup[]
+): Promise<SetupWithUsage[]> {
+  if (setupRows.length === 0) return [];
+
+  const usage = await db
+    .select({ setupId: journalEntrySetups.setupId, n: count() })
+    .from(journalEntrySetups)
+    .where(
+      inArray(
+        journalEntrySetups.setupId,
+        setupRows.map(setup => setup.id)
+      )
+    )
+    .groupBy(journalEntrySetups.setupId);
+  const usageBySetup = new Map(usage.map(row => [row.setupId, row.n]));
+
+  return setupRows.map(setup => ({
+    ...setup,
+    usageCount: usageBySetup.get(setup.id) ?? 0,
+  }));
+}
+
+export async function getSetupRow(
+  userId: number,
+  setupId: number
+): Promise<Setup | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const [row] = await db
+    .select()
+    .from(setups)
+    .where(and(eq(setups.id, setupId), eq(setups.userId, userId)))
+    .limit(1);
+  return row;
+}
+
+/** By lower(name) asc. */
+export async function listSetups(userId: number): Promise<SetupWithUsage[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const setupRows = await db
+    .select()
+    .from(setups)
+    .where(eq(setups.userId, userId))
+    .orderBy(asc(sql`lower(${setups.name})`), asc(setups.id));
+  return withSetupUsage(db, setupRows);
+}
+
+export async function getSetup(
+  userId: number,
+  setupId: number
+): Promise<SetupWithUsage | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const setup = await getSetupRow(userId, setupId);
+  if (!setup) return undefined;
+  const [row] = await withSetupUsage(db, [setup]);
+  return row;
+}
+
+/** Case-insensitive (ASCII) name lookup, for the uniqueness pre-check. */
+export async function findSetupByName(
+  userId: number,
+  name: string
+): Promise<{ id: number } | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const [row] = await db
+    .select({ id: setups.id })
+    .from(setups)
+    .where(
+      and(
+        eq(setups.userId, userId),
+        sql`lower(${setups.name}) = lower(${name})`
+      )
+    )
+    .limit(1);
+  return row;
+}
+
+/** Throws on a case-insensitive name clash (unique index). */
+export async function createSetup(
+  userId: number,
+  name: string
+): Promise<Setup> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [row] = await db.insert(setups).values({ userId, name }).returning();
+  return row;
+}
+
+/** Throws on a case-insensitive name clash (unique index). */
+export async function updateSetup(
+  userId: number,
+  setupId: number,
+  patch: {
+    name?: string;
+    description?: RichTextDoc | null;
+    triggers?: string[];
+  }
+): Promise<Setup | undefined> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [row] = await db
+    .update(setups)
+    .set({ ...patch, updatedAt: new Date() })
+    .where(and(eq(setups.id, setupId), eq(setups.userId, userId)))
+    .returning();
+  return row;
+}
+
+/** Delete a setup with its images, atomically. The router refuses one in use. */
+export async function deleteSetup(
+  userId: number,
+  setupId: number
+): Promise<boolean> {
+  return runInSqliteTransaction(async db => {
+    const [owned] = await db
+      .select({ id: setups.id })
+      .from(setups)
+      .where(and(eq(setups.id, setupId), eq(setups.userId, userId)))
+      .limit(1);
+    if (!owned) return false;
+
+    await db
+      .delete(images)
+      .where(
+        and(
+          eq(images.ownerKind, "setup"),
+          eq(images.ownerId, setupId),
+          eq(images.userId, userId)
+        )
+      );
+    await db.delete(setups).where(eq(setups.id, setupId));
+    return true;
+  });
 }
 
 // ============ Review Agent: conversations / messages / settings ============
