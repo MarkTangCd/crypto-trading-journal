@@ -6,6 +6,7 @@ import {
   formatUtc8Prompt,
   parseDatetimeLocalUtc8,
   toDatetimeLocalUtc8,
+  utc8DayKey,
   utc8Parts,
 } from "./time";
 
@@ -24,6 +25,12 @@ describe("shared/time UTC+8 helpers", () => {
     expect(formatUtc8Date(T)).toBe("Mar 5, 2026");
     // 2026-03-05 23:00 UTC is already 03-06 in UTC+8.
     expect(formatUtc8Date(Date.UTC(2026, 2, 5, 23, 0))).toBe("Mar 6, 2026");
+  });
+
+  it("keys a timestamp by its UTC+8 calendar day", () => {
+    expect(utc8DayKey(T)).toBe("2026-03-05");
+    expect(utc8DayKey(Date.UTC(2026, 2, 5, 15, 59))).toBe("2026-03-05");
+    expect(utc8DayKey(Date.UTC(2026, 2, 5, 16, 0))).toBe("2026-03-06");
   });
 
   it("formats LLM prompt time with explicit UTC+8 label", () => {

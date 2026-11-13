@@ -12,9 +12,10 @@ import {
 } from "@/lib/ledger";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
-import { utc8Parts } from "@shared/time";
+import { utc8DayKey, utc8Parts } from "@shared/time";
 import type { Trade } from "@shared/types";
 import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
 import { Link } from "wouter";
 
 const hhmm = (ts: number) => fmtDateTime(ts).slice(-5);
@@ -88,6 +89,13 @@ export default function Trades() {
     { accountId: selectedAccount?.id ?? 0 },
     { enabled: selectedAccount !== null }
   );
+
+  // Arriving from the profit calendar: jump to the linked day once loaded.
+  const isLoaded = trades !== undefined;
+  useEffect(() => {
+    const id = window.location.hash.slice(1);
+    if (isLoaded && id) document.getElementById(id)?.scrollIntoView();
+  }, [isLoaded]);
 
   if (isAccountLoading || (selectedAccount !== null && isTradesLoading)) {
     return (
@@ -174,7 +182,11 @@ export default function Trades() {
       )}
 
       {days.map(([day, dayTrades]) => (
-        <section key={day} className="space-y-2">
+        <section
+          key={day}
+          id={utc8DayKey(dayTrades[0].closeTime ?? dayTrades[0].openTime)}
+          className="space-y-2"
+        >
           <div className="flex items-baseline justify-between border-b border-border pb-3">
             <h2 className="text-label">{day}</h2>
             <Pnl

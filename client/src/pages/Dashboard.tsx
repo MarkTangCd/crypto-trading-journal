@@ -1,4 +1,5 @@
 import { OpenGoals } from "@/components/goals/OpenGoals";
+import { ProfitCalendar } from "@/components/ProfitCalendar";
 import { SyncLine } from "@/components/sync/SyncLine";
 import { SectionHeader, type Tone, fmtMoney, toneClass } from "@/lib/ledger";
 import { trpc } from "@/lib/trpc";
@@ -197,6 +198,8 @@ function AccountStats() {
               </div>
             )}
           </section>
+
+          <ProfitCalendar accountId={selectedAccount.id} />
 
           {stats.openCount > 0 && (
             <section aria-labelledby="open-label">

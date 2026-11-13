@@ -61,6 +61,12 @@ export function formatUtc8Date(ts: number | Date): string {
   return `${p.monthName} ${p.day}, ${p.year}`;
 }
 
+// "2026-03-05" — UTC+8 calendar day, used as a bucket key and URL anchor.
+export function utc8DayKey(ts: number | Date): string {
+  const d = shifted(ts);
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+}
+
 // "2026-03-05 14:30"
 function isoMinute(ts: number | Date): string {
   const d = shifted(ts);

@@ -15,6 +15,7 @@ import {
   TradeEditError,
   getTradeById,
   getTradeStats,
+  getDailyPnl,
   listTrades,
   updateTradeByHand,
   // Pre-trade
@@ -274,6 +275,13 @@ export const appRouter = router({
           unrealizedPnlUsdt: account.unrealizedPnlUsdt,
           lastSyncedAt: account.lastSyncedAt,
         };
+      }),
+
+    dailyPnl: publicProcedure
+      .input(z.object({ accountId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const account = await requireOwnedAccount(ctx, input.accountId);
+        return getDailyPnl(account.id, ctx.user.id);
       }),
   }),
 

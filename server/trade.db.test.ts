@@ -159,6 +159,33 @@ check((await db.updateTradeByHand(c1.id, 2, { stopLossPrice: "1" })) === undefin
     expect(output).toContain("ok");
   });
 
+  it("sums closed trades per UTC+8 close day", () => {
+    const output = runCase(
+      "daily-pnl",
+      `
+check((await db.getDailyPnl(account.id, 1)).length === 0, "empty");
+
+// 2026-03-05 16:00 UTC is midnight 03-06 in UTC+8.
+const boundary = Date.UTC(2026, 2, 5, 16, 0);
+await db.upsertTradesByTradeKey(account.id, 1, [
+  trade("A", { status: "closed", closeTime: boundary - 1, realizedPnlUsd: "0.1" }),
+  trade("B", { status: "closed", closeTime: boundary - 60000, realizedPnlUsd: "0.2" }),
+  trade("C", { status: "closed", closeTime: boundary, realizedPnlUsd: "-5" }),
+  trade("O", { openTime: boundary, realizedPnlUsd: "2.5" }),
+], 5000);
+
+const days = await db.getDailyPnl(account.id, 1);
+const expected = [
+  { day: "2026-03-05", pnlUsd: "0.3", tradeCount: 2 },
+  { day: "2026-03-06", pnlUsd: "-5", tradeCount: 1 },
+];
+check(JSON.stringify(days) === JSON.stringify(expected), "days", days);
+check((await db.getDailyPnl(account.id, 2)).length === 0, "user-scope");
+`
+    );
+    expect(output).toContain("ok");
+  });
+
   it("derives stats from trades and writes sync state", () => {
     const output = runCase(
       "stats",

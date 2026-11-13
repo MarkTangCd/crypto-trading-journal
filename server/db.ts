@@ -40,6 +40,7 @@ import {
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { ANONYMOUS_OPEN_ID, ANONYMOUS_USER_NAME } from "@shared/const";
+import { utc8DayKey } from "@shared/time";
 import * as decimal from "./_core/decimal";
 import { decrypt } from "./agents/secrets";
 import type { PublicAccount } from "@shared/types";
@@ -815,6 +816,35 @@ export async function getTradeStats(
         ? null
         : decimal.div(openExposureUsdt, balance, RATIO_SCALE),
   };
+}
+
+export interface DailyPnl {
+  /** UTC+8 close day, yyyy-mm-dd */
+  day: string;
+  pnlUsd: string;
+  tradeCount: number;
+}
+
+/** Closed trades summed per UTC+8 close day, oldest day first. */
+export async function getDailyPnl(
+  accountId: number,
+  userId: number
+): Promise<DailyPnl[]> {
+  const closed = await listTrades(accountId, userId, "closed");
+
+  const days = new Map<string, string[]>();
+  for (const row of closed) {
+    const day = utc8DayKey(row.closeTime ?? row.openTime);
+    days.set(day, [...(days.get(day) ?? []), row.realizedPnlUsd]);
+  }
+
+  return [...days.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([day, pnls]) => ({
+      day,
+      pnlUsd: decimal.add(pnls),
+      tradeCount: pnls.length,
+    }));
 }
 
 // ============ Goals ============

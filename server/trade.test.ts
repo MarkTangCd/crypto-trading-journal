@@ -9,6 +9,7 @@ vi.mock("./db", () => ({
   getAccountById: vi.fn(),
   getTradeById: vi.fn(),
   getTradeStats: vi.fn(),
+  getDailyPnl: vi.fn(),
   listTrades: vi.fn(),
   updateTradeByHand: vi.fn(),
 }));
@@ -218,6 +219,32 @@ describe("Trade Router", () => {
         code: "FORBIDDEN",
       });
       expect(db.getTradeStats).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("stats.dailyPnl", () => {
+    it("returns the account's daily pnl rows", async () => {
+      const rows: db.DailyPnl[] = [
+        { day: "2026-03-05", pnlUsd: "12.5", tradeCount: 2 },
+      ];
+      vi.mocked(db.getAccountById).mockResolvedValueOnce({
+        id: 1,
+      } as Awaited<ReturnType<typeof db.getAccountById>>);
+      vi.mocked(db.getDailyPnl).mockResolvedValueOnce(rows);
+
+      const result = await caller.stats.dailyPnl({ accountId: 1 });
+
+      expect(db.getDailyPnl).toHaveBeenCalledWith(1, 1);
+      expect(result).toEqual(rows);
+    });
+
+    it("rejects an account the user does not own", async () => {
+      vi.mocked(db.getAccountById).mockResolvedValueOnce(undefined);
+
+      await expect(
+        caller.stats.dailyPnl({ accountId: 2 })
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      expect(db.getDailyPnl).not.toHaveBeenCalled();
     });
   });
 });
