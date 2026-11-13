@@ -42,6 +42,22 @@ import {
   reopenPlan,
   deletePlan,
   listTradeSymbols,
+  // Journal
+  listJournalEntries,
+  getJournalEntry,
+  listPickableTrades,
+  getJournalEntryForTrade,
+  createJournalEntry,
+  updateJournalEntry,
+  setJournalEntrySetups,
+  addJournalEntryTrade,
+  removeJournalEntryTrade,
+  addSlotImage,
+  removeSlotImage,
+  setJournalEntryReviewedAt,
+  deleteJournalEntry,
+  getImageOwner,
+  type JournalEntryDetail,
   // Setups
   listSetups,
   getSetup,
@@ -52,15 +68,19 @@ import {
   deleteSetup,
 } from "./db";
 import type { TrpcContext } from "./_core/context";
-import type { Account, Goal, Plan } from "../drizzle/schema";
+import type { Account, Goal, Plan, Trade } from "../drizzle/schema";
 import { normalize as normalizeDecimal } from "./_core/decimal";
 import {
+  DECIMAL_PATTERN,
+  EMOTIONS,
   ENTRY_TRIGGER_MAX,
+  JOURNAL_SLOTS,
   SCENARIO_NAME_MAX,
   SCENARIO_OUTCOMES,
   SCENARIO_SIDES,
   SCENARIO_TIME_FRAMES,
   SETUP_NAME_MAX,
+  SLOT_IMAGE_MAX,
   TIME_FRAMES,
   TRADING_PAIR_RE,
 } from "@shared/const";
@@ -190,8 +210,37 @@ const setupTriggers = z
     { message: "Duplicate entry trigger" }
   );
 
+// Planned price: a positive plain decimal, stored as typed (trimmed); blank
+// clears it.
+const plannedPrice = z
+  .string()
+  .trim()
+  .refine(
+    value =>
+      value === "" || (DECIMAL_PATTERN.test(value) && /[1-9]/.test(value)),
+    "Invalid price"
+  )
+  .transform(value => (value === "" ? null : value))
+  .nullable()
+  .optional();
+const richTextField = richTextDocSchema.nullable().optional();
+const distinct = (ids: number[]) => new Set(ids).size === ids.length;
+const REVIEW_FIELDS = [
+  "mistakes",
+  "rules",
+  "managementDecisions",
+  "nextTime",
+] as const;
+
 function notFound(
-  what: "Plan" | "Scenario" | "Observation" | "Setup"
+  what:
+    | "Plan"
+    | "Scenario"
+    | "Observation"
+    | "Setup"
+    | "Journal entry"
+    | "Trade"
+    | "Image"
 ): TRPCError {
   return new TRPCError({ code: "NOT_FOUND", message: `${what} not found` });
 }
@@ -205,6 +254,70 @@ async function requireFreeSetupName(
   const taken = await findSetupByName(ctx.user.id, name);
   if (taken && taken.id !== setupId) {
     throw new TRPCError({ code: "CONFLICT", message: "Setup name is taken" });
+  }
+}
+
+async function requireEntry(
+  ctx: TrpcContext,
+  entryId: number
+): Promise<JournalEntryDetail> {
+  const entry = await getJournalEntry(ctx.user.id, entryId);
+  if (!entry) throw notFound("Journal entry");
+  return entry;
+}
+
+// Every write to a reviewed entry except reopen and delete is a CONFLICT.
+async function requireUnreviewedEntry(
+  ctx: TrpcContext,
+  entryId: number
+): Promise<JournalEntryDetail> {
+  const entry = await requireEntry(ctx, entryId);
+  if (entry.reviewedAt !== null) {
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: "Journal entry is reviewed",
+    });
+  }
+  return entry;
+}
+
+// The review (fields, after slot, markReviewed) waits for every linked trade
+// to close.
+function requireClosedTrades(entry: JournalEntryDetail): void {
+  if (entry.openTradeCount > 0) {
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: `Waiting for ${entry.openTradeCount} open trade(s) to close`,
+    });
+  }
+}
+
+async function requireTrade(ctx: TrpcContext, tradeId: number): Promise<Trade> {
+  const trade = await getTradeById(tradeId, ctx.user.id);
+  if (!trade) throw notFound("Trade");
+  return trade;
+}
+
+// A trade belongs to at most one entry, enforced by a unique index: when
+// `link` fails and one of the trades turns out linked, that is a CONFLICT
+// (already linked before, or a concurrent link won).
+async function linkTrades<T>(
+  ctx: TrpcContext,
+  tradeIds: number[],
+  link: () => Promise<T>
+): Promise<T> {
+  try {
+    return await link();
+  } catch (error) {
+    for (const tradeId of tradeIds) {
+      if (await getJournalEntryForTrade(ctx.user.id, tradeId)) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "Trade is already in a journal entry",
+        });
+      }
+    }
+    throw error;
   }
 }
 
@@ -752,6 +865,252 @@ export const appRouter = router({
         }
         const deleted = await deleteSetup(ctx.user.id, input.id);
         if (!deleted) throw notFound("Setup");
+        return { success: true };
+      }),
+  }),
+
+  // Trade journal entries: linked trades, recording fields, then the review.
+  journal: router({
+    list: publicProcedure.query(async ({ ctx }) => {
+      return listJournalEntries(ctx.user.id);
+    }),
+
+    get: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return requireEntry(ctx, input.id);
+      }),
+
+    pickableTrades: publicProcedure
+      .input(z.object({ accountId: z.number(), symbol: z.string().optional() }))
+      .query(async ({ ctx, input }) => {
+        return listPickableTrades(ctx.user.id, input.accountId, input.symbol);
+      }),
+
+    forTrade: publicProcedure
+      .input(z.object({ tradeId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        await requireTrade(ctx, input.tradeId);
+        return (
+          (await getJournalEntryForTrade(ctx.user.id, input.tradeId)) ?? null
+        );
+      }),
+
+    create: publicProcedure
+      .input(
+        z.object({
+          tradeIds: z
+            .array(z.number())
+            .min(1)
+            .refine(distinct, "Duplicate trade id"),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const picked: Trade[] = [];
+        for (const tradeId of input.tradeIds) {
+          picked.push(await requireTrade(ctx, tradeId));
+        }
+        const [first] = picked;
+        const mixed = picked.some(
+          trade =>
+            trade.symbol !== first.symbol || trade.accountId !== first.accountId
+        );
+        if (mixed) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Trades must share one symbol and account",
+          });
+        }
+        const entry = await linkTrades(ctx, input.tradeIds, () =>
+          createJournalEntry(ctx.user.id, input.tradeIds)
+        );
+        if (!entry) throw notFound("Trade");
+        return { id: entry.id };
+      }),
+
+    update: publicProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          plannedEntry: plannedPrice,
+          plannedStopLoss: plannedPrice,
+          plannedTakeProfit: plannedPrice,
+          emotion: z.enum(EMOTIONS).nullable().optional(),
+          entryReason: richTextField,
+          marketContext: richTextField,
+          invalidation: richTextField,
+          mistakes: richTextField,
+          rules: richTextField,
+          managementDecisions: richTextField,
+          nextTime: richTextField,
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { id, ...patch } = input;
+        const entry = await requireUnreviewedEntry(ctx, id);
+        if (REVIEW_FIELDS.some(field => patch[field] !== undefined)) {
+          requireClosedTrades(entry);
+        }
+        const updatedAt = await updateJournalEntry(ctx.user.id, id, patch);
+        if (!updatedAt) throw notFound("Journal entry");
+        return { updatedAt };
+      }),
+
+    setSetups: publicProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          setupIds: z.array(z.number()).refine(distinct, "Duplicate setup id"),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        await requireUnreviewedEntry(ctx, input.id);
+        for (const setupId of input.setupIds) {
+          if (!(await getSetupRow(ctx.user.id, setupId))) {
+            throw notFound("Setup");
+          }
+        }
+        const saved = await setJournalEntrySetups(
+          ctx.user.id,
+          input.id,
+          input.setupIds
+        );
+        if (!saved) throw notFound("Journal entry");
+        return { success: true };
+      }),
+
+    addTrade: publicProcedure
+      .input(z.object({ id: z.number(), tradeId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const entry = await requireUnreviewedEntry(ctx, input.id);
+        const trade = await requireTrade(ctx, input.tradeId);
+        if (
+          trade.symbol !== entry.symbol ||
+          trade.accountId !== entry.accountId
+        ) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Trade must match the entry's symbol and account",
+          });
+        }
+        const added = await linkTrades(ctx, [trade.id], () =>
+          addJournalEntryTrade(ctx.user.id, entry.id, trade.id)
+        );
+        if (!added) throw notFound("Journal entry");
+        return { success: true };
+      }),
+
+    removeTrade: publicProcedure
+      .input(z.object({ id: z.number(), tradeId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const entry = await requireUnreviewedEntry(ctx, input.id);
+        if (!entry.trades.some(trade => trade.id === input.tradeId)) {
+          throw notFound("Trade");
+        }
+        if (entry.trades.length === 1) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "An entry keeps at least one trade",
+          });
+        }
+        const removed = await removeJournalEntryTrade(
+          ctx.user.id,
+          entry.id,
+          input.tradeId
+        );
+        if (!removed) throw notFound("Trade");
+        return { success: true };
+      }),
+
+    addSlotImage: publicProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          slot: z.enum(JOURNAL_SLOTS),
+          imageId: z.number(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const entry = await requireUnreviewedEntry(ctx, input.id);
+        const owner = await getImageOwner(ctx.user.id, input.imageId);
+        if (
+          owner?.ownerKind !== "journal_entry" ||
+          owner.ownerId !== entry.id
+        ) {
+          throw notFound("Image");
+        }
+        if (input.slot === "after") requireClosedTrades(entry);
+        const current =
+          input.slot === "before" ? entry.beforeImageIds : entry.afterImageIds;
+        if (
+          !current.includes(input.imageId) &&
+          current.length >= SLOT_IMAGE_MAX
+        ) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `A slot holds at most ${SLOT_IMAGE_MAX} images`,
+          });
+        }
+        const imageIds = await addSlotImage(
+          ctx.user.id,
+          entry.id,
+          input.slot,
+          input.imageId
+        );
+        if (!imageIds) throw notFound("Journal entry");
+        return { imageIds };
+      }),
+
+    // The image row is orphaned, not deleted.
+    removeSlotImage: publicProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          slot: z.enum(JOURNAL_SLOTS),
+          imageId: z.number(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const entry = await requireUnreviewedEntry(ctx, input.id);
+        if (input.slot === "after") requireClosedTrades(entry);
+        const imageIds = await removeSlotImage(
+          ctx.user.id,
+          entry.id,
+          input.slot,
+          input.imageId
+        );
+        if (!imageIds) throw notFound("Journal entry");
+        return { imageIds };
+      }),
+
+    markReviewed: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const entry = await requireUnreviewedEntry(ctx, input.id);
+        requireClosedTrades(entry);
+        await setJournalEntryReviewedAt(ctx.user.id, entry.id, new Date());
+        return { success: true };
+      }),
+
+    reopen: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const entry = await requireEntry(ctx, input.id);
+        if (entry.reviewedAt === null) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Journal entry is not reviewed",
+          });
+        }
+        await setJournalEntryReviewedAt(ctx.user.id, entry.id, null);
+        return { success: true };
+      }),
+
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const deleted = await deleteJournalEntry(ctx.user.id, input.id);
+        if (!deleted) throw notFound("Journal entry");
         return { success: true };
       }),
   }),

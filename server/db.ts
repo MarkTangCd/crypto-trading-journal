@@ -1350,6 +1350,22 @@ export async function getImage(
   return row;
 }
 
+/** The image's owner pair, without its bytes, for attach-time checks. */
+export async function getImageOwner(
+  userId: number,
+  imageId: number
+): Promise<{ ownerKind: ImageOwnerKind; ownerId: number } | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const [row] = await db
+    .select({ ownerKind: images.ownerKind, ownerId: images.ownerId })
+    .from(images)
+    .where(and(eq(images.id, imageId), eq(images.userId, userId)))
+    .limit(1);
+  return row;
+}
+
 // ============ Journal entries ============
 // Separate queries per table, never a join (see Plans). State guards live in
 // the router and the image route.
