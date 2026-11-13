@@ -87,6 +87,18 @@ A linked account whose last successful sync is more than five minutes old.
 Opening the trade list syncs stale accounts automatically.
 _Avoid_: Outdated, expired, out of date
 
+## Review
+
+**Daily PnL**:
+The sum of net realized PnL of every closed trade whose close time falls on
+one UTC+8 calendar day. Open trades contribute nothing until they close.
+_Avoid_: Daily return, day profit, daily equity change
+
+**Profit calendar**:
+The month grid on the Dashboard showing the selected linked account's daily
+PnL, one cell per UTC+8 day.
+_Avoid_: PnL heatmap, trading calendar, performance calendar
+
 ## Trading plans
 
 **Plan**:
