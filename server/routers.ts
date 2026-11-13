@@ -42,15 +42,25 @@ import {
   reopenPlan,
   deletePlan,
   listTradeSymbols,
+  // Setups
+  listSetups,
+  getSetup,
+  getSetupRow,
+  findSetupByName,
+  createSetup,
+  updateSetup,
+  deleteSetup,
 } from "./db";
 import type { TrpcContext } from "./_core/context";
 import type { Account, Goal, Plan } from "../drizzle/schema";
 import { normalize as normalizeDecimal } from "./_core/decimal";
 import {
+  ENTRY_TRIGGER_MAX,
   SCENARIO_NAME_MAX,
   SCENARIO_OUTCOMES,
   SCENARIO_SIDES,
   SCENARIO_TIME_FRAMES,
+  SETUP_NAME_MAX,
   TIME_FRAMES,
   TRADING_PAIR_RE,
 } from "@shared/const";
@@ -171,8 +181,31 @@ const observationContent = richTextDocSchema.refine(doc => !isEmptyDoc(doc), {
   message: "Observation cannot be empty",
 });
 
-function notFound(what: "Plan" | "Scenario" | "Observation"): TRPCError {
+const setupName = z.string().trim().min(1).max(SETUP_NAME_MAX);
+const setupTriggers = z
+  .array(z.string().trim().min(1).max(ENTRY_TRIGGER_MAX))
+  .refine(
+    triggers =>
+      new Set(triggers.map(t => t.toLowerCase())).size === triggers.length,
+    { message: "Duplicate entry trigger" }
+  );
+
+function notFound(
+  what: "Plan" | "Scenario" | "Observation" | "Setup"
+): TRPCError {
   return new TRPCError({ code: "NOT_FOUND", message: `${what} not found` });
+}
+
+// Setup names are unique per user, case-insensitively.
+async function requireFreeSetupName(
+  ctx: TrpcContext,
+  name: string,
+  setupId?: number
+): Promise<void> {
+  const taken = await findSetupByName(ctx.user.id, name);
+  if (taken && taken.id !== setupId) {
+    throw new TRPCError({ code: "CONFLICT", message: "Setup name is taken" });
+  }
 }
 
 async function requirePlan(ctx: TrpcContext, planId: number): Promise<Plan> {
@@ -663,6 +696,62 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         const deleted = await deletePlan(ctx.user.id, input.id);
         if (!deleted) throw notFound("Plan");
+        return { success: true };
+      }),
+  }),
+
+  // Trade journal setups; one in use by any entry cannot be deleted.
+  setup: router({
+    list: publicProcedure.query(async ({ ctx }) => {
+      return listSetups(ctx.user.id);
+    }),
+
+    get: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const setup = await getSetup(ctx.user.id, input.id);
+        if (!setup) throw notFound("Setup");
+        return setup;
+      }),
+
+    create: publicProcedure
+      .input(z.object({ name: setupName }))
+      .mutation(async ({ ctx, input }) => {
+        await requireFreeSetupName(ctx, input.name);
+        const setup = await createSetup(ctx.user.id, input.name);
+        return { id: setup.id };
+      }),
+
+    update: publicProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          name: setupName.optional(),
+          description: richTextDocSchema.nullable().optional(),
+          triggers: setupTriggers.optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { id, ...patch } = input;
+        if (!(await getSetupRow(ctx.user.id, id))) throw notFound("Setup");
+        if (patch.name !== undefined) {
+          await requireFreeSetupName(ctx, patch.name, id);
+        }
+        const setup = await updateSetup(ctx.user.id, id, patch);
+        if (!setup) throw notFound("Setup");
+        return { updatedAt: setup.updatedAt };
+      }),
+
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const setup = await getSetup(ctx.user.id, input.id);
+        if (!setup) throw notFound("Setup");
+        if (setup.usageCount > 0) {
+          throw new TRPCError({ code: "CONFLICT", message: "Setup is in use" });
+        }
+        const deleted = await deleteSetup(ctx.user.id, input.id);
+        if (!deleted) throw notFound("Setup");
         return { success: true };
       }),
   }),
