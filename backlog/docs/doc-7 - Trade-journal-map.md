@@ -3,7 +3,7 @@ id: doc-7
 title: Trade journal map
 type: other
 created_date: '2026-11-13 12:46'
-updated_date: '2026-11-13 14:22'
+updated_date: '2026-11-13 14:30'
 ---
 ## Destination
 
@@ -50,6 +50,7 @@ Settled directly with the trader while charting; later tickets build on these an
 - [Standalone paste-and-drop image slot reusing the upload pipeline](task-87): extract uploadImage(file, owner) + imageUploadError into client/src/lib/images.ts shared by PlanEditor and the slot; slot = native button with onPaste + hidden file input, onDrop on the wrapper, no window listener (ProseMirror/FileHandler stop propagation, no double-fire); store beforeImageIds / afterImageIds as ordered JSON number[] on journal_entries, removal orphans the row, add/remove via server read-modify-write in a transaction. Findings: branch research/journal-image-slot.
 - [Prototype the Journal pages](task-88): variant B, facing pages, as is: /journal a column table (date · symbol · side · setups · trades · net pnl · state, '● to review' / '● n open' / muted 'reviewed'), the picker replaces the table in place; the entry is a two-page spread, left 'before' with planned R:R as hero, right 'after' with actual R as hero, linked trades and the locked review; setups master-detail; trade detail ends with a 'journal' section. Mixed directions show as 'short / long'. Build needs a popover for the setups multi-select. Prototype: branch prototype/journal-ui.
 - [Write the Trade journal spec, schema and ADR](task-89): locked as doc-8 Trade journal spec; four new tables plus the images owner pair in two migrations, CONFLICT for every state conflict (incl. open trades on mark reviewed), BAD_REQUEST for input; planned R:R client-only off the earliest trade's side, actual R and net pnl on read; RichTextEditor with an owner prop, shadcn popover for setups; no new ADR, decision-3 amended.
+- [Break the Trade journal spec into implementation tasks](task-90): fourteen ready-for-agent tasks, task-91 (shared constants) through task-104 (trade detail journal section); critical path shared constants → schema and migrations → db functions → tRPC journal → list and picker → entry before page → image slot → after page → lifecycle; the image route API changes together with its client. Map complete; the fog stays for a later effort.
 
 ## Not yet specified
 
