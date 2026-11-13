@@ -1,4 +1,8 @@
 import { AgentDrawerToggle } from "@/components/review-agent/AgentDrawerToggle";
+import { useVariant } from "@/components/journal-prototype/shared";
+import { TradeLinkA } from "@/components/journal-prototype/VariantA";
+import { TradeLinkB } from "@/components/journal-prototype/VariantB";
+import { TradeLinkC } from "@/components/journal-prototype/VariantC";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -230,6 +234,7 @@ function OpenTimeEdit({ trade }: { trade: Trade }) {
 
 export default function TradeDetail() {
   const [, setLocation] = useLocation();
+  const variant = useVariant();
   const params = useParams<{ id: string }>();
   const tradeId = parseInt(params.id || "0");
 
@@ -298,7 +303,11 @@ export default function TradeDetail() {
         >
           ← trades
         </Link>
-        <AgentDrawerToggle tradeId={trade.id} />
+        {/* PROTOTYPE (TASK-88): variant C puts the journal link in the top bar. */}
+        <div className="flex items-center gap-6">
+          {variant === "C" && <TradeLinkC trade={trade} />}
+          <AgentDrawerToggle tradeId={trade.id} />
+        </div>
       </div>
 
       <section aria-label="result">
@@ -316,6 +325,8 @@ export default function TradeDetail() {
           {isOpen ? "open" : signed(pnl)}
         </p>
         <p className="text-label mt-4">{subLine.join(" · ")}</p>
+        {/* PROTOTYPE (TASK-88): journal link, variant A under the result. */}
+        {variant === "A" && <TradeLinkA trade={trade} />}
       </section>
 
       <section aria-label="price levels" className="pt-6">
@@ -355,6 +366,9 @@ export default function TradeDetail() {
           </p>
         </section>
       )}
+
+      {/* PROTOTYPE (TASK-88): variant B closes the page with a journal section. */}
+      {variant === "B" && <TradeLinkB trade={trade} />}
     </div>
   );
 }

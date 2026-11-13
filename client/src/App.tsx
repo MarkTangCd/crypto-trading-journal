@@ -11,6 +11,7 @@ import { AccountProvider } from "./contexts/AccountContext";
 import Dashboard from "./pages/Dashboard";
 import Goals from "./pages/Goals";
 import Plans from "./pages/Plans";
+import JournalPrototype from "./pages/JournalPrototype";
 import Trades from "./pages/Trades";
 import TradeDetail from "./pages/TradeDetail";
 import Accounts from "./pages/Accounts";
@@ -45,6 +46,8 @@ function Router() {
         </Route>
         <Route path="/trades" component={Trades} />
         <Route path="/trades/:id" component={TradeDetail} />
+        <Route path="/journal" component={JournalPrototype} />
+        <Route path="/journal/:rest*" component={JournalPrototype} />
         <Route path="/accounts" component={Accounts} />
         <Route path="/pre-trade" component={PreTrade} />
         <Route path="/pre-trade/:id" component={PreTrade} />
