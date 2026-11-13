@@ -1,4 +1,4 @@
-import { PlanEditor } from "@/components/plans/PlanEditor";
+import { RichTextEditor } from "@/components/RichTextEditor";
 import { PlanFooter } from "@/components/plans/PlanFooter";
 import { PlanObservations } from "@/components/plans/PlanObservations";
 import { PlanScenarios } from "@/components/plans/PlanScenarios";
@@ -145,8 +145,8 @@ export default function PlanDetail() {
         {!isOpen && plan.marketContext === null ? (
           <p className="text-sm">no market context was written.</p>
         ) : (
-          <PlanEditor
-            planId={plan.id}
+          <RichTextEditor
+            owner={{ kind: "plan", id: plan.id }}
             content={plan.marketContext}
             editable={isOpen}
             onSave={doc =>

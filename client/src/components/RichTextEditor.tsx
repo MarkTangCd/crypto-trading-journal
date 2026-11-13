@@ -1,5 +1,6 @@
+import { imageUploadError, uploadImage, type ImageOwner } from "@/lib/images";
 import { cn } from "@/lib/utils";
-import { IMAGE_MIME_TYPES, MAX_IMAGE_BYTES } from "@shared/const";
+import { IMAGE_MIME_TYPES } from "@shared/const";
 import type { RichTextDoc } from "@shared/richText";
 import FileHandler from "@tiptap/extension-file-handler";
 import Image from "@tiptap/extension-image";
@@ -23,28 +24,13 @@ function findImage(editor: Editor, src: string) {
   return found;
 }
 
-async function uploadImage(planId: number, file: File): Promise<number> {
-  const response = await fetch(`/api/images?planId=${planId}`, {
-    method: "POST",
-    headers: { "content-type": file.type },
-    body: file,
-  });
-  const body: { id?: number; error?: string } = await response
-    .json()
-    .catch(() => ({}));
-  if (!response.ok || typeof body.id !== "number") {
-    throw new Error(body.error ?? `upload failed (${response.status})`);
-  }
-  return body.id;
-}
-
 /**
- * Rich text for plans: market context, scenario content and observations.
- * Autosaves through `onSave` ~1 s after the last change; images are uploaded
- * to /api/images and stored in the document by URL, never as base64.
+ * Rich text for plans, journal entries and setups. Autosaves through `onSave`
+ * ~1 s after the last change; images are uploaded to /api/images under
+ * `owner` and stored in the document by URL, never as base64.
  */
-export function PlanEditor({
-  planId,
+export function RichTextEditor({
+  owner,
   content,
   editable,
   onSave,
@@ -52,7 +38,7 @@ export function PlanEditor({
   className,
   debounceMs = AUTOSAVE_MS,
 }: {
-  planId: number;
+  owner: ImageOwner;
   content: RichTextDoc | null;
   editable: boolean;
   onSave: (doc: RichTextDoc) => void;
@@ -86,8 +72,9 @@ export function PlanEditor({
 
   const insertImages = (editor: Editor, files: File[], pos: number) => {
     for (const file of files) {
-      if (file.size > MAX_IMAGE_BYTES) {
-        toast.error(`${file.name} is over 10 mb`);
+      const error = imageUploadError(file);
+      if (error) {
+        toast.error(error);
         continue;
       }
       const url = URL.createObjectURL(file);
@@ -100,8 +87,8 @@ export function PlanEditor({
         })
         .run();
 
-      uploadImage(planId, file)
-        .then(id => {
+      uploadImage(file, owner)
+        .then(({ url: src }) => {
           if (editor.isDestroyed) return;
           const image = findImage(editor, url);
           if (!image) return;
@@ -110,7 +97,7 @@ export function PlanEditor({
             .command(({ tr }) => {
               tr.setNodeMarkup(image.pos, undefined, {
                 ...image.attrs,
-                src: `/api/images/${id}`,
+                src,
                 title: null,
               });
               return true;

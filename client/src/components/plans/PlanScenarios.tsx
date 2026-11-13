@@ -1,4 +1,4 @@
-import { PlanEditor } from "@/components/plans/PlanEditor";
+import { RichTextEditor } from "@/components/RichTextEditor";
 import { INPUT_CLASS, SectionHeader } from "@/lib/ledger";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
@@ -189,8 +189,8 @@ function ScenarioRow({
             </button>
           )}
         </div>
-        <PlanEditor
-          planId={planId}
+        <RichTextEditor
+          owner={{ kind: "plan", id: planId }}
           content={scenario.content}
           editable={editable}
           onSave={doc =>

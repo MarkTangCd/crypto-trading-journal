@@ -1,4 +1,4 @@
-import { PlanEditor } from "@/components/plans/PlanEditor";
+import { RichTextEditor } from "@/components/RichTextEditor";
 import { SectionHeader, fmtDayTime } from "@/lib/ledger";
 import { trpc } from "@/lib/trpc";
 import { isEmptyDoc, type RichTextDoc } from "@shared/richText";
@@ -50,8 +50,8 @@ function ObservationRow({
   return (
     <li className="group grid grid-cols-[7rem_1fr_auto] gap-x-6 py-3 border-b border-border">
       <span className="text-sm tabular-nums pt-px">{time}</span>
-      <PlanEditor
-        planId={planId}
+      <RichTextEditor
+        owner={{ kind: "plan", id: planId }}
         content={observation.content}
         editable={editable}
         onSave={doc => {
@@ -128,9 +128,9 @@ function ObservationComposer({
         }
       }}
     >
-      <PlanEditor
+      <RichTextEditor
         key={round}
-        planId={planId}
+        owner={{ kind: "plan", id: planId }}
         content={null}
         editable
         debounceMs={0}

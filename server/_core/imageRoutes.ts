@@ -8,13 +8,26 @@ import type {
 import express, { Router as makeRouter } from "express";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { IMAGE_MIME_TYPES, MAX_IMAGE_BYTES } from "@shared/const";
-import { findImageBySha, getImage, getPlanRow, insertImage } from "../db";
+import {
+  IMAGE_MIME_TYPES,
+  IMAGE_OWNER_KINDS,
+  MAX_IMAGE_BYTES,
+  type ImageOwnerKind,
+} from "@shared/const";
+import {
+  findImageBySha,
+  getImage,
+  getJournalEntryRow,
+  getPlanRow,
+  getSetupRow,
+  insertImage,
+} from "../db";
 import { createContext } from "./context";
 
 type ImageMime = (typeof IMAGE_MIME_TYPES)[number];
 
 const idSchema = z.coerce.number().int().positive();
+const ownerKindSchema = z.enum(IMAGE_OWNER_KINDS);
 
 // WHATWG MIME Sniffing §6.1 image patterns; null bytes are wildcards (the
 // RIFF chunk size of a WebP file).
@@ -36,6 +49,36 @@ function sniffImageMime(bytes: Buffer): ImageMime | undefined {
       bytes.length >= pattern.length &&
       pattern.every((byte, i) => byte === null || bytes[i] === byte)
   )?.mime;
+}
+
+// Why the owner cannot take a new image, or undefined when it can.
+async function ownerRejection(
+  userId: number,
+  ownerKind: ImageOwnerKind,
+  ownerId: number
+): Promise<{ status: 404 | 409; error: string } | undefined> {
+  switch (ownerKind) {
+    case "plan": {
+      const plan = await getPlanRow(userId, ownerId);
+      if (!plan) return { status: 404, error: "plan not found" };
+      if (plan.closedAt !== null)
+        return { status: 409, error: "plan is closed" };
+      return undefined;
+    }
+    case "journal_entry": {
+      const entry = await getJournalEntryRow(userId, ownerId);
+      if (!entry) return { status: 404, error: "journal entry not found" };
+      if (entry.reviewedAt !== null) {
+        return { status: 409, error: "journal entry is reviewed" };
+      }
+      return undefined;
+    }
+    case "setup": {
+      const setup = await getSetupRow(userId, ownerId);
+      if (!setup) return { status: 404, error: "setup not found" };
+      return undefined;
+    }
+  }
 }
 
 async function resolveUserId(req: Request, res: Response): Promise<number> {
@@ -63,7 +106,7 @@ const handleError: ErrorRequestHandler = (err, _req, res, _next) => {
 };
 
 /**
- * Mounts `POST /api/images?planId=N` (raw image bytes) and
+ * Mounts `POST /api/images?ownerKind=K&ownerId=N` (raw image bytes) and
  * `GET /api/images/:id`. Plain Express because tRPC cannot carry binary
  * bodies; see decision-3. Shares user resolution with tRPC via
  * `createContext`, like the SSE routes.
@@ -80,20 +123,23 @@ export function mountImageRoutes(): Router {
     }),
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const planId = idSchema.safeParse(req.query.planId);
-        if (!planId.success) {
-          res.status(400).json({ error: "invalid planId" });
+        const parsedKind = ownerKindSchema.safeParse(req.query.ownerKind);
+        if (!parsedKind.success) {
+          res.status(400).json({ error: "invalid ownerKind" });
           return;
         }
+        const parsedId = idSchema.safeParse(req.query.ownerId);
+        if (!parsedId.success) {
+          res.status(400).json({ error: "invalid ownerId" });
+          return;
+        }
+        const ownerKind = parsedKind.data;
+        const ownerId = parsedId.data;
 
         const userId = await resolveUserId(req, res);
-        const plan = await getPlanRow(userId, planId.data);
-        if (!plan) {
-          res.status(404).json({ error: "plan not found" });
-          return;
-        }
-        if (plan.closedAt !== null) {
-          res.status(409).json({ error: "plan is closed" });
+        const rejection = await ownerRejection(userId, ownerKind, ownerId);
+        if (rejection) {
+          res.status(rejection.status).json({ error: rejection.error });
           return;
         }
 
@@ -110,7 +156,12 @@ export function mountImageRoutes(): Router {
         }
 
         const sha256 = createHash("sha256").update(bytes).digest("hex");
-        const existing = await findImageBySha(userId, "plan", plan.id, sha256);
+        const existing = await findImageBySha(
+          userId,
+          ownerKind,
+          ownerId,
+          sha256
+        );
         if (existing) {
           res.status(200).json({ id: existing.id });
           return;
@@ -119,8 +170,8 @@ export function mountImageRoutes(): Router {
         try {
           const { id } = await insertImage({
             userId,
-            ownerKind: "plan",
-            ownerId: plan.id,
+            ownerKind,
+            ownerId,
             sha256,
             mime,
             size: bytes.length,
@@ -129,7 +180,12 @@ export function mountImageRoutes(): Router {
           res.status(201).json({ id });
         } catch (error) {
           // A concurrent upload of the same bytes won the unique index.
-          const raced = await findImageBySha(userId, "plan", plan.id, sha256);
+          const raced = await findImageBySha(
+            userId,
+            ownerKind,
+            ownerId,
+            sha256
+          );
           if (!raced) throw error;
           res.status(200).json({ id: raced.id });
         }

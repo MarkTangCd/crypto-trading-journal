@@ -25,10 +25,13 @@ type StoredImage = {
   bytes: Buffer;
 };
 
-// In-memory stand-in for the plan and image db functions. User 1 is the
-// request user; plan 2 belongs to user 2; plan 3 is closed.
+// In-memory stand-in for the owner and image db functions. User 1 is the
+// request user; owner 2 of each kind belongs to user 2; plan 3 is closed and
+// journal entry 3 is reviewed.
 const store = vi.hoisted(() => ({
   plans: [] as { id: number; userId: number; closedAt: Date | null }[],
+  entries: [] as { id: number; userId: number; reviewedAt: Date | null }[],
+  setups: [] as { id: number; userId: number }[],
   images: [] as StoredImage[],
   failNextInsert: false,
 }));
@@ -37,6 +40,12 @@ vi.mock("../db", () => ({
   getOrCreateAnonymousUser: vi.fn(async () => ({ id: 1 })),
   getPlanRow: vi.fn(async (userId: number, planId: number) =>
     store.plans.find(p => p.id === planId && p.userId === userId)
+  ),
+  getJournalEntryRow: vi.fn(async (userId: number, entryId: number) =>
+    store.entries.find(e => e.id === entryId && e.userId === userId)
+  ),
+  getSetupRow: vi.fn(async (userId: number, setupId: number) =>
+    store.setups.find(s => s.id === setupId && s.userId === userId)
   ),
   findImageBySha: vi.fn(
     async (
@@ -120,11 +129,17 @@ function send(
   });
 }
 
-const upload = (planId: string | number, body: Buffer, type = "image/png") =>
-  send("POST", `/api/images?planId=${planId}`, {
+type Owner = { kind: string; id: string | number };
+const PLAN: Owner = { kind: "plan", id: 1 };
+
+const post = (query: string, body: Buffer, type = "image/png") =>
+  send("POST", `/api/images?${query}`, {
     body,
     headers: { "content-type": type },
   });
+
+const upload = (owner: Owner, body: Buffer, type?: string) =>
+  post(`ownerKind=${owner.kind}&ownerId=${owner.id}`, body, type);
 
 const json = (reply: Reply) => JSON.parse(reply.body.toString("utf-8"));
 
@@ -152,13 +167,22 @@ beforeEach(() => {
     { id: 2, userId: 2, closedAt: null },
     { id: 3, userId: 1, closedAt: new Date() },
   ];
+  store.entries = [
+    { id: 1, userId: 1, reviewedAt: null },
+    { id: 2, userId: 2, reviewedAt: null },
+    { id: 3, userId: 1, reviewedAt: new Date() },
+  ];
+  store.setups = [
+    { id: 1, userId: 1 },
+    { id: 2, userId: 2 },
+  ];
   store.images = [];
   store.failNextInsert = false;
 });
 
 describe("POST /api/images", () => {
   it("stores a new image with 201 and its sniffed metadata", async () => {
-    const reply = await upload(1, PNG);
+    const reply = await upload(PLAN, PNG);
     expect(reply.status).toBe(201);
     expect(json(reply)).toEqual({ id: 1 });
     expect(store.images[0]).toMatchObject({
@@ -172,26 +196,43 @@ describe("POST /api/images", () => {
     expect(Buffer.compare(store.images[0].bytes, PNG)).toBe(0);
   });
 
+  it.each(["journal_entry", "setup"])(
+    "stores an image owned by a %s",
+    async kind => {
+      const reply = await upload({ kind, id: 1 }, PNG);
+      expect(reply.status).toBe(201);
+      expect(store.images[0]).toMatchObject({ ownerKind: kind, ownerId: 1 });
+    }
+  );
+
   it("dedupes the same bytes within a plan with 200 and the same id", async () => {
-    const first = await upload(1, PNG);
-    const second = await upload(1, PNG);
+    const first = await upload(PLAN, PNG);
+    const second = await upload(PLAN, PNG);
     expect(second.status).toBe(200);
     expect(json(second)).toEqual(json(first));
     expect(store.images).toHaveLength(1);
   });
 
+  it("stores the same bytes under another owner as a new row", async () => {
+    await upload(PLAN, PNG);
+    const reply = await upload({ kind: "journal_entry", id: 1 }, PNG);
+    expect(reply.status).toBe(201);
+    expect(json(reply)).toEqual({ id: 2 });
+    expect(store.images).toHaveLength(2);
+  });
+
   it("re-selects after losing a unique-index race", async () => {
     store.failNextInsert = true;
-    const reply = await upload(1, PNG);
+    const reply = await upload(PLAN, PNG);
     expect(reply.status).toBe(200);
     expect(json(reply)).toEqual({ id: 1 });
   });
 
   it("stores the sniffed type, not the claimed Content-Type", async () => {
-    await upload(1, PNG, "image/jpeg");
-    await upload(1, JPEG, "image/png");
-    await upload(1, GIF, "image/webp");
-    await upload(1, WEBP, "image/gif");
+    await upload(PLAN, PNG, "image/jpeg");
+    await upload(PLAN, JPEG, "image/png");
+    await upload(PLAN, GIF, "image/webp");
+    await upload(PLAN, WEBP, "image/gif");
     expect(store.images.map(i => i.mime)).toEqual([
       "image/png",
       "image/jpeg",
@@ -201,33 +242,59 @@ describe("POST /api/images", () => {
   });
 
   it.each(["", "abc", "0", "-1", "1.5"])(
-    "answers 400 for planId %j",
-    async planId => {
-      const reply = await upload(planId, PNG);
+    "answers 400 for ownerId %j",
+    async ownerId => {
+      const reply = await upload({ kind: "plan", id: ownerId }, PNG);
       expect(reply.status).toBe(400);
       expect(json(reply)).toHaveProperty("error");
     }
   );
 
-  it("answers 404 for an unknown or foreign plan", async () => {
-    expect((await upload(99, PNG)).status).toBe(404);
-    expect((await upload(2, PNG)).status).toBe(404);
-    expect(store.images).toHaveLength(0);
+  it.each(["", "Plan", "journal-entry", "trade"])(
+    "answers 400 for ownerKind %j",
+    async kind => {
+      const reply = await upload({ kind, id: 1 }, PNG);
+      expect(reply.status).toBe(400);
+      expect(json(reply)).toHaveProperty("error");
+    }
+  );
+
+  it("answers 400 without an ownerKind", async () => {
+    expect((await post("ownerId=1", PNG)).status).toBe(400);
+    expect((await post("planId=1", PNG)).status).toBe(400);
   });
 
+  it.each(["plan", "journal_entry", "setup"])(
+    "answers 404 for an unknown or foreign %s",
+    async kind => {
+      expect((await upload({ kind, id: 99 }, PNG)).status).toBe(404);
+      expect((await upload({ kind, id: 2 }, PNG)).status).toBe(404);
+      expect(store.images).toHaveLength(0);
+    }
+  );
+
   it("answers 409 for a closed plan", async () => {
-    const reply = await upload(3, PNG);
+    const reply = await upload({ kind: "plan", id: 3 }, PNG);
     expect(reply.status).toBe(409);
     expect(json(reply)).toHaveProperty("error");
   });
 
+  it("answers 409 for a reviewed journal entry", async () => {
+    const reply = await upload({ kind: "journal_entry", id: 3 }, PNG);
+    expect(reply.status).toBe(409);
+    expect(json(reply)).toHaveProperty("error");
+    expect(store.images).toHaveLength(0);
+  });
+
   it("answers 415 for a disallowed Content-Type", async () => {
-    expect((await upload(1, PNG, "image/svg+xml")).status).toBe(415);
-    expect((await upload(1, PNG, "application/octet-stream")).status).toBe(415);
+    expect((await upload(PLAN, PNG, "image/svg+xml")).status).toBe(415);
+    expect((await upload(PLAN, PNG, "application/octet-stream")).status).toBe(
+      415
+    );
   });
 
   it("answers 415 when the magic bytes match no allowed image", async () => {
-    const reply = await upload(1, Buffer.from("hello"), "image/png");
+    const reply = await upload(PLAN, Buffer.from("hello"), "image/png");
     expect(reply.status).toBe(415);
     expect(json(reply)).toHaveProperty("error");
     expect(store.images).toHaveLength(0);
@@ -236,11 +303,11 @@ describe("POST /api/images", () => {
   it("accepts exactly MAX_IMAGE_BYTES and answers 413 JSON above it", async () => {
     const atLimit = Buffer.alloc(MAX_IMAGE_BYTES);
     PNG.copy(atLimit);
-    expect((await upload(1, atLimit)).status).toBe(201);
+    expect((await upload(PLAN, atLimit)).status).toBe(201);
 
     const over = Buffer.alloc(MAX_IMAGE_BYTES + 1);
     PNG.copy(over);
-    const reply = await upload(1, over);
+    const reply = await upload(PLAN, over);
     expect(reply.status).toBe(413);
     expect(reply.headers["content-type"]).toMatch(/application\/json/);
     expect(json(reply)).toEqual({ error: "entity.too.large" });
@@ -249,7 +316,7 @@ describe("POST /api/images", () => {
 
 describe("GET /api/images/:id", () => {
   it("serves the bytes with immutable caching headers", async () => {
-    await upload(1, PNG);
+    await upload(PLAN, PNG);
     const reply = await send("GET", "/api/images/1");
     expect(reply.status).toBe(200);
     expect(Buffer.compare(reply.body, PNG)).toBe(0);
@@ -262,7 +329,7 @@ describe("GET /api/images/:id", () => {
   });
 
   it("answers 304 on a matching If-None-Match", async () => {
-    await upload(1, PNG);
+    await upload(PLAN, PNG);
     const reply = await send("GET", "/api/images/1", {
       headers: { "if-none-match": `"${store.images[0].sha256}"` },
     });

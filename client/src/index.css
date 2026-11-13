@@ -289,7 +289,7 @@
   }
 }
 
-/* Plan rich text (PlanEditor). Body rules only; no editor chrome. */
+/* Rich text (RichTextEditor). Body rules only; no editor chrome. */
 .plan-editor {
   outline: none;
   max-width: 65ch;
