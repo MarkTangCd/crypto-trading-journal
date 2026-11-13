@@ -3,7 +3,7 @@ id: doc-7
 title: Trade journal map
 type: other
 created_date: '2026-11-13 12:46'
-updated_date: '2026-11-13 13:11'
+updated_date: '2026-11-13 13:35'
 ---
 ## Destination
 
@@ -48,12 +48,12 @@ Settled directly with the trader while charting; later tickets build on these an
 <!-- one line per closed ticket, appended as tickets resolve -->
 - [Migrating images to a polymorphic owner on SQLite](task-86): drizzle-kit emits a full __new_images rebuild whose INSERT … SELECT reads the new columns from the old table and fails at runtime; use `drizzle-kit generate --name images_polymorphic_owner` then hand-edit the SELECT to `'plan', "planId"` (verified on a 0014 DB, rows and ids survive, drizzle-kit check passes; same precedent as 0012). POST ownership check per kind: plan 404/closedAt 409, journal_entry 404/reviewedAt 409, setup 404. Touch points listed with file:line. Findings: branch research/journal-image-owner.
 - [Standalone paste-and-drop image slot reusing the upload pipeline](task-87): extract uploadImage(file, owner) + imageUploadError into client/src/lib/images.ts shared by PlanEditor and the slot; slot = native button with onPaste + hidden file input, onDrop on the wrapper, no window listener (ProseMirror/FileHandler stop propagation, no double-fire); store beforeImageIds / afterImageIds as ordered JSON number[] on journal_entries, removal orphans the row, add/remove via server read-modify-write in a transaction. Findings: branch research/journal-image-slot.
+- [Prototype the Journal pages](task-88): variant B, facing pages, as is: /journal a column table (date · symbol · side · setups · trades · net pnl · state, '● to review' / '● n open' / muted 'reviewed'), the picker replaces the table in place; the entry is a two-page spread, left 'before' with planned R:R as hero, right 'after' with actual R as hero, linked trades and the locked review; setups master-detail; trade detail ends with a 'journal' section. Mixed directions show as 'short / long'. Build needs a popover for the setups multi-select. Prototype: branch prototype/journal-ui.
 
 ## Not yet specified
 
 - Statistics by setup and by emotion (win rate, average actual R per setup) once entries accumulate; where they live (Dashboard strip or a Journal summary).
 - A Dashboard nudge for entries still unreviewed whose trades have all closed.
-- Whether an entry with mixed directions among its trades should display a side at all, or only the symbol.
 - Orphan image garbage collection now that three owner kinds share the table (carried over from the Plans map).
 - e2e coverage of the entry lifecycle in the Playwright smoke.
 
