@@ -11,6 +11,7 @@ import { AccountProvider } from "./contexts/AccountContext";
 import Dashboard from "./pages/Dashboard";
 import Goals from "./pages/Goals";
 import Plans from "./pages/Plans";
+import Journal from "./pages/Journal";
 import Trades from "./pages/Trades";
 import TradeDetail from "./pages/TradeDetail";
 import Accounts from "./pages/Accounts";
@@ -19,8 +20,19 @@ import Tools from "./pages/Tools";
 import PositionSizeCalculator from "./pages/PositionSizeCalculator";
 import Settings from "./pages/Settings";
 
-// Lazy so the rich-text editor only loads on the plan detail page.
+// Lazy so the rich-text editor only loads on the pages that use it.
 const PlanDetail = lazy(() => import("./pages/PlanDetail"));
+const JournalSetups = lazy(() => import("./pages/JournalSetups"));
+const JournalEntry = lazy(() => import("./pages/JournalEntry"));
+
+const LAZY_FALLBACK = (
+  <div className="flex items-center justify-center min-h-[400px]">
+    <Loader2
+      className="h-6 w-6 animate-spin text-foreground"
+      aria-label="loading"
+    />
+  </div>
+);
 
 function Router() {
   return (
@@ -30,21 +42,23 @@ function Router() {
         <Route path="/goals" component={Goals} />
         <Route path="/plans" component={Plans} />
         <Route path="/plans/:id">
-          <Suspense
-            fallback={
-              <div className="flex items-center justify-center min-h-[400px]">
-                <Loader2
-                  className="h-6 w-6 animate-spin text-foreground"
-                  aria-label="loading"
-                />
-              </div>
-            }
-          >
+          <Suspense fallback={LAZY_FALLBACK}>
             <PlanDetail />
           </Suspense>
         </Route>
         <Route path="/trades" component={Trades} />
         <Route path="/trades/:id" component={TradeDetail} />
+        <Route path="/journal" component={Journal} />
+        <Route path="/journal/setups">
+          <Suspense fallback={LAZY_FALLBACK}>
+            <JournalSetups />
+          </Suspense>
+        </Route>
+        <Route path="/journal/:id">
+          <Suspense fallback={LAZY_FALLBACK}>
+            <JournalEntry />
+          </Suspense>
+        </Route>
         <Route path="/accounts" component={Accounts} />
         <Route path="/pre-trade" component={PreTrade} />
         <Route path="/pre-trade/:id" component={PreTrade} />

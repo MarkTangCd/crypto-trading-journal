@@ -13,6 +13,7 @@ import {
 import { useIsMobile } from "@/hooks/useMobile";
 import {
   BarChart3,
+  BookOpen,
   FileText,
   Flag,
   NotebookPen,
@@ -32,6 +33,7 @@ const menuItems = [
   { icon: Flag, label: "Goals", path: "/goals" },
   { icon: NotebookPen, label: "Plans", path: "/plans" },
   { icon: FileText, label: "Trades", path: "/trades" },
+  { icon: BookOpen, label: "Journal", path: "/journal" },
   { icon: Sparkles, label: "Pre-Trade", path: "/pre-trade" },
   { icon: Wallet, label: "Accounts", path: "/accounts" },
   { icon: Wrench, label: "Tools", path: "/tools" },
