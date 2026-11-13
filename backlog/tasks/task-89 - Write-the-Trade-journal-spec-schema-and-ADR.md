@@ -1,10 +1,11 @@
 ---
 id: TASK-89
 title: 'Write the Trade journal spec, schema and ADR'
-status: To Do
-assignee: []
+status: Done
+assignee:
+  - '@myself'
 created_date: '2026-11-13 12:47'
-updated_date: '2026-11-13 13:35'
+updated_date: '2026-11-13 14:22'
 labels:
   - 'wayfinder:grilling'
 dependencies:
@@ -29,3 +30,9 @@ Lock the Trade journal spec as a Backlog doc (same shape as doc-6 Trading plan s
 <!-- SECTION:NOTES:BEGIN -->
 From task-88: the UI is variant B (facing pages), see its final summary. The setups multi-select needs a popover primitive that components/ui lacks; decide in the spec whether to add shadcn popover or a native dropdown. Mixed-direction entries display 'short / long'.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Locked as doc-8 Trade journal spec. Schema: images ownerKind/ownerId (migration 0015 hand-edited SELECT), journal_entries (accountId + symbol fixed from first trade, text-decimal planned prices, emotion, 7 rich text columns, beforeImageIds/afterImageIds JSON arrays, reviewedAt), journal_entry_trades (unique tradeId), setups (unique (userId, lower(name)), triggers JSON), journal_entry_setups; new tables in 0016. Errors: NOT_FOUND unknown/foreign ids; CONFLICT for every state conflict incl. mark reviewed or review-field/after-slot writes with open trades (deviates from the ticket's BAD_REQUEST), linked trade, setup name taken, setup in use; BAD_REQUEST for input (decimals, lengths, symbol/account mismatch, empty or last trade, slot full at 10). Planned R:R client-only via previewPlannedRiskReward with the earliest trade's side; actual R and net pnl server-side on read. Linking an open trade relocks the review, content kept. '+ add trade' uses the entry's account. Rich text fields accept images; PlanEditor becomes components/RichTextEditor with an owner prop; shadcn popover added for the setups multi-select; journal.pickableTrades and journal.forTrade. GLOSSARY: Market context now covers journal entries. No new ADR: decision-3 amended with the polymorphic owner.
+<!-- SECTION:FINAL_SUMMARY:END -->

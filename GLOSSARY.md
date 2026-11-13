@@ -113,8 +113,8 @@ states. Closing records the end time; a closed plan can be reopened.
 _Avoid_: Active, in progress, completed, done, finished, archived
 
 **Market context**:
-The free-form background (text and screenshots) the trader writes at the top
-of a plan.
+The free-form background (text and screenshots) the trader writes about the
+market: at the top of a plan, or before taking a journal entry's trades.
 _Avoid_: Background, analysis, thesis, idea
 
 **Scenario**:

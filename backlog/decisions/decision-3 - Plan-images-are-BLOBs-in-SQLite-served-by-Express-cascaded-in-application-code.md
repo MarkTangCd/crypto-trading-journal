@@ -56,3 +56,17 @@ drizzle-kit emits for table rebuilds is silently ignored. With an
 - Reversal cost: moderate. Moving to disk storage means a data migration of
   every BLOB and rewriting the image routes, but no document changes, since
   documents only hold `/api/images/:id` URLs.
+
+## Amended 2026-11-13: polymorphic owner
+
+The Trade journal (doc-7, spec doc-8) adds two more image owners: journal
+entries and setups. `images.planId` is replaced by `ownerKind`
+(`plan | journal_entry | setup`, check constraint) plus `ownerId`, unique on
+`(ownerKind, ownerId, sha256)`; still no foreign key. The upload route
+becomes `POST /api/images?ownerKind=&ownerId=` and checks ownership and
+editability per kind; `GET` is unchanged. Each owner's delete function
+cascades its images by `(ownerKind, ownerId)` inside its transaction. The
+migration is a drizzle-kit `__new_images` rebuild with the `SELECT` hand-edited
+to `'plan', "planId"` (research `research/journal-image-owner`, task-86).
+Alternatives weighed: one image table per owner, or three nullable owner
+columns; both multiply code paths for no gain without foreign keys.
