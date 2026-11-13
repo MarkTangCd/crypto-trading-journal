@@ -1,9 +1,14 @@
 import { RichTextEditor } from "@/components/RichTextEditor";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { INPUT_CLASS, SELECT_CLASS, fmtDayTime, fmtRatio } from "@/lib/ledger";
 import { previewPlannedRiskReward } from "@/lib/plannedRiskReward";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
-import { EMOTIONS, type Emotion } from "@shared/const";
+import { EMOTIONS, SETUP_NAME_MAX, type Emotion } from "@shared/const";
 import { isEmptyDoc, type RichTextDoc } from "@shared/richText";
 import { utc8Parts } from "@shared/time";
 import type { JournalEntry as JournalEntryRow, Trade } from "@shared/types";
@@ -13,6 +18,7 @@ import { Link, useParams } from "wouter";
 import { toast } from "sonner";
 
 const LINK = "text-label hover:text-foreground transition-colors";
+const NAME_LENGTH = `a name is 1 to ${SETUP_NAME_MAX} characters`;
 
 type PriceField = "plannedEntry" | "plannedStopLoss" | "plannedTakeProfit";
 type RichField = "entryReason" | "marketContext" | "invalidation";
@@ -46,6 +52,7 @@ const emotionLabel = (emotion: Emotion) =>
 
 type Entry = JournalEntryRow & {
   trades: Trade[];
+  setups: { id: number; name: string }[];
   sides: ("long" | "short")[];
   date: number | null;
   tradeCount: number;
@@ -236,6 +243,7 @@ function BeforePage({
       </div>
 
       <div className="grid sm:grid-cols-2 gap-6">
+        <SetupSelect entry={entry} editable={editable} onSaved={onSaved} />
         <label className="space-y-2 block">
           <span className="text-label block">emotion</span>
           <select
@@ -281,6 +289,146 @@ function BeforePage({
           />
         </Block>
       ))}
+    </div>
+  );
+}
+
+function SetupSelect({
+  entry,
+  editable,
+  onSaved,
+}: {
+  entry: Entry;
+  editable: boolean;
+  onSaved: (updatedAt: Date) => void;
+}) {
+  const utils = trpc.useUtils();
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const { data: setups, isLoading } = trpc.setup.list.useQuery(undefined, {
+    enabled: editable,
+  });
+  const linkedIds = entry.setups.map(setup => setup.id);
+  const names = entry.setups.map(setup => setup.name).join(", ") || "—";
+
+  // Stay pending until journal.get refetches, so the next toggle starts
+  // from the saved set.
+  const save = trpc.journal.setSetups.useMutation({
+    onSuccess: () => {
+      // setSetups returns no updatedAt; links don't touch the entry row.
+      onSaved(new Date());
+      return Promise.all([
+        utils.journal.get.invalidate({ id: entry.id }),
+        utils.journal.list.invalidate(),
+        utils.setup.list.invalidate(),
+      ]);
+    },
+    onError: error => {
+      toast.error(error.message || "failed to save setups");
+    },
+  });
+
+  const create = trpc.setup.create.useMutation({
+    onSuccess: ({ id }) => {
+      utils.setup.list.invalidate();
+      setDraft("");
+      setError(null);
+      save.mutate({ id: entry.id, setupIds: [...linkedIds, id] });
+    },
+    onError: error => {
+      const code = error.data?.code;
+      if (code === "CONFLICT") setError("name taken");
+      else if (code === "BAD_REQUEST") setError(NAME_LENGTH);
+      else toast.error(error.message || "failed to create setup");
+    },
+  });
+
+  const busy = save.isPending || create.isPending;
+
+  const toggle = (id: number) =>
+    save.mutate({
+      id: entry.id,
+      setupIds: linkedIds.includes(id)
+        ? linkedIds.filter(x => x !== id)
+        : [...linkedIds, id],
+    });
+
+  return (
+    <div className="space-y-2">
+      <span className="text-label block">setups</span>
+      {!editable ? (
+        <p className="text-sm py-1.5">{names}</p>
+      ) : (
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger className={cn(INPUT_CLASS, "text-left")}>
+            {names}
+          </PopoverTrigger>
+          <PopoverContent
+            align="start"
+            className="w-(--radix-popover-trigger-width) min-w-64 bg-background border-border p-3 space-y-2"
+          >
+            {isLoading ? (
+              <p className="text-label">loading setups…</p>
+            ) : (setups ?? []).length === 0 ? (
+              <p className="text-sm">no setups yet. name one below.</p>
+            ) : (
+              <ul className="space-y-1">
+                {(setups ?? []).map(setup => (
+                  <li key={setup.id}>
+                    <label className="flex items-center gap-3 text-sm cursor-pointer py-1">
+                      <input
+                        type="checkbox"
+                        checked={linkedIds.includes(setup.id)}
+                        disabled={busy}
+                        onChange={() => toggle(setup.id)}
+                        className="accent-foreground h-4 w-4"
+                      />
+                      {setup.name}
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <form
+              className="border-t border-border pt-2"
+              onSubmit={event => {
+                event.preventDefault();
+                const name = draft.trim();
+                if (name.length < 1 || name.length > SETUP_NAME_MAX) {
+                  setError(NAME_LENGTH);
+                  return;
+                }
+                create.mutate({ name });
+              }}
+            >
+              <input
+                type="text"
+                value={draft}
+                onChange={event => setDraft(event.target.value)}
+                placeholder="+ new setup ⏎"
+                aria-label="new setup name"
+                maxLength={SETUP_NAME_MAX}
+                disabled={busy}
+                className={cn(INPUT_CLASS, "placeholder:normal-case")}
+              />
+              {error && <p className="text-label pt-1">{error}</p>}
+            </form>
+            <div className="flex justify-between pt-1">
+              <Link href="/journal/setups" className={LINK}>
+                manage setups
+              </Link>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className={LINK}
+              >
+                done
+              </button>
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
     </div>
   );
 }
