@@ -5,7 +5,15 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { INPUT_CLASS, SELECT_CLASS, fmtDayTime, fmtRatio } from "@/lib/ledger";
+import {
+  INPUT_CLASS,
+  SELECT_CLASS,
+  fmtDayTime,
+  fmtDecimal,
+  fmtMoney,
+  fmtRatio,
+  toneClass,
+} from "@/lib/ledger";
 import { previewPlannedRiskReward } from "@/lib/plannedRiskReward";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
@@ -13,7 +21,7 @@ import { EMOTIONS, SETUP_NAME_MAX, type Emotion } from "@shared/const";
 import { isEmptyDoc, type RichTextDoc } from "@shared/richText";
 import { utc8Parts } from "@shared/time";
 import type { JournalEntry as JournalEntryRow, Trade } from "@shared/types";
-import { Loader2 } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link, useParams } from "wouter";
 import { toast } from "sonner";
@@ -23,6 +31,7 @@ const NAME_LENGTH = `a name is 1 to ${SETUP_NAME_MAX} characters`;
 
 type PriceField = "plannedEntry" | "plannedStopLoss" | "plannedTakeProfit";
 type RichField = "entryReason" | "marketContext" | "invalidation";
+type ReviewField = "mistakes" | "rules" | "managementDecisions" | "nextTime";
 
 const PRICE_FIELDS: { key: PriceField; label: string }[] = [
   { key: "plannedEntry", label: "planned entry" },
@@ -48,6 +57,38 @@ const RICH_FIELDS: { key: RichField; label: string; hint: string }[] = [
   },
 ];
 
+const REVIEW_FIELDS: { key: ReviewField; label: string; hint: string }[] = [
+  { key: "mistakes", label: "mistakes", hint: "what went wrong?" },
+  {
+    key: "rules",
+    label: "rules followed or broken",
+    hint: "which rules held, which broke?",
+  },
+  {
+    key: "managementDecisions",
+    label: "management decisions",
+    hint: "stops moved, partials, adds, exits",
+  },
+  {
+    key: "nextTime",
+    label: "notes for next time",
+    hint: "what will you do differently?",
+  },
+];
+
+// doc-7 Notes, verbatim; never stored.
+const REVIEW_PROMPTS = [
+  "哪些方面做得好?",
+  "哪些方面出了问题?",
+  "我是否遵循了计划?",
+  "我应该重复什么?",
+  "我应该避免什么?",
+  "主要教训是什么?",
+  "下次我会做出哪些不同的做法?",
+];
+
+const px = (v: string | null) => fmtDecimal(v, 4);
+
 const emotionLabel = (emotion: Emotion) =>
   emotion === "fomo" ? "FOMO" : emotion;
 
@@ -58,10 +99,27 @@ type Entry = JournalEntryRow & {
   date: number | null;
   tradeCount: number;
   openTradeCount: number;
+  netPnlUsd: number;
+  actualR: number | null;
 };
 
 function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
+}
+
+function Pnl({ value }: { value: number }) {
+  const tone = value > 0 ? "win" : value < 0 ? "loss" : undefined;
+  return (
+    <span className={toneClass(tone)}>
+      {value >= 0 ? "+" : "-"}${fmtMoney(Math.abs(value))}
+    </span>
+  );
+}
+
+function tradeLine(trade: Trade): string {
+  return `${trade.side} ${fmtDecimal(trade.quantity)} @ ${px(trade.entryPrice)}${
+    trade.exitPrice !== null ? ` → ${px(trade.exitPrice)}` : ""
+  }`;
 }
 
 function stateWord(entry: Entry): string {
@@ -141,9 +199,7 @@ export default function JournalEntry() {
 
       <div className="grid lg:grid-cols-2 gap-y-16">
         <BeforePage entry={entry} onSaved={setSavedAt} />
-        <div className="space-y-10 lg:pl-12">
-          <p className="text-label">after · actual r</p>
-        </div>
+        <AfterPage entry={entry} onSaved={setSavedAt} />
       </div>
     </div>
   );
@@ -300,6 +356,243 @@ function BeforePage({
         />
       </Block>
     </div>
+  );
+}
+
+function AfterPage({
+  entry,
+  onSaved,
+}: {
+  entry: Entry;
+  onSaved: (updatedAt: Date) => void;
+}) {
+  const unreviewed = entry.reviewedAt === null;
+  const open = entry.openTradeCount;
+  const reviewEditable = unreviewed && open === 0;
+
+  // Autosave: set the saved mark only, as on the before page.
+  const autosave = trpc.journal.update.useMutation({
+    onSuccess: ({ updatedAt }) => onSaved(updatedAt),
+    onError: error => {
+      toast.error(error.message || "failed to save journal entry");
+    },
+  });
+
+  const r = entry.actualR;
+  const formula =
+    open > 0
+      ? `${open} of ${entry.tradeCount} trades still open`
+      : entry.plannedEntry === null || entry.plannedStopLoss === null
+        ? "set entry and stop to measure r"
+        : r === null
+          ? "entry equals stop"
+          : "pnl / (|entry − stop| × qty)";
+
+  return (
+    <div className="space-y-10 lg:pl-12">
+      <div className="space-y-2">
+        <p className="text-label">after · actual r</p>
+        {/* Not cn(): tailwind-merge drops text-display next to a color. */}
+        <p
+          className={`text-display tabular-nums ${
+            open === 0 && r !== null
+              ? toneClass(r > 0 ? "win" : r < 0 ? "loss" : undefined)
+              : ""
+          }`}
+        >
+          {open > 0
+            ? "open"
+            : r === null
+              ? "—"
+              : `${r >= 0 ? "+" : ""}${r.toFixed(2)}r`}
+        </p>
+        <p className="text-label tabular-nums">
+          net <Pnl value={entry.netPnlUsd} /> · {formula}
+        </p>
+      </div>
+
+      <LinkedTrades entry={entry} editable={unreviewed} />
+
+      {open > 0 ? (
+        <p className="text-sm border-y border-border py-4">
+          waiting for {plural(open, "open trade")} to close. the review opens
+          once binance reports every linked trade closed.
+        </p>
+      ) : (
+        <div
+          lang="zh"
+          className="space-y-3 text-sm leading-relaxed border-y border-border py-5"
+        >
+          <p>交易结束后，问:</p>
+          <ul className="space-y-1 pl-4">
+            {REVIEW_PROMPTS.map(prompt => (
+              <li key={prompt} className="list-['-_']">
+                {prompt}
+              </li>
+            ))}
+          </ul>
+          <p className="text-muted-foreground">
+            目标不是为每一笔交易写长篇笔记。目标是养成持续反思的习惯。
+          </p>
+        </div>
+      )}
+
+      {/* Stays mounted while locked so relocking keeps what was written. */}
+      <div className={cn("space-y-10", open > 0 && "opacity-35")}>
+        <Block label="after screenshots">
+          <ScreenshotSlot
+            entry={entry}
+            slot="after"
+            editable={reviewEditable}
+            onSaved={onSaved}
+          />
+        </Block>
+        {REVIEW_FIELDS.map(field => (
+          <Block key={field.key} label={field.label}>
+            <RichTextEditor
+              owner={{ kind: "journal_entry", id: entry.id }}
+              content={entry[field.key]}
+              editable={reviewEditable}
+              onSave={(doc: RichTextDoc) =>
+                autosave.mutate({
+                  id: entry.id,
+                  [field.key]: isEmptyDoc(doc) ? null : doc,
+                })
+              }
+              placeholder={field.hint}
+            />
+          </Block>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LinkedTrades({
+  entry,
+  editable,
+}: {
+  entry: Entry;
+  editable: boolean;
+}) {
+  const utils = trpc.useUtils();
+  const [adding, setAdding] = useState(false);
+  const { data: pickable, isLoading } = trpc.journal.pickableTrades.useQuery(
+    { accountId: entry.accountId, symbol: entry.symbol },
+    { enabled: editable && adding }
+  );
+
+  const onSuccess = () =>
+    Promise.all([
+      utils.journal.get.invalidate({ id: entry.id }),
+      utils.journal.list.invalidate(),
+      utils.journal.pickableTrades.invalidate(),
+      utils.journal.forTrade.invalidate(),
+    ]);
+  const add = trpc.journal.addTrade.useMutation({
+    onSuccess: () => {
+      setAdding(false);
+      return onSuccess();
+    },
+    onError: error => {
+      toast.error(error.message || "failed to add trade");
+    },
+  });
+  const remove = trpc.journal.removeTrade.useMutation({
+    onSuccess,
+    onError: error => {
+      toast.error(error.message || "failed to unlink trade");
+    },
+  });
+  const busy = add.isPending || remove.isPending;
+
+  return (
+    <section className="space-y-2">
+      <h3 className="text-label border-b border-border pb-2">
+        linked trades · {entry.tradeCount}
+      </h3>
+      <ul className="text-sm tabular-nums">
+        {entry.trades.map(trade => (
+          <li
+            key={trade.id}
+            className="grid grid-cols-[7.5rem_1fr_auto_1rem] gap-x-4 items-baseline py-2 border-b border-border group"
+          >
+            <span className="text-muted-foreground">
+              {fmtDayTime(trade.openTime)}
+            </span>
+            <span>{tradeLine(trade)}</span>
+            {trade.status === "open" ? (
+              <span className="text-label">open</span>
+            ) : (
+              <Pnl value={parseFloat(trade.realizedPnlUsd)} />
+            )}
+            {editable && entry.trades.length > 1 ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  remove.mutate({ id: entry.id, tradeId: trade.id })
+                }
+                aria-label={`unlink trade opened ${fmtDayTime(trade.openTime)}`}
+                className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            ) : (
+              <span />
+            )}
+          </li>
+        ))}
+      </ul>
+      {editable &&
+        (adding ? (
+          <div className="space-y-1 pt-2">
+            {isLoading ? (
+              <p className="text-label">loading trades…</p>
+            ) : (pickable ?? []).length === 0 ? (
+              <p className="text-label">
+                no unlinked {entry.symbol.toLowerCase()} trades in this account.
+              </p>
+            ) : (
+              <ul className="text-sm tabular-nums">
+                {(pickable ?? []).map(trade => (
+                  <li key={trade.id}>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        add.mutate({ id: entry.id, tradeId: trade.id })
+                      }
+                      className="w-full grid grid-cols-[7.5rem_1fr_auto] gap-x-4 items-baseline py-2 text-left hover:bg-foreground/[0.03]"
+                    >
+                      <span className="text-muted-foreground">
+                        {fmtDayTime(trade.openTime)}
+                      </span>
+                      <span>+ {tradeLine(trade)}</span>
+                      <span className="text-label">{trade.status}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <button
+              type="button"
+              onClick={() => setAdding(false)}
+              className={LINK}
+            >
+              cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className={cn(LINK, "pt-1")}
+          >
+            + add trade
+          </button>
+        ))}
+    </section>
   );
 }
 
