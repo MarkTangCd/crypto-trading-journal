@@ -1,4 +1,5 @@
 import { RichTextEditor } from "@/components/RichTextEditor";
+import { ImageSlot } from "@/components/journal/ImageSlot";
 import {
   Popover,
   PopoverContent,
@@ -289,7 +290,47 @@ function BeforePage({
           />
         </Block>
       ))}
+
+      <Block label="before screenshots">
+        <ScreenshotSlot
+          entry={entry}
+          slot="before"
+          editable={editable}
+          onSaved={onSaved}
+        />
+      </Block>
     </div>
+  );
+}
+
+function ScreenshotSlot({
+  entry,
+  slot,
+  editable,
+  onSaved,
+}: {
+  entry: Entry;
+  slot: "before" | "after";
+  editable: boolean;
+  onSaved: (updatedAt: Date) => void;
+}) {
+  const utils = trpc.useUtils();
+  // ImageSlot toasts failures; these only refresh the entry.
+  const onSuccess = () => {
+    onSaved(new Date());
+    return utils.journal.get.invalidate({ id: entry.id });
+  };
+  const add = trpc.journal.addSlotImage.useMutation({ onSuccess });
+  const remove = trpc.journal.removeSlotImage.useMutation({ onSuccess });
+
+  return (
+    <ImageSlot
+      imageIds={slot === "before" ? entry.beforeImageIds : entry.afterImageIds}
+      owner={{ kind: "journal_entry", id: entry.id }}
+      editable={editable}
+      onAdd={imageId => add.mutateAsync({ id: entry.id, slot, imageId })}
+      onRemove={imageId => remove.mutateAsync({ id: entry.id, slot, imageId })}
+    />
   );
 }
 
