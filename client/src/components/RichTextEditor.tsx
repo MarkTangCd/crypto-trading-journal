@@ -156,6 +156,8 @@ export function RichTextEditor({
       attributes: { class: cn("plan-editor", className) },
     },
     onUpdate: ({ editor: ed }) => scheduleSave(ed),
+    // Save before a click elsewhere (mark reviewed, delete) changes state.
+    onBlur: () => flush(),
   });
 
   useEffect(() => {

@@ -1,6 +1,16 @@
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { ImageSlot } from "@/components/journal/ImageSlot";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -23,7 +33,7 @@ import { utc8Parts } from "@shared/time";
 import type { JournalEntry as JournalEntryRow, Trade } from "@shared/types";
 import { Loader2, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { Link, useParams } from "wouter";
+import { Link, useLocation, useParams } from "wouter";
 import { toast } from "sonner";
 
 const LINK = "text-label hover:text-foreground transition-colors";
@@ -201,6 +211,8 @@ export default function JournalEntry() {
         <BeforePage entry={entry} onSaved={setSavedAt} />
         <AfterPage entry={entry} onSaved={setSavedAt} />
       </div>
+
+      <EntryFooter entry={entry} />
     </div>
   );
 }
@@ -593,6 +605,117 @@ function LinkedTrades({
           </button>
         ))}
     </section>
+  );
+}
+
+function EntryFooter({ entry }: { entry: Entry }) {
+  const utils = trpc.useUtils();
+  const [, setLocation] = useLocation();
+  const [deleting, setDeleting] = useState(false);
+  const open = entry.openTradeCount;
+  const screenshotCount =
+    entry.beforeImageIds.length + entry.afterImageIds.length;
+
+  const invalidate = () =>
+    Promise.all([
+      utils.journal.get.invalidate({ id: entry.id }),
+      utils.journal.list.invalidate(),
+      utils.journal.forTrade.invalidate(),
+    ]);
+
+  const markReviewed = trpc.journal.markReviewed.useMutation({
+    onSuccess: invalidate,
+    onError: error => {
+      toast.error(error.message || "failed to mark the entry reviewed");
+    },
+  });
+
+  const reopen = trpc.journal.reopen.useMutation({
+    onSuccess: invalidate,
+    onError: error => {
+      toast.error(error.message || "failed to reopen the entry");
+    },
+  });
+
+  const remove = trpc.journal.delete.useMutation({
+    onSuccess: () => {
+      setLocation("/journal");
+      // Mark stale without refetching: this page is still mounted for a
+      // moment and the entry no longer exists.
+      utils.journal.get.invalidate({ id: entry.id }, { refetchType: "none" });
+      utils.journal.list.invalidate();
+      utils.journal.forTrade.invalidate();
+      utils.journal.pickableTrades.invalidate();
+    },
+    onError: error => {
+      toast.error(error.message || "failed to delete the entry");
+    },
+  });
+
+  return (
+    <>
+      <footer className="flex flex-wrap items-baseline justify-between gap-6 border-t border-border pt-6">
+        {entry.reviewedAt !== null ? (
+          <p className="text-sm tabular-nums">
+            reviewed {fmtDayTime(entry.reviewedAt)} ·{" "}
+            <button
+              type="button"
+              disabled={reopen.isPending}
+              onClick={() => reopen.mutate({ id: entry.id })}
+              className="underline underline-offset-4 disabled:opacity-40"
+            >
+              reopen
+            </button>
+          </p>
+        ) : (
+          <div className="flex flex-wrap items-baseline gap-4">
+            <button
+              type="button"
+              disabled={open > 0 || markReviewed.isPending}
+              onClick={() => markReviewed.mutate({ id: entry.id })}
+              className="bg-foreground text-background px-4 py-2 text-sm hover:opacity-90 disabled:opacity-40"
+            >
+              mark reviewed →
+            </button>
+            {open > 0 && (
+              <span className="text-label">
+                after every linked trade closes
+              </span>
+            )}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => setDeleting(true)}
+          className={LINK}
+        >
+          delete entry
+        </button>
+      </footer>
+
+      <AlertDialog open={deleting} onOpenChange={setDeleting}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>delete this journal entry?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {plural(screenshotCount, "screenshot")} and every written field go
+              with it. the {plural(entry.tradeCount, "trade")}{" "}
+              {entry.tradeCount === 1 ? "stays" : "stay"} and can be picked
+              again.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={remove.isPending}
+              onClick={() => remove.mutate({ id: entry.id })}
+            >
+              delete entry
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 
