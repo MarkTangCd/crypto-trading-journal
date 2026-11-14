@@ -3,8 +3,10 @@ import { Button } from "@/components/ui/button";
 import {
   Field,
   INPUT_CLASS,
+  SectionHeader,
   type Tone,
   fmtDateTime,
+  fmtDayTime,
   fmtDecimal,
   fmtDuration,
   fmtMoney,
@@ -228,6 +230,67 @@ function OpenTimeEdit({ trade }: { trade: Trade }) {
   );
 }
 
+// Closing section: the journal entry holding this trade, or a way to start one.
+function JournalSection({ tradeId }: { tradeId: number }) {
+  const {
+    data: entry,
+    isLoading,
+    error,
+  } = trpc.journal.forTrade.useQuery({ tradeId }, { retry: false });
+
+  return (
+    <section
+      aria-labelledby="trade-journal-label"
+      className="space-y-2 max-w-3xl"
+    >
+      <SectionHeader id="trade-journal-label">journal</SectionHeader>
+      {isLoading ? (
+        <div className="flex justify-center py-3">
+          <Loader2
+            className="h-4 w-4 animate-spin text-foreground"
+            aria-label="loading"
+          />
+        </div>
+      ) : error ? (
+        <p className="text-sm py-3">failed to load journal: {error.message}</p>
+      ) : entry ? (
+        <Link
+          href={`/journal/${entry.id}`}
+          className="grid grid-cols-[7.5rem_1fr_auto] gap-x-6 items-baseline py-3 border-b border-border text-sm tabular-nums hover:underline underline-offset-4"
+        >
+          <span>{entry.date === null ? "—" : fmtDayTime(entry.date)}</span>
+          <span>
+            {entry.setupNames.join(", ") || "no setup"}{" "}
+            <span className="text-label">
+              · {entry.tradeCount} trade{entry.tradeCount === 1 ? "" : "s"} ·{" "}
+              {entry.state === "reviewed" ? (
+                "reviewed"
+              ) : (
+                <span className="text-foreground font-medium">
+                  ● unreviewed
+                </span>
+              )}
+            </span>
+          </span>
+          <span aria-hidden>→</span>
+        </Link>
+      ) : (
+        <div className="flex items-baseline justify-between gap-6 py-3">
+          <p className="text-sm text-muted-foreground">
+            this trade is not in a journal entry.
+          </p>
+          <Link
+            href={`/journal?new=1&pick=${tradeId}`}
+            className="text-sm hover:underline underline-offset-4 whitespace-nowrap"
+          >
+            new journal entry →
+          </Link>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function TradeDetail() {
   const [, setLocation] = useLocation();
   const params = useParams<{ id: string }>();
@@ -355,6 +418,8 @@ export default function TradeDetail() {
           </p>
         </section>
       )}
+
+      <JournalSection tradeId={trade.id} />
     </div>
   );
 }
